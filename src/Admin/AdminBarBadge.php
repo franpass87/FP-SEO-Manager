@@ -37,8 +37,8 @@ class AdminBarBadge {
 		 * Hook registrations.
 		 */
 	public function register(): void {
-			add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+                        add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
+                        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
 	}
 
 		/**

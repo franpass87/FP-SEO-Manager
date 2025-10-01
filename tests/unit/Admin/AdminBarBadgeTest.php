@@ -118,6 +118,46 @@ class AdminBarBadgeTest extends TestCase {
         }
 
         /**
+         * Ensures hooks register without expecting parameters on enqueue callback.
+         */
+        public function test_register_adds_hooks_without_enqueued_args(): void {
+                $badge = new AdminBarBadge();
+                $hooks = array();
+
+                when( 'add_action' )->alias(
+                        static function ( $hook, $callback, $priority = 10, $accepted_args = 1 ) use ( &$hooks ): bool {
+                                $hooks[] = array( $hook, $callback, $priority, $accepted_args );
+
+                                return true;
+                        }
+                );
+
+                $badge->register();
+
+                self::assertCount( 2, $hooks );
+
+                $badge_hook = array_filter(
+                        $hooks,
+                        static function ( array $call ) use ( $badge ): bool {
+                                return 'admin_bar_menu' === $call[0] && $call[1] === array( $badge, 'add_badge' );
+                        }
+                );
+
+                self::assertNotEmpty( $badge_hook );
+                self::assertSame( 120, array_values( $badge_hook )[0][2] );
+
+                $enqueue_hook = array_filter(
+                        $hooks,
+                        static function ( array $call ): bool {
+                                return 'admin_enqueue_scripts' === $call[0];
+                        }
+                );
+
+                self::assertNotEmpty( $enqueue_hook );
+                self::assertSame( 0, array_values( $enqueue_hook )[0][3] );
+        }
+
+        /**
          * Ensures the tooltip string is properly escaped.
          */
         public function test_add_badge_escapes_tooltip_attribute(): void {
