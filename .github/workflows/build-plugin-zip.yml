@@ -1,0 +1,76 @@
+name: Build plugin zip
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: zip
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+          composer dump-autoload -o --classmap-authoritative
+
+      - name: Prepare build directory
+        env:
+          PLUGIN_SLUG: fp-seo-performance
+        run: |
+          BUILD_DIR="build/${PLUGIN_SLUG}"
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          rsync -a --delete \
+            --exclude=.git/ \
+            --exclude=.github/ \
+            --exclude=tests/ \
+            --exclude=docs/ \
+            --exclude=node_modules/ \
+            --exclude=*.md \
+            --exclude=.idea/ \
+            --exclude=.vscode/ \
+            --exclude=build/ \
+            --exclude=.gitattributes \
+            --exclude=.gitignore \
+            --exclude=.codex-state.json \
+            --exclude=build.sh \
+            --exclude=tools/ \
+            --exclude=composer.json \
+            --exclude=composer.lock \
+            --exclude=phpcs.xml \
+            --exclude=phpstan.neon \
+            --exclude=phpstan-bootstrap.php \
+            --exclude=phpunit.xml.dist \
+            --exclude=rector.php \
+            --exclude=README-BUILD.md \
+            --exclude=README.md \
+            ./ "$BUILD_DIR/"
+
+      - name: Create zip
+        id: zip
+        env:
+          PLUGIN_SLUG: fp-seo-performance
+        run: |
+          cd build
+          ZIP_NAME="${PLUGIN_SLUG}-${GITHUB_REF_NAME}.zip"
+          zip -rq "$ZIP_NAME" "$PLUGIN_SLUG"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-zip
+          path: build/${{ steps.zip.outputs.zip_name }}
+          if-no-files-found: error
