@@ -89,11 +89,46 @@ class MetaboxTest extends TestCase {
 	/**
 	 * Cleans up Brain Monkey state.
 	 */
-	protected function tearDown(): void {
-		$_POST = array();
-		Monkey\tearDown();
-		parent::tearDown();
-	}
+        protected function tearDown(): void {
+                $_POST = array();
+                Monkey\tearDown();
+                parent::tearDown();
+        }
+
+        /**
+         * Ensures register wires hooks without passing parameters to callbacks.
+         */
+        public function test_register_sets_hooks_without_arguments(): void {
+                $metabox     = new Metabox();
+                $invocations = array();
+
+                when( 'add_action' )->alias(
+                        static function ( $hook, $callback, $priority = 10, $accepted_args = 1 ) use ( &$invocations ): bool {
+                                $invocations[] = array( $hook, $callback, $priority, $accepted_args );
+
+                                return true;
+                        }
+                );
+
+                $metabox->register();
+
+                self::assertCount( 4, $invocations );
+
+                $assert_hook_args = static function ( string $hook ) use ( $invocations ): void {
+                        $matches = array_values(
+                                array_filter(
+                                        $invocations,
+                                        static fn( array $call ): bool => $hook === $call[0]
+                                )
+                        );
+
+                        self::assertNotEmpty( $matches );
+                        self::assertSame( 0, $matches[0][3] );
+                };
+
+                $assert_hook_args( 'admin_enqueue_scripts' );
+                $assert_hook_args( 'add_meta_boxes' );
+        }
 
 	/**
 	 * Ensures the metabox saves the exclusion flag when checked.

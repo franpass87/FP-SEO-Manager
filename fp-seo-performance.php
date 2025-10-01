@@ -21,7 +21,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
-	define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
+        define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
+}
+
+require_once __DIR__ . '/src/Utils/Version.php';
+
+if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
+        define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.1.0' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';
