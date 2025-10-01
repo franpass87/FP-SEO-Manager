@@ -14,6 +14,30 @@ use FP\SEO\Admin\BulkAuditPage;
 use PHPUnit\Framework\TestCase;
 use function Brain\Monkey\Functions\when;
 
+if ( ! class_exists( '\\WP_Query' ) ) {
+        class BulkAuditPageTest_WP_Query_Stub {
+                /**
+                 * Captured query arguments.
+                 *
+                 * @var array<string, mixed>
+                 */
+                public static array $last_args = array();
+
+                /**
+                 * Queried posts.
+                 *
+                 * @var array<int, mixed>
+                 */
+                public array $posts = array();
+
+                public function __construct( array $args = array() ) {
+                        self::$last_args = $args;
+                }
+        }
+
+        class_alias( __NAMESPACE__ . '\\BulkAuditPageTest_WP_Query_Stub', '\\WP_Query' );
+}
+
 /**
  * Bulk auditor admin page unit tests.
  *
@@ -23,14 +47,25 @@ class BulkAuditPageTest extends TestCase {
 		/**
 		 * Set up Brain Monkey.
 		 */
-	protected function setUp(): void {
-			parent::setUp();
-			Monkey\setUp();
+        protected function setUp(): void {
+                parent::setUp();
+                Monkey\setUp();
 
-		if ( ! defined( 'DAY_IN_SECONDS' ) ) {
-				define( 'DAY_IN_SECONDS', 24 * 60 * 60 );
-		}
-	}
+                if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+                        define( 'DAY_IN_SECONDS', 24 * 60 * 60 );
+                }
+
+                when( 'get_post_types' )->alias(
+                        static function (): array {
+                                return array( 'post', 'page' );
+                        }
+                );
+                when( 'post_type_supports' )->alias(
+                        static function (): bool {
+                                return true;
+                        }
+                );
+        }
 
 		/**
 		 * Tear down Brain Monkey.
@@ -133,5 +168,22 @@ class BulkAuditPageTest extends TestCase {
                 self::assertCount( $limit, $cache );
                 self::assertArrayNotHasKey( 1, $cache );
                 self::assertArrayHasKey( $limit + 1, $cache );
+        }
+
+        /**
+         * Query arguments should avoid expensive counts and cache hydration.
+         */
+        public function test_query_posts_sets_lightweight_query_flags(): void {
+                \WP_Query::$last_args = array();
+
+                $page   = new BulkAuditPage();
+                $method = new \ReflectionMethod( BulkAuditPage::class, 'query_posts' );
+                $method->setAccessible( true );
+                $method->invoke( $page, 'all', 'any' );
+
+                self::assertArrayHasKey( 'no_found_rows', \WP_Query::$last_args );
+                self::assertTrue( \WP_Query::$last_args['no_found_rows'] );
+                self::assertFalse( \WP_Query::$last_args['update_post_meta_cache'] );
+                self::assertFalse( \WP_Query::$last_args['update_post_term_cache'] );
         }
 }

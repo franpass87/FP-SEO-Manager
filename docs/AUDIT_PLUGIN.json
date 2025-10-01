@@ -1,0 +1,126 @@
+{
+  "meta": {
+    "plugin": "FP SEO Performance",
+    "date": "2025-10-01",
+    "wp_min": "6.6",
+    "php_targets": [
+      "8.2",
+      "8.3"
+    ]
+  },
+  "summary": {
+    "files_scanned": 76,
+    "files_total": 76,
+    "issues_total": 3,
+    "by_severity": {
+      "critical": 0,
+      "high": 1,
+      "medium": 2,
+      "low": 0
+    }
+  },
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "severity": "high",
+      "category": [
+        "functional",
+        "settings"
+      ],
+      "file": "src/Analysis/Analyzer.php",
+      "line": 54,
+      "snippet": "if ( empty( $checks ) ) {\n        $checks = $this->default_checks();\n}\n\n$enabled_ids = array();\n\nforeach ( $checks as $check ) {\n        $enabled_ids[ $check->id() ] = true;\n}",
+      "diagnosis": "Analyzer always runs the full default check set and never applies the saved Analysis \"Checks\" toggles rendered in SettingsPage, so disabling a check in the UI has no effect.",
+      "impact": "Editors cannot silence specific checks; scores and recommendations ignore administrator intent, undermining trust in the tool.",
+      "repro": [
+        "Disable a check (e.g. Open Graph) in Settings → Analysis",
+        "Save changes",
+        "Open any post editor metabox and observe the check still runs"
+      ],
+      "proposed_fix": "Hook into the `fp_seo_perf_checks_enabled` filter (or adjust Analyzer) to intersect the enabled list with `Options::get()['analysis']['checks']` before running checks.",
+      "effort": "M",
+      "tags": [
+        "analyzer",
+        "options",
+        "settings"
+      ]
+    },
+    {
+      "id": "ISSUE-002",
+      "severity": "medium",
+      "category": [
+        "performance",
+        "database"
+      ],
+      "file": "src/Admin/BulkAuditPage.php",
+      "line": 450,
+      "snippet": "$args = array(\n        'post_type'      => 'all' === $post_type ? $types : $post_type,\n        'post_status'    => 'any' === $status ? $this->get_allowed_statuses() : $status,\n        'posts_per_page' => 200,\n        'orderby'        => 'date',\n        'order'          => 'DESC',\n);\n\n$query = new WP_Query( $args );",
+      "diagnosis": "Bulk audit table pulls 200 posts without disabling pagination counts or cache priming, causing heavy queries on large libraries.",
+      "impact": "Slow admin loads and unnecessary DB load on shared hosts when editors open the bulk auditor.",
+      "repro": [
+        "Open Bulk Auditor on a site with thousands of posts",
+        "Observe slow response and expensive SQL in query log"
+      ],
+      "proposed_fix": "Set `no_found_rows`, `update_post_meta_cache`, and `update_post_term_cache` to `false`/`true` appropriately to avoid counting and cache hydration for this report.",
+      "effort": "S",
+      "tags": [
+        "wpquery",
+        "admin",
+        "performance"
+      ]
+    },
+    {
+      "id": "ISSUE-003",
+      "severity": "medium",
+      "category": [
+        "performance",
+        "remote"
+      ],
+      "file": "src/SiteHealth/SeoHealth.php",
+      "line": 202,
+      "snippet": "$endpoint = add_query_arg(\n        array(\n                'url'      => $request_url,\n                'key'      => $api_key,\n                'strategy' => 'mobile',\n        ),\n        'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'\n);\n\n$response = wp_remote_get(\n        $endpoint,\n        array(\n                'timeout' => 15,\n        )\n);",
+      "diagnosis": "Site Health always performs a live PageSpeed Insights request with no caching, instead of reusing the plugin's PSI cache, so every visit triggers network I/O.",
+      "impact": "Slow Site Health dashboard, potential PSI quota exhaustion, and timeouts on constrained hosts when PSI is enabled.",
+      "repro": [
+        "Enable PSI integration with an API key",
+        "Load Tools → Site Health multiple times and monitor outbound requests"
+      ],
+      "proposed_fix": "Cache results via a transient or delegate to `Perf\\Signals::collect()` with caching, refreshing only when stale or forced.",
+      "effort": "M",
+      "tags": [
+        "site-health",
+        "psi",
+        "remote-request"
+      ]
+    }
+  ],
+  "conflicts": [],
+  "compat": {
+    "deprecated": [
+      "Update 'Requires at least' to 6.6 in plugin header and readme."
+    ],
+    "php_warnings": []
+  },
+  "perf": {
+    "hotspots": [
+      "Bulk audit query lacks no_found_rows/meta cache flags (src/Admin/BulkAuditPage.php:450)",
+      "Site Health PSI test should reuse cached PSI data (src/SiteHealth/SeoHealth.php:202)"
+    ],
+    "autoload_options": [],
+    "cron": []
+  },
+  "i18n": {
+    "domain_issues": [],
+    "missing": []
+  },
+  "tests": {
+    "gaps": [
+      "No coverage ensures disabled analyzer checks stay inactive.",
+      "Signals/Site Health tests cover URL normalization but not PSI caching regressions (ISSUE-003)."
+    ],
+    "suggestions": [
+      "Add integration test for analyzer respecting settings toggles.",
+      "Cover Site Health PSI caching fallback to avoid regressions (ISSUE-003)."
+    ]
+  }
+}

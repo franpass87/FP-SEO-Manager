@@ -19,6 +19,7 @@ use function get_transient;
 use function home_url;
 use function html_entity_decode;
 use function is_array;
+use function is_numeric;
 use function is_string;
 use function is_wp_error;
 use function json_decode;
@@ -101,13 +102,17 @@ class Signals {
                 $normalized_url = $this->normalize_page_url( $url );
                 $cache_key      = $this->build_cache_key( $normalized_url );
 
-		if ( ! $refresh ) {
-			$cached = get_transient( $cache_key );
+                if ( ! $refresh ) {
+                        $cached = get_transient( $cache_key );
 			if ( is_array( $cached ) ) {
 				$cached['cached'] = true;
-				return $cached;
-			}
-		}
+                                if ( ! isset( $cached['performance_score'] ) ) {
+                                        $cached['performance_score'] = null;
+                                }
+
+                                return $cached;
+                        }
+                }
 
                 $endpoint = add_query_arg(
                         array(
@@ -125,7 +130,7 @@ class Signals {
 			)
 		);
 
-		if ( is_wp_error( $response ) ) {
+                if ( is_wp_error( $response ) ) {
                         return array(
                                 'source'        => 'psi',
                                 'url'           => $normalized_url,
@@ -133,8 +138,9 @@ class Signals {
                                 'error'         => $response->get_error_message(),
                                 'metrics'       => array(),
                                 'opportunities' => array(),
+                                'performance_score' => null,
                         );
-		}
+                }
 
                 $body    = (string) wp_remote_retrieve_body( $response );
                 $payload = json_decode( $body, true );
@@ -147,6 +153,7 @@ class Signals {
                                 'error'         => esc_html__( 'Unexpected PageSpeed Insights payload.', 'fp-seo-performance' ),
                                 'metrics'       => array(),
                                 'opportunities' => array(),
+                                'performance_score' => null,
                         );
                 }
 
@@ -160,11 +167,14 @@ class Signals {
                                 'error'         => $api_error,
                                 'metrics'       => array(),
                                 'opportunities' => array(),
+                                'performance_score' => null,
                         );
                 }
 
                 $metrics = $this->parse_core_web_vitals( $payload );
                 $ops     = $this->parse_opportunities( $payload );
+
+                $performance_score = $this->extract_performance_score( $payload );
 
                 $result = array(
                         'source'        => 'psi',
@@ -172,6 +182,7 @@ class Signals {
                         'endpoint'      => $endpoint,
                         'metrics'       => $metrics,
                         'opportunities' => $ops,
+                        'performance_score' => $performance_score,
                         'cached'        => false,
                 );
 
@@ -305,11 +316,11 @@ class Signals {
 	 *
 	 * @return array<int, array<string, mixed>>
 	 */
-	private function parse_opportunities( array $payload ): array {
-		$audits = $payload['lighthouseResult']['audits'] ?? array();
-		if ( ! is_array( $audits ) ) {
-			return array();
-		}
+        private function parse_opportunities( array $payload ): array {
+                $audits = $payload['lighthouseResult']['audits'] ?? array();
+                if ( ! is_array( $audits ) ) {
+                        return array();
+                }
 
 		$opps = array();
 
@@ -333,16 +344,31 @@ class Signals {
 			if ( count( $opps ) >= 5 ) {
 				break;
 			}
-		}
+                }
 
                 return $opps;
         }
 
         /**
+         * Extracts the Lighthouse performance score from the PSI payload.
+         *
+         * @param array<string, mixed> $payload PSI response payload.
+         */
+        private function extract_performance_score( array $payload ): ?int {
+                $category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
+
+                if ( is_numeric( $category ) ) {
+                        return (int) round( (float) $category * 100 );
+                }
+
+                return null;
+        }
+
+        /**
          * Provides localized metric labels.
-	 *
-	 * @param string $metric Metric key.
-	 *
+         *
+         * @param string $metric Metric key.
+         *
 	 * @return string
 	 */
 	private function metric_label( string $metric ): string {

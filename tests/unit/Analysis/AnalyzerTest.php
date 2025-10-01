@@ -29,6 +29,7 @@ final class AnalyzerTest extends TestCase {
                 when( 'esc_html__' )->returnArg( 1 );
                 when( 'home_url' )->justReturn( 'https://example.com/' );
                 when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+                when( 'get_option' )->justReturn( array() );
         }
 
         protected function tearDown(): void {
@@ -128,30 +129,69 @@ final class AnalyzerTest extends TestCase {
 		self::assertSame( 1, $result['summary'][ Result::STATUS_WARN ] );
 		self::assertSame( 2, $result['summary']['total'] );
 		self::assertArrayHasKey( 'beta', $result['checks'] );
-	}
+        }
 
-	/**
-	 * Provides an analyzer check stub.
+        /**
+         * Provides an analyzer check stub.
 	 *
 	 * @param string $id     Check identifier.
 	 * @param string $status Result status.
 	 * @param float  $weight Result weight.
 	 */
-	private function create_stub_check( string $id, string $status, float $weight ): CheckInterface {
-			$mock = $this->createMock( CheckInterface::class );
+        private function create_stub_check( string $id, string $status, float $weight ): CheckInterface {
+                $mock = $this->createMock( CheckInterface::class );
 
-			$mock->method( 'id' )->willReturn( $id );
-			$mock->method( 'label' )->willReturn( ucfirst( $id ) );
-			$mock->method( 'description' )->willReturn( 'Stub description' );
-			$mock->method( 'run' )->willReturn(
-				new Result(
-					$status,
-					array( 'checked' => $id ),
-					'Resolve ' . $id . ' issues',
-					$weight
-				)
-			);
+                $mock->method( 'id' )->willReturn( $id );
+                $mock->method( 'label' )->willReturn( ucfirst( $id ) );
+                $mock->method( 'description' )->willReturn( 'Stub description' );
+                $mock->method( 'run' )->willReturn(
+                        new Result(
+                                $status,
+                                array( 'checked' => $id ),
+                                'Resolve ' . $id . ' issues',
+                                $weight
+                        )
+                );
 
-			return $mock;
-	}
+                return $mock;
+        }
+
+        /**
+         * Ensures analyzer honours disabled checks stored in options.
+         */
+        public function test_respects_disabled_checks_from_options(): void {
+                $context = new Context( null, '<p>Example</p>' );
+
+                when( 'get_option' )->justReturn(
+                        array(
+                                'analysis' => array(
+                                        'checks' => array(
+                                                'title_length'      => true,
+                                                'meta_description'  => false,
+                                        ),
+                                ),
+                        )
+                );
+
+                $enabled = $this->createMock( CheckInterface::class );
+                $enabled->method( 'id' )->willReturn( 'title_length' );
+                $enabled->method( 'label' )->willReturn( 'Title Length' );
+                $enabled->method( 'description' )->willReturn( 'Title length description' );
+                $enabled->expects( self::once() )->method( 'run' )->willReturn(
+                        new Result( Result::STATUS_PASS, array(), 'Looks good', 1.0 )
+                );
+
+                $disabled = $this->createMock( CheckInterface::class );
+                $disabled->method( 'id' )->willReturn( 'meta_description' );
+                $disabled->method( 'label' )->willReturn( 'Meta Description' );
+                $disabled->method( 'description' )->willReturn( 'Meta description' );
+                $disabled->expects( self::never() )->method( 'run' );
+
+                $analyzer = new Analyzer( array( $enabled, $disabled ) );
+                $result   = $analyzer->analyze( $context );
+
+                self::assertArrayHasKey( 'title_length', $result['checks'] );
+                self::assertArrayNotHasKey( 'meta_description', $result['checks'] );
+                self::assertSame( 1, $result['summary']['total'] );
+        }
 }

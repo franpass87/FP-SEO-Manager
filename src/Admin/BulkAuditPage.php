@@ -450,17 +450,20 @@ class BulkAuditPage {
 	private function query_posts( string $post_type, string $status ): array {
 			$types = $this->get_allowed_post_types();
 
-			$args = array(
-				'post_type'      => 'all' === $post_type ? $types : $post_type,
-				'post_status'    => 'any' === $status ? $this->get_allowed_statuses() : $status,
-				'posts_per_page' => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
-				'orderby'        => 'date',
-				'order'          => 'DESC',
-			);
+                $args = array(
+                        'post_type'      => 'all' === $post_type ? $types : $post_type,
+                        'post_status'    => 'any' === $status ? $this->get_allowed_statuses() : $status,
+                        'posts_per_page' => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
+                        'orderby'        => 'date',
+                        'order'          => 'DESC',
+                        'no_found_rows'  => true,
+                        'update_post_meta_cache' => false,
+                        'update_post_term_cache' => false,
+                );
 
-			$query = new WP_Query( $args );
+                $query = new WP_Query( $args );
 
-			return $query->posts;
+                return $query->posts;
 	}
 
 		/**
