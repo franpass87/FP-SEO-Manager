@@ -1,0 +1,716 @@
+# Copyright (C) 2025 FP
+# This file is distributed under the same license as the FP SEO Performance plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: FP SEO Performance 0.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/FP-SEO-Manager\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2025-10-01T06:28:34+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: fp-seo-performance\n"
+
+#. Plugin Name of the plugin
+#: fp-seo-performance.php
+#: src/Admin/Menu.php:48
+msgid "FP SEO Performance"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: fp-seo-performance.php
+msgid "https://example.com/plugins/fp-seo-performance"
+msgstr ""
+
+#. Description of the plugin
+#: fp-seo-performance.php
+msgid "SEO and performance assistant for WordPress editors."
+msgstr ""
+
+#. Author of the plugin
+#: fp-seo-performance.php
+msgid "FP"
+msgstr ""
+
+#. Author URI of the plugin
+#: fp-seo-performance.php
+msgid "https://example.com"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:94
+#: src/Admin/BulkAuditPage.php:95
+#: src/Admin/BulkAuditPage.php:152
+msgid "Bulk Auditor"
+msgstr ""
+
+#. translators: 1: Number of items processed, 2: Total items selected.
+#: src/Admin/BulkAuditPage.php:126
+#, php-format
+msgid "Analyzing %1$d of %2$d items…"
+msgstr ""
+
+#. translators: %1$d: Number of items analyzed.
+#: src/Admin/BulkAuditPage.php:128
+#, php-format
+msgid "Analysis complete for %1$d items."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:129
+msgid "Select at least one item to analyze."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:130
+msgid "Analysis request failed. Please try again."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:141
+msgid "Sorry, you are not allowed to access this page."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:156
+msgid "The analyzer is currently disabled. Enable it in the settings to run bulk audits."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:163
+msgid "Filter by type"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:165
+msgid "All types"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:175
+msgid "Filter by status"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:177
+msgid "All statuses"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:185
+msgid "Apply filters"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:196
+msgid "Analyze selected"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:199
+msgid "Export CSV"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:211
+#: src/Admin/BulkAuditPage.php:348
+msgid "Title"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:212
+#: src/Admin/BulkAuditPage.php:349
+msgid "Type"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:213
+#: src/Admin/BulkAuditPage.php:350
+msgid "Status"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:214
+#: src/Admin/BulkAuditPage.php:351
+msgid "Score"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:215
+#: src/Admin/BulkAuditPage.php:352
+msgid "Warnings"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:216
+#: src/Admin/BulkAuditPage.php:353
+msgid "Last analyzed"
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:223
+msgid "No content found for the selected filters."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:281
+msgid "Insufficient permissions."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:285
+msgid "Analyzer is disabled in settings."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:318
+msgid "Sorry, you are not allowed to export these results."
+msgstr ""
+
+#: src/Admin/BulkAuditPage.php:347
+msgid "Post ID"
+msgstr ""
+
+#: src/Admin/Menu.php:34
+#: src/Admin/Menu.php:35
+#: src/Editor/Metabox.php:69
+msgid "SEO Performance"
+msgstr ""
+
+#: src/Admin/Menu.php:49
+msgid "Dashboard coming soon."
+msgstr ""
+
+#: src/Admin/Notices.php:49
+msgid "PageSpeed Insights is enabled but no API key is configured. Add a key or disable PSI hints."
+msgstr ""
+
+#: src/Admin/Notices.php:56
+msgid "The admin bar badge requires the analyzer to be enabled. Update your general settings to avoid missing scores."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:38
+#: src/Admin/SettingsPage.php:39
+msgid "Settings"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:66
+msgid "You do not have permission to access these settings."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:73
+msgid "General"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:74
+msgid "Analysis"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:75
+#: src/SiteHealth/SeoHealth.php:297
+msgid "Performance"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:76
+msgid "Advanced"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:80
+msgid "FP SEO Performance Settings"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:120
+msgid "Save Changes"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:131
+msgid "You do not have permission to import settings."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:139
+msgid "Import data cannot be empty."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:146
+msgid "Invalid JSON settings payload."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:152
+msgid "Settings imported successfully."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:168
+msgid "Analyzer"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:172
+msgid "Enable on-page analyzer"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:174
+msgid "Toggle to enable or disable all analyzer features globally."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:178
+msgid "Content language"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:185
+msgid "Used as a hint for language-specific analysis tweaks."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:189
+msgid "Admin bar badge"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:193
+msgid "Display analyzer score badge in the admin bar."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:211
+msgid "Checks"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:212
+msgid "Enable or disable individual analyzer checks."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:225
+msgid "Metadata thresholds"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:229
+msgid "Title length"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:232
+#: src/Admin/SettingsPage.php:246
+msgid "Min"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:236
+#: src/Admin/SettingsPage.php:250
+msgid "Max"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:239
+msgid "Recommended between 50 and 60 characters."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:243
+#: src/Admin/SettingsPage.php:409
+msgid "Meta description length"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:253
+msgid "Recommended between 120 and 160 characters."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:257
+msgid "Canonical policy"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:260
+msgid "Automatic (recommended)"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:261
+msgid "Do not enforce"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:266
+msgid "Social tags"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:270
+msgid "Enable Open Graph tags."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:275
+msgid "Enable Twitter card tags."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:282
+msgid "Scoring weights"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:283
+msgid "Fine-tune how much each check influences the final score. Higher numbers increase impact."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:310
+msgid "PageSpeed Insights"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:314
+msgid "Enable PSI-based performance hints."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:316
+msgid "Requires a Google PageSpeed Insights API key to fetch Core Web Vitals signals."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:317
+msgid "Enter PSI API key"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:321
+msgid "Local heuristics"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:325
+msgid "Warn when images miss width/height attributes."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:330
+msgid "Highlight pages with unusually large DOM trees."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:350
+msgid "Required capability"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:353
+msgid "Users must have this capability to manage plugin settings."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:357
+msgid "Telemetry"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:361
+msgid "Share anonymous usage analytics to help improve the plugin."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:363
+msgid "Telemetry remains disabled by default unless explicitly enabled."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:369
+msgid "Export settings"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:370
+msgid "Copy the JSON below to back up your configuration."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:373
+msgid "Import settings"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:378
+msgid "Paste settings JSON here"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:379
+msgid "Import Settings"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:391
+msgid "English"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:392
+msgid "Spanish"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:393
+msgid "French"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:394
+msgid "German"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:395
+msgid "Italian"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:408
+msgid "SEO Title length"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:410
+msgid "H1 presence"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:411
+msgid "Heading structure"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:412
+msgid "Image alternative text"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:413
+msgid "Canonical tag"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:414
+msgid "Robots indexability"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:415
+msgid "Open Graph cards"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:416
+msgid "Twitter cards"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:417
+msgid "Schema.org presets"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:418
+msgid "Internal links"
+msgstr ""
+
+#: src/Editor/Metabox.php:124
+#: src/Editor/Metabox.php:155
+msgid "SEO Score"
+msgstr ""
+
+#: src/Editor/Metabox.php:125
+#: src/Editor/Metabox.php:159
+msgid "Key indicators"
+msgstr ""
+
+#: src/Editor/Metabox.php:126
+#: src/Editor/Metabox.php:169
+msgid "Recommendations"
+msgstr ""
+
+#: src/Editor/Metabox.php:127
+msgid "All checks are passing."
+msgstr ""
+
+#: src/Editor/Metabox.php:128
+#: src/Editor/Metabox.php:228
+msgid "Analyzer disabled in settings."
+msgstr ""
+
+#: src/Editor/Metabox.php:129
+msgid "This content is excluded from SEO analysis."
+msgstr ""
+
+#: src/Editor/Metabox.php:130
+msgid "Analyzing content…"
+msgstr ""
+
+#: src/Editor/Metabox.php:131
+msgid "Unable to analyze content. Please try again."
+msgstr ""
+
+#: src/Editor/Metabox.php:134
+msgid "Pass"
+msgstr ""
+
+#: src/Editor/Metabox.php:135
+msgid "Warning"
+msgstr ""
+
+#: src/Editor/Metabox.php:136
+msgid "Fail"
+msgstr ""
+
+#: src/Editor/Metabox.php:150
+msgid "Exclude this content from analysis"
+msgstr ""
+
+#: src/Editor/Metabox.php:222
+msgid "You are not allowed to edit this post."
+msgstr ""
+
+#: src/Perf/Signals.php:140
+msgid "Unexpected PageSpeed Insights payload."
+msgstr ""
+
+#: src/Perf/Signals.php:183
+msgid "Image alternative text coverage"
+msgstr ""
+
+#: src/Perf/Signals.php:191
+msgid "Add missing alternative text to images"
+msgstr ""
+
+#: src/Perf/Signals.php:192
+msgid "Improving alternative text helps with Core Web Vitals for LCP images and accessibility."
+msgstr ""
+
+#: src/Perf/Signals.php:201
+msgid "Reduce inline CSS size"
+msgstr ""
+
+#. translators: %s: Inline CSS size in kilobytes.
+#: src/Perf/Signals.php:204
+#, php-format
+msgid "Inline styles add %s KB to the page. Consider extracting critical CSS and deferring the rest."
+msgstr ""
+
+#: src/Perf/Signals.php:214
+msgid "Review number of images on the page"
+msgstr ""
+
+#: src/Perf/Signals.php:215
+msgid "Large numbers of images can slow down rendering. Consider lazy-loading or trimming media."
+msgstr ""
+
+#: src/Perf/Signals.php:223
+msgid "Simplify heading structure"
+msgstr ""
+
+#: src/Perf/Signals.php:224
+msgid "Complex heading hierarchies often indicate heavy DOM depth, which can impact INP."
+msgstr ""
+
+#: src/Perf/Signals.php:327
+msgid "Largest Contentful Paint"
+msgstr ""
+
+#: src/Perf/Signals.php:329
+msgid "Cumulative Layout Shift"
+msgstr ""
+
+#: src/Perf/Signals.php:331
+msgid "Interaction to Next Paint"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:34
+msgid "Homepage SEO metadata"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:38
+msgid "Homepage performance insights"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:64
+msgid "Unable to verify homepage SEO metadata"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:67
+msgid "We could not load the homepage to review its SEO metadata. Check your site is reachable and try again."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:72
+msgid "Open homepage"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:82
+msgid "Homepage returned an empty response"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:85
+msgid "The homepage response was empty so SEO metadata could not be verified."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:98
+msgid "Homepage is missing a <title> element."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:102
+msgid "Update site title & tagline"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:107
+msgid "Homepage is missing a meta description."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:111
+msgid "Add a site meta description"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:116
+msgid "Homepage is missing a canonical URL."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:120
+msgid "Review canonical settings"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:139
+msgid "Homepage robots directives block indexing."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:143
+msgid "Review search engine visibility"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:152
+msgid "Homepage exposes SEO metadata"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:155
+msgid "The homepage provides core SEO tags including title, description, canonical URL, and indexing directives."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:160
+msgid "Homepage SEO metadata needs attention"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:165
+msgid "Review the homepage to resolve the following:"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:186
+msgid "PageSpeed Insights API key not configured"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:189
+msgid "Add a Google PageSpeed Insights API key to fetch Core Web Vitals directly in Site Health."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:194
+msgid "Configure PSI settings"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:218
+msgid "Unable to contact PageSpeed Insights API"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:221
+msgid "The PSI API request failed. Verify the API key and network connectivity."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:226
+msgid "Review PSI configuration"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:245
+msgid "Unexpected PageSpeed Insights response"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:248
+msgid "The PageSpeed Insights response did not include a performance score. Double-check the queried URL and API quota."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:253
+msgid "Open PSI report"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:260
+msgid "PageSpeed Insights score available"
+msgstr ""
+
+#. translators: %d: PSI performance score.
+#: src/SiteHealth/SeoHealth.php:265
+#, php-format
+msgid "Google PageSpeed Insights reports a performance score of %d for the homepage."
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:272
+msgid "View detailed PSI report"
+msgstr ""
+
+#: src/SiteHealth/SeoHealth.php:285
+msgid "SEO"
+msgstr ""
+
+#: src/Utils/Options.php:174
+msgid "Title length minimum cannot exceed maximum. Resetting to defaults."
+msgstr ""
+
+#: src/Utils/Options.php:179
+msgid "Title length thresholds must be numbers."
+msgstr ""
+
+#: src/Utils/Options.php:204
+msgid "Meta description minimum cannot exceed maximum. Resetting to defaults."
+msgstr ""
+
+#: src/Utils/Options.php:209
+msgid "Meta description thresholds must be numbers."
+msgstr ""
+
+#: src/Utils/Options.php:236
+msgid "Score weights must be numeric values. Using defaults."
+msgstr ""
+
+#: src/Utils/Options.php:257
+msgid "PSI integration requires an API key. Please supply one or disable PSI."
+msgstr ""
+
+#: src/Utils/Options.php:265
+msgid "Admin bar badge requires the analyzer to be enabled."
+msgstr ""

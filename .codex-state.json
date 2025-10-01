@@ -1,0 +1,16 @@
+{
+  "phases": [
+    { "name": "Bootstrap", "weight": 10, "completion": 100 },
+    { "name": "Settings + Admin skeleton", "weight": 8, "completion": 100 },
+    { "name": "Analyzer Engine", "weight": 22, "completion": 100 },
+    { "name": "Scoring & Recommendations", "weight": 10, "completion": 100 },
+    { "name": "Post Editor Metabox", "weight": 10, "completion": 100 },
+    { "name": "Bulk Auditor", "weight": 10, "completion": 100 },
+    { "name": "Site Health", "weight": 8, "completion": 100 },
+    { "name": "Performance Signals (PSI opt-in)", "weight": 8, "completion": 100 },
+    { "name": "i18n + Accessibility + UX polish", "weight": 6, "completion": 100 },
+    { "name": "Tests + QA", "weight": 5, "completion": 100 },
+    { "name": "CI + Build ZIP", "weight": 3, "completion": 100 }
+  ],
+  "overall_percent": 100
+}
