@@ -10,19 +10,23 @@ declare(strict_types=1);
 namespace FP\SEO\Perf;
 
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\UrlNormalizer;
 use function add_query_arg;
 use function count;
 use function defined;
 use function esc_html__;
 use function get_transient;
 use function home_url;
+use function html_entity_decode;
 use function is_array;
+use function is_string;
 use function is_wp_error;
 use function json_decode;
 use function max;
 use function md5;
 use function min;
-use function rawurlencode;
+use function rawurldecode;
+use function wp_parse_url;
 use function round;
 use function set_transient;
 use function sprintf;
@@ -93,8 +97,9 @@ class Signals {
 	 *
 	 * @return array<string, mixed>
 	 */
-	private function collect_from_psi( string $url, string $api_key, bool $refresh = false ): array {
-		$cache_key = self::TRANSIENT_PREFIX . md5( strtolower( $url ) );
+        private function collect_from_psi( string $url, string $api_key, bool $refresh = false ): array {
+                $normalized_url = $this->normalize_page_url( $url );
+                $cache_key      = $this->build_cache_key( $normalized_url );
 
 		if ( ! $refresh ) {
 			$cached = get_transient( $cache_key );
@@ -104,14 +109,14 @@ class Signals {
 			}
 		}
 
-		$endpoint = add_query_arg(
-			array(
-				'url'      => rawurlencode( $url ),
-				'key'      => $api_key,
-				'strategy' => 'mobile',
-			),
-			'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
-		);
+                $endpoint = add_query_arg(
+                        array(
+                                'url'      => $normalized_url,
+                                'key'      => $api_key,
+                                'strategy' => 'mobile',
+                        ),
+                        'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
+                );
 
 		$response = wp_remote_get(
 			$endpoint,
@@ -121,41 +126,54 @@ class Signals {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return array(
-				'source'        => 'psi',
-				'url'           => $url,
-				'endpoint'      => $endpoint,
-				'error'         => $response->get_error_message(),
-				'metrics'       => array(),
-				'opportunities' => array(),
-			);
+                        return array(
+                                'source'        => 'psi',
+                                'url'           => $normalized_url,
+                                'endpoint'      => $endpoint,
+                                'error'         => $response->get_error_message(),
+                                'metrics'       => array(),
+                                'opportunities' => array(),
+                        );
 		}
 
-		$body    = (string) wp_remote_retrieve_body( $response );
-		$payload = json_decode( $body, true );
+                $body    = (string) wp_remote_retrieve_body( $response );
+                $payload = json_decode( $body, true );
 
-		if ( ! is_array( $payload ) ) {
-			return array(
-				'source'        => 'psi',
-				'url'           => $url,
-				'endpoint'      => $endpoint,
-				'error'         => esc_html__( 'Unexpected PageSpeed Insights payload.', 'fp-seo-performance' ),
-				'metrics'       => array(),
-				'opportunities' => array(),
-			);
-		}
+                if ( ! is_array( $payload ) ) {
+                        return array(
+                                'source'        => 'psi',
+                                'url'           => $normalized_url,
+                                'endpoint'      => $endpoint,
+                                'error'         => esc_html__( 'Unexpected PageSpeed Insights payload.', 'fp-seo-performance' ),
+                                'metrics'       => array(),
+                                'opportunities' => array(),
+                        );
+                }
 
-		$metrics = $this->parse_core_web_vitals( $payload );
-		$ops     = $this->parse_opportunities( $payload );
+                $api_error = $this->extract_psi_error_message( $payload );
 
-		$result = array(
-			'source'        => 'psi',
-			'url'           => $url,
-			'endpoint'      => $endpoint,
-			'metrics'       => $metrics,
-			'opportunities' => $ops,
-			'cached'        => false,
-		);
+                if ( null !== $api_error ) {
+                        return array(
+                                'source'        => 'psi',
+                                'url'           => $normalized_url,
+                                'endpoint'      => $endpoint,
+                                'error'         => $api_error,
+                                'metrics'       => array(),
+                                'opportunities' => array(),
+                        );
+                }
+
+                $metrics = $this->parse_core_web_vitals( $payload );
+                $ops     = $this->parse_opportunities( $payload );
+
+                $result = array(
+                        'source'        => 'psi',
+                        'url'           => $normalized_url,
+                        'endpoint'      => $endpoint,
+                        'metrics'       => $metrics,
+                        'opportunities' => $ops,
+                        'cached'        => false,
+                );
 
 		$ttl = defined( 'DAY_IN_SECONDS' ) ? (int) DAY_IN_SECONDS : 86400;
 		set_transient( $cache_key, $result, $ttl );
@@ -163,14 +181,15 @@ class Signals {
 		return $result;
 	}
 
-	/**
-	 * Builds heuristic results when PSI is unavailable.
-	 *
-	 * @param array<string, mixed> $context Local context metrics.
-	 *
-	 * @return array<string, mixed>
-	 */
-        private function collect_heuristics( array $context, array $toggles = array() ): array {
+       /**
+        * Builds heuristic results when PSI is unavailable.
+        *
+        * @param array<string, mixed> $context Local context metrics.
+        * @param array<string, bool>  $toggles Heuristic toggle overrides keyed by metric identifier.
+        *
+        * @return array<string, mixed>
+        */
+       private function collect_heuristics( array $context, array $toggles = array() ): array {
                 $images_total       = max( 0, (int) ( $context['images']['total'] ?? 0 ) );
                 $images_missing_alt = max( 0, (int) ( $context['images']['missing_alt'] ?? 0 ) );
                 $inline_css_bytes   = max( 0, (int) ( $context['inline_css_bytes'] ?? 0 ) );
@@ -316,26 +335,99 @@ class Signals {
 			}
 		}
 
-		return $opps;
-	}
+                return $opps;
+        }
 
-	/**
-	 * Provides localized metric labels.
+        /**
+         * Provides localized metric labels.
 	 *
 	 * @param string $metric Metric key.
 	 *
 	 * @return string
 	 */
 	private function metric_label( string $metric ): string {
-		switch ( $metric ) {
-			case 'lcp':
-				return esc_html__( 'Largest Contentful Paint', 'fp-seo-performance' );
-			case 'cls':
-				return esc_html__( 'Cumulative Layout Shift', 'fp-seo-performance' );
+                switch ( $metric ) {
+                        case 'lcp':
+                                return esc_html__( 'Largest Contentful Paint', 'fp-seo-performance' );
+                        case 'cls':
+                                return esc_html__( 'Cumulative Layout Shift', 'fp-seo-performance' );
 			case 'inp':
 				return esc_html__( 'Interaction to Next Paint', 'fp-seo-performance' );
 			default:
-				return strtoupper( $metric );
-		}
-	}
+                                return strtoupper( $metric );
+                }
+        }
+
+        /**
+         * Normalizes the requested page URL for PSI requests.
+         *
+         * @param string $url Page URL, potentially percent-encoded already.
+         */
+        private function normalize_page_url( string $url ): string {
+                return UrlNormalizer::normalize( $url );
+        }
+
+        /**
+         * Generates a cache key for a normalized PSI URL while respecting path casing.
+         *
+         * @param string $normalized_url Normalized page URL.
+         */
+        private function build_cache_key( string $normalized_url ): string {
+                $source = $normalized_url;
+                $parts  = wp_parse_url( $normalized_url );
+
+                if ( is_array( $parts ) ) {
+                        $scheme   = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) . '://' : '';
+                        $host     = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
+                        $port     = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+                        $path     = $parts['path'] ?? '';
+                        $query    = isset( $parts['query'] ) && '' !== $parts['query'] ? '?' . $parts['query'] : '';
+                        $fragment = isset( $parts['fragment'] ) && '' !== $parts['fragment'] ? '#' . $parts['fragment'] : '';
+
+                        if ( '' !== $scheme || '' !== $host ) {
+                                $source = $scheme . $host . $port . $path . $query . $fragment;
+                        }
+                }
+
+                return self::TRANSIENT_PREFIX . md5( $source );
+        }
+
+        /**
+         * Extracts an error message from a PSI response payload, if present.
+         *
+         * @param array<string, mixed> $payload PSI response payload.
+         */
+        private function extract_psi_error_message( array $payload ): ?string {
+                $error = $payload['error'] ?? null;
+
+                if ( ! is_array( $error ) ) {
+                        return null;
+                }
+
+                $message = $error['message'] ?? null;
+
+                if ( is_string( $message ) && '' !== trim( $message ) ) {
+                        return trim( $message );
+                }
+
+                $details = $error['errors'] ?? null;
+
+                if ( ! is_array( $details ) ) {
+                        return null;
+                }
+
+                foreach ( $details as $detail ) {
+                        if ( ! is_array( $detail ) ) {
+                                continue;
+                        }
+
+                        $detail_message = $detail['message'] ?? null;
+
+                        if ( is_string( $detail_message ) && '' !== trim( $detail_message ) ) {
+                                return trim( $detail_message );
+                        }
+                }
+
+                return null;
+        }
 }

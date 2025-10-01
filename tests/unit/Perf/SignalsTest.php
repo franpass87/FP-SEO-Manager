@@ -13,6 +13,7 @@ use Brain\Monkey;
 use FP\SEO\Perf\Signals;
 use FP\SEO\Utils\Options;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use function Brain\Monkey\Functions\expect;
 use function Brain\Monkey\Functions\when;
 
@@ -47,11 +48,16 @@ class SignalsTest extends TestCase {
 				return 'https://example.com' . $path;
 			}
 		);
-		when( 'add_query_arg' )->alias(
-			static function ( array $args, string $url ): string {
-				return $url . '?' . http_build_query( $args );
-			}
-		);
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ): string {
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+                when( 'wp_parse_url' )->alias(
+                        static function ( $url ) {
+                                return parse_url( (string) $url );
+                        }
+                );
 		when( 'wp_json_encode' )->alias( 'json_encode' );
 		when( 'wp_remote_retrieve_body' )->alias(
 			static function ( $response ) {
@@ -113,11 +119,11 @@ class SignalsTest extends TestCase {
 	/**
 	 * PSI data should be parsed into metrics and opportunities when available.
 	 */
-	public function test_collect_fetches_and_parses_psi_payload(): void {
-		$payload = array(
-			'loadingExperience' => array(
-				'metrics' => array(
-					'LARGEST_CONTENTFUL_PAINT_MS'   => array(
+        public function test_collect_fetches_and_parses_psi_payload(): void {
+                $payload = array(
+                        'loadingExperience' => array(
+                                'metrics' => array(
+                                        'LARGEST_CONTENTFUL_PAINT_MS'   => array(
 						'category'   => 'FAST',
 						'percentile' => 2100,
 					),
@@ -171,12 +177,565 @@ class SignalsTest extends TestCase {
 		self::assertArrayHasKey( 'lcp', $result['metrics'] );
 		self::assertSame( 'fast', $result['metrics']['lcp']['category'] );
 		self::assertCount( 1, $result['opportunities'] );
-		self::assertFalse( $result['cached'] );
-	}
+                self::assertFalse( $result['cached'] );
+        }
 
-	/**
-	 * When PSI is disabled the service should fallback to heuristics.
-	 */
+        /**
+         * PSI requests should send the raw URL without double-encoding.
+         */
+        public function test_collect_from_psi_uses_raw_url_parameter(): void {
+                $raw_url = 'https://example.com/landing page/?ref=ä';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.9,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $raw_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertSame( $raw_url, $captured_args['url'] ?? null );
+                self::assertSame( 'psi', $result['source'] );
+        }
+
+        /**
+         * Cache keys should normalize host casing but respect path casing.
+         */
+        public function test_cache_key_respects_path_casing(): void {
+                $signals    = new Signals();
+                $reflection = new ReflectionClass( Signals::class );
+                $method     = $reflection->getMethod( 'build_cache_key' );
+                $method->setAccessible( true );
+
+                $upper_host_key = $method->invoke( $signals, 'HTTPS://Example.com/Page' );
+                $lower_host_key = $method->invoke( $signals, 'https://example.com/Page' );
+                $path_variant   = $method->invoke( $signals, 'https://example.com/page' );
+
+                self::assertSame( $lower_host_key, $upper_host_key );
+                self::assertNotSame( $lower_host_key, $path_variant );
+        }
+
+        /**
+         * Percent-encoded URLs should decode safe characters while preserving reserved encodings.
+         */
+        public function test_collect_from_psi_decodes_safe_percent_encoded_urls(): void {
+                $encoded_url = 'https://example.com/landing%20page/?ref=%C3%A4';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.9,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $encoded_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( 'https://example.com/landing page/?ref=ä', $captured_args['url'] );
+                self::assertSame( 'https://example.com/landing page/?ref=ä', $result['url'] );
+                self::assertSame( 'psi', $result['source'] );
+        }
+
+        public function test_collect_from_psi_preserves_plus_sign_query_encodings(): void {
+                $encoded_url = 'https://example.com/?q=cat%2Bdog';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.9,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $encoded_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( 'https://example.com/?q=cat%2Bdog', $captured_args['url'] );
+                self::assertSame( 'https://example.com/?q=cat%2Bdog', $result['url'] );
+        }
+
+        public function test_collect_from_psi_collapses_double_encoded_reserved_sequences(): void {
+                $encoded_url = 'https://example.com/download%252Ffile/?q=cat%252Bdog';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.9,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $encoded_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( 'https://example.com/download%2Ffile/?q=cat%2Bdog', $captured_args['url'] );
+                self::assertSame( 'https://example.com/download%2Ffile/?q=cat%2Bdog', $result['url'] );
+        }
+
+        /**
+         * Nested encoded query values should remain encoded so PSI requests hit the right URL.
+         */
+        public function test_collect_from_psi_preserves_nested_query_encoding(): void {
+                $nested_url = 'https://example.com/?redirect=https%3A%2F%2Fdest.test%2F%3Fa%3Db%2526c%253Dd';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.92,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $nested_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( $nested_url, $captured_args['url'] );
+                self::assertSame( $nested_url, $result['url'] );
+        }
+
+        /**
+         * HTML entity encoded URLs should be normalized before being sent to PSI.
+         */
+        public function test_collect_from_psi_decodes_html_entities_in_urls(): void {
+                $encoded_url = 'https://example.com/landing/?ref=summer&amp;utm_campaign=promo';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.92,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $signals->collect( $encoded_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertSame(
+                        'https://example.com/landing/?ref=summer&utm_campaign=promo',
+                        $captured_args['url'] ?? null
+                );
+        }
+
+        /**
+         * Fully encoded URLs should decode before PSI requests are made.
+         */
+        public function test_collect_from_psi_decodes_fully_encoded_urls(): void {
+                $encoded_url = 'https%3A%2F%2Fexample.com%2Fdownload%252Ffile';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.9,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $encoded_url );
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( 'https://example.com/download%2Ffile', $captured_args['url'] );
+                self::assertSame( 'https://example.com/download%2Ffile', $result['url'] );
+        }
+
+        /**
+         * Percent-encoded hosts should be decoded before invoking PSI.
+         */
+        public function test_collect_from_psi_decodes_percent_encoded_hosts(): void {
+                $encoded_host_url = 'https://%65xample.com/reports/?id=123';
+
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode(
+                                        array(
+                                                'loadingExperience' => array(
+                                                        'metrics' => array(),
+                                                ),
+                                                'lighthouseResult'  => array(
+                                                        'categories' => array(
+                                                                'performance' => array(
+                                                                        'score' => 0.91,
+                                                                ),
+                                                        ),
+                                                ),
+                                        )
+                                ),
+                        )
+                );
+                expect( 'set_transient' )->once()->andReturn( true );
+
+                $signals = new Signals();
+                $result  = $signals->collect( $encoded_host_url );
+
+                $expected_url = 'https://example.com/reports/?id=123';
+
+                self::assertIsArray( $captured_args );
+                self::assertArrayHasKey( 'url', $captured_args );
+                self::assertSame( $expected_url, $captured_args['url'] );
+                self::assertSame( $expected_url, $result['url'] );
+        }
+
+        /**
+         * PSI API errors should be surfaced instead of caching empty responses.
+         */
+        public function test_collect_from_psi_returns_error_message_from_payload(): void {
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'enable_psi'  => true,
+                                                        'psi_api_key' => 'abc123',
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $captured_args = null;
+                when( 'add_query_arg' )->alias(
+                        static function ( array $args, string $url ) use ( &$captured_args ): string {
+                                $captured_args = $args;
+
+                                return $url . '?' . http_build_query( $args );
+                        }
+                );
+
+                $error_payload = array(
+                        'error' => array(
+                                'code'    => 400,
+                                'message' => 'Invalid API key provided.',
+                                'errors'  => array(
+                                        array(
+                                                'message' => 'The API key is invalid.',
+                                        ),
+                                ),
+                        ),
+                );
+
+                expect( 'get_transient' )->once()->andReturn( false );
+                expect( 'wp_remote_get' )->once()->andReturn(
+                        array(
+                                'body' => wp_json_encode( $error_payload ),
+                        )
+                );
+                expect( 'set_transient' )->never();
+
+                $signals = new Signals();
+                $result  = $signals->collect( 'https://example.com/' );
+
+                self::assertIsArray( $captured_args );
+                self::assertSame( 'https://example.com/', $captured_args['url'] ?? null );
+                self::assertSame( 'psi', $result['source'] );
+                self::assertSame( 'Invalid API key provided.', $result['error'] );
+                self::assertSame( array(), $result['metrics'] );
+                self::assertSame( array(), $result['opportunities'] );
+        }
+
+        /**
+         * When PSI is disabled the service should fallback to heuristics.
+         */
         public function test_collect_uses_heuristics_when_psi_disabled(): void {
                 when( 'get_option' )->alias(
                         static function ( string $option, $default_value = false ) {

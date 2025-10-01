@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace FP\SEO\SiteHealth;
 
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\UrlNormalizer;
+use function esc_html;
 use function wp_remote_retrieve_response_code;
 
 /**
@@ -51,14 +53,14 @@ class SeoHealth {
 	public function run_seo_test(): array {
 		$badge    = $this->seo_badge();
 		$home_url = home_url( '/' );
-		$response = wp_remote_get(
-			$home_url,
-			array(
-				'timeout'     => 10,
-				'headers'     => array(),
-				'limit_redir' => 3,
-			)
-		);
+                $response = wp_remote_get(
+                        $home_url,
+                        array(
+                                'timeout'     => 10,
+                                'headers'     => array(),
+                                'redirection' => 3,
+                        )
+                );
 
 		if ( is_wp_error( $response ) ) {
 			return array(
@@ -220,14 +222,16 @@ class SeoHealth {
 			);
 		}
 
-		$endpoint = add_query_arg(
-			array(
-				'url'      => rawurlencode( $home_url ),
-				'key'      => $api_key,
-				'strategy' => 'mobile',
-			),
-			'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
-		);
+                $request_url = UrlNormalizer::normalize( $home_url );
+
+                $endpoint = add_query_arg(
+                        array(
+                                'url'      => $request_url,
+                                'key'      => $api_key,
+                                'strategy' => 'mobile',
+                        ),
+                        'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
+                );
 
 		$response = wp_remote_get(
 			$endpoint,
@@ -252,12 +256,36 @@ class SeoHealth {
 			);
 		}
 
-		$body    = (string) wp_remote_retrieve_body( $response );
-		$payload = json_decode( $body, true );
-		$score   = null;
+                $body    = (string) wp_remote_retrieve_body( $response );
+                $payload = json_decode( $body, true );
+                $score   = null;
 
-		if ( is_array( $payload ) ) {
-			$category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
+                if ( is_array( $payload ) ) {
+                        $error_message = $this->extract_psi_error_message( $payload );
+
+                        if ( null !== $error_message ) {
+                                return array(
+                                        'label'       => __( 'PageSpeed Insights API returned an error', 'fp-seo-performance' ),
+                                        'status'      => 'recommended',
+                                        'badge'       => $badge,
+                                        'description' => sprintf(
+                                                '%s %s',
+                                                esc_html__( 'The PageSpeed Insights API responded with an error:', 'fp-seo-performance' ),
+                                                esc_html( $error_message )
+                                        ),
+                                        'actions'     => array(
+                                                sprintf(
+                                                        '<a href="%s">%s</a>',
+                                                        esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
+                                                        esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
+                                                ),
+                                        ),
+                                );
+                        }
+                }
+
+                if ( is_array( $payload ) ) {
+                        $category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
 			if ( is_numeric( $category ) ) {
 				$score = (int) round( (float) $category * 100 );
 			}
@@ -315,10 +343,49 @@ class SeoHealth {
 	 *
 	 * @return array<string, string> Badge metadata.
 	 */
-	private function performance_badge(): array {
-		return array(
-			'label' => __( 'Performance', 'fp-seo-performance' ),
-			'color' => 'orange',
-		);
-	}
+        private function performance_badge(): array {
+                return array(
+                        'label' => __( 'Performance', 'fp-seo-performance' ),
+                        'color' => 'orange',
+                );
+        }
+
+        /**
+         * Extracts a human readable error message from a PSI response payload.
+         *
+         * @param array<string, mixed> $payload PSI response payload.
+         */
+        private function extract_psi_error_message( array $payload ): ?string {
+                $error = $payload['error'] ?? null;
+
+                if ( ! is_array( $error ) ) {
+                        return null;
+                }
+
+                $message = $error['message'] ?? null;
+
+                if ( is_string( $message ) && '' !== trim( $message ) ) {
+                        return trim( $message );
+                }
+
+                $details = $error['errors'] ?? null;
+
+                if ( ! is_array( $details ) ) {
+                        return null;
+                }
+
+                foreach ( $details as $detail ) {
+                        if ( ! is_array( $detail ) ) {
+                                continue;
+                        }
+
+                        $detail_message = $detail['message'] ?? null;
+
+                        if ( is_string( $detail_message ) && '' !== trim( $detail_message ) ) {
+                                return trim( $detail_message );
+                        }
+                }
+
+                return null;
+        }
 }

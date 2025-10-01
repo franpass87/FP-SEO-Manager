@@ -28,13 +28,13 @@
         "yoast/phpunit-polyfills": "^2.0"
     },
     "scripts": {
-        "test": "phpunit",
+        "test": "vendor/bin/phpunit",
         "lint": [
             "@phpcs"
         ],
-        "phpcs": "phpcs",
-        "phpstan": "phpstan analyse",
-        "rector": "rector process"
+        "phpcs": "vendor/bin/phpcs",
+        "phpstan": "vendor/bin/phpstan analyse",
+        "rector": "vendor/bin/rector process"
     },
     "config": {
         "allow-plugins": {
