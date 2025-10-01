@@ -1,0 +1,95 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main", "master", "work" ]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, json
+          coverage: none
+
+      - name: Validate Composer
+        run: composer validate --strict
+
+      - name: Install dependencies
+        run: composer install --prefer-dist
+
+      - name: Run PHPCS
+        run: vendor/bin/phpcs
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit
+
+      - name: Prepare production dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader
+
+      - name: Build plugin artifact
+        run: |
+          mkdir -p build/fp-seo-performance
+          rsync -a --prune-empty-dirs \
+            --include='fp-seo-performance.php' \
+            --include='readme.txt' \
+            --include='src/***' \
+            --include='assets/***' \
+            --include='languages/***' \
+            --include='vendor/***' \
+            --exclude='*' \
+            ./ build/fp-seo-performance/
+          (cd build && zip -r fp-seo-performance.zip fp-seo-performance)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fp-seo-performance
+          path: build/fp-seo-performance.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fp-seo-performance
+          path: build
+
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: FP SEO Performance ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build/fp-seo-performance.zip
+          asset_name: fp-seo-performance.zip
+          asset_content_type: application/zip
