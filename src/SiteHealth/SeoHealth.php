@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace FP\SEO\SiteHealth;
 
 use FP\SEO\Utils\Options;
+use function wp_remote_retrieve_response_code;
 
 /**
  * Registers Site Health checks for the plugin.
@@ -75,7 +76,29 @@ class SeoHealth {
 			);
 		}
 
-		$body = (string) wp_remote_retrieve_body( $response );
+                $status_code = (int) wp_remote_retrieve_response_code( $response );
+
+                if ( 200 !== $status_code ) {
+                        return array(
+                                'label'       => __( 'Homepage returned an unexpected HTTP status', 'fp-seo-performance' ),
+                                'status'      => 'critical',
+                                'badge'       => $badge,
+                                'description' => sprintf(
+                                        /* translators: %d: HTTP status code. */
+                                        __( 'The homepage responded with HTTP %d so SEO metadata could not be verified. Resolve the issue and try again.', 'fp-seo-performance' ),
+                                        $status_code
+                                ),
+                                'actions'     => array(
+                                        sprintf(
+                                                '<a href="%s" target="_blank" rel="noopener">%s</a>',
+                                                esc_url( $home_url ),
+                                                esc_html__( 'Open homepage', 'fp-seo-performance' )
+                                        ),
+                                ),
+                        );
+                }
+
+                $body = (string) wp_remote_retrieve_body( $response );
 
 		if ( '' === trim( $body ) ) {
 			return array(

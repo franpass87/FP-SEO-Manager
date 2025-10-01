@@ -66,10 +66,12 @@ class Signals {
 	 *
 	 * @return array<string, mixed> Signal payload.
 	 */
-	public function collect( string $url = '', array $context = array(), bool $refresh = false ): array {
-		$options = Options::get();
-		$enable  = (bool) ( $options['performance']['enable_psi'] ?? false );
-		$api_key = trim( (string) ( $options['performance']['psi_api_key'] ?? '' ) );
+        public function collect( string $url = '', array $context = array(), bool $refresh = false ): array {
+                $options     = Options::get();
+                $performance = $options['performance'] ?? array();
+                $enable      = (bool) ( $performance['enable_psi'] ?? false );
+                $api_key     = trim( (string) ( $performance['psi_api_key'] ?? '' ) );
+                $heuristics  = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
 
 		if ( '' === $url ) {
 			$url = home_url( '/' );
@@ -79,8 +81,8 @@ class Signals {
 			return $this->collect_from_psi( $url, $api_key, $refresh );
 		}
 
-		return $this->collect_heuristics( $context );
-	}
+                return $this->collect_heuristics( $context, $heuristics );
+        }
 
 	/**
 	 * Retrieves metrics from PSI with caching.
@@ -168,19 +170,22 @@ class Signals {
 	 *
 	 * @return array<string, mixed>
 	 */
-	private function collect_heuristics( array $context ): array {
-		$images_total       = max( 0, (int) ( $context['images']['total'] ?? 0 ) );
-		$images_missing_alt = max( 0, (int) ( $context['images']['missing_alt'] ?? 0 ) );
-		$inline_css_bytes   = max( 0, (int) ( $context['inline_css_bytes'] ?? 0 ) );
-		$max_heading_depth  = max( 0, (int) ( $context['headings']['depth'] ?? 0 ) );
+        private function collect_heuristics( array $context, array $toggles = array() ): array {
+                $images_total       = max( 0, (int) ( $context['images']['total'] ?? 0 ) );
+                $images_missing_alt = max( 0, (int) ( $context['images']['missing_alt'] ?? 0 ) );
+                $inline_css_bytes   = max( 0, (int) ( $context['inline_css_bytes'] ?? 0 ) );
+                $max_heading_depth  = max( 0, (int) ( $context['headings']['depth'] ?? 0 ) );
 
-		$metrics = array();
-		$opps    = array();
+                $defaults = Options::get_defaults()['performance']['heuristics'];
+                $toggles  = array_merge( $defaults, array_map( 'boolval', $toggles ) );
 
-		if ( $images_total > 0 ) {
-			$coverage                      = max( 0, min( 1, 1 - ( $images_missing_alt / $images_total ) ) );
-			$metrics['image_alt_coverage'] = array(
-				'label' => esc_html__( 'Image alternative text coverage', 'fp-seo-performance' ),
+                $metrics = array();
+                $opps    = array();
+
+                if ( $toggles['image_alt_coverage'] && $images_total > 0 ) {
+                        $coverage                      = max( 0, min( 1, 1 - ( $images_missing_alt / $images_total ) ) );
+                        $metrics['image_alt_coverage'] = array(
+                                'label' => esc_html__( 'Image alternative text coverage', 'fp-seo-performance' ),
 				'value' => round( $coverage * 100, 1 ),
 				'unit'  => '%',
 			);
@@ -195,10 +200,10 @@ class Signals {
 			}
 		}
 
-		if ( $inline_css_bytes > self::INLINE_CSS_THRESHOLD ) {
-			$opps[] = array(
-				'id'          => 'inline-css',
-				'label'       => esc_html__( 'Reduce inline CSS size', 'fp-seo-performance' ),
+                if ( $toggles['inline_css'] && $inline_css_bytes > self::INLINE_CSS_THRESHOLD ) {
+                        $opps[] = array(
+                                'id'          => 'inline-css',
+                                'label'       => esc_html__( 'Reduce inline CSS size', 'fp-seo-performance' ),
 				'description' => sprintf(
 				/* translators: %s: Inline CSS size in kilobytes. */
 					esc_html__( 'Inline styles add %s KB to the page. Consider extracting critical CSS and deferring the rest.', 'fp-seo-performance' ),
@@ -208,19 +213,19 @@ class Signals {
 			);
 		}
 
-		if ( $images_total > self::IMAGE_COUNT_THRESHOLD ) {
-			$opps[] = array(
-				'id'          => 'image-count',
-				'label'       => esc_html__( 'Review number of images on the page', 'fp-seo-performance' ),
+                if ( $toggles['image_count'] && $images_total > self::IMAGE_COUNT_THRESHOLD ) {
+                        $opps[] = array(
+                                'id'          => 'image-count',
+                                'label'       => esc_html__( 'Review number of images on the page', 'fp-seo-performance' ),
 				'description' => esc_html__( 'Large numbers of images can slow down rendering. Consider lazy-loading or trimming media.', 'fp-seo-performance' ),
 				'priority'    => 'low',
 			);
 		}
 
-		if ( $max_heading_depth > 4 ) {
-			$opps[] = array(
-				'id'          => 'heading-depth',
-				'label'       => esc_html__( 'Simplify heading structure', 'fp-seo-performance' ),
+                if ( $toggles['heading_depth'] && $max_heading_depth > 4 ) {
+                        $opps[] = array(
+                                'id'          => 'heading-depth',
+                                'label'       => esc_html__( 'Simplify heading structure', 'fp-seo-performance' ),
 				'description' => esc_html__( 'Complex heading hierarchies often indicate heavy DOM depth, which can impact INP.', 'fp-seo-performance' ),
 				'priority'    => 'low',
 			);

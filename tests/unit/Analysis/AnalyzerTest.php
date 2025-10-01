@@ -9,17 +9,32 @@ declare(strict_types=1);
 
 namespace FP\SEO\Tests\Unit\Analysis;
 
+use Brain\Monkey;
 use FP\SEO\Analysis\Analyzer;
 use FP\SEO\Analysis\CheckInterface;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use PHPUnit\Framework\TestCase;
+use function Brain\Monkey\Functions\when;
 use const JSON_UNESCAPED_SLASHES;
 
 /**
  * Analyzer integration smoke test.
  */
 final class AnalyzerTest extends TestCase {
+        protected function setUp(): void {
+                parent::setUp();
+                Monkey\setUp();
+                when( '__' )->returnArg( 1 );
+                when( 'esc_html__' )->returnArg( 1 );
+                when( 'home_url' )->justReturn( 'https://example.com/' );
+                when( 'wp_strip_all_tags' )->alias( 'strip_tags' );
+        }
+
+        protected function tearDown(): void {
+                Monkey\tearDown();
+                parent::tearDown();
+        }
 	/**
 	 * Ensures analyzer executes all checks and aggregates results.
 	 *
@@ -28,21 +43,23 @@ final class AnalyzerTest extends TestCase {
 	public function test_runs_all_checks_and_aggregates_summary(): void {
 		$meta_description = str_repeat( 'Helpful search description offering clarity and context. ', 2 ) . 'Encourages clicks with compelling value.';
 		$content          = str_repeat( 'Insightful content supporting the analyzer evaluation. ', 40 );
-		$html             = '<html><head>'
-		. '<meta name="description" content="' . $meta_description . '" />'
-		. '<meta name="robots" content="index,follow" />'
-		. '<link rel="canonical" href="https://example.com/sample-page" />'
-		. '<meta property="og:title" content="OG Title" />'
-		. '<meta property="og:description" content="OG description content." />'
-		. '<meta property="og:type" content="article" />'
-		. '<meta property="og:url" content="https://example.com/sample-page" />'
-		. '<meta name="twitter:card" content="summary_large_image" />'
-		. '<meta name="twitter:title" content="Twitter Title" />'
-		. '<meta name="twitter:description" content="Twitter description goes here." />'
-		. '<script type="application/ld+json">' . json_encode( // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
-			array(
-				'@context' => 'https://schema.org',
-				'@type'    => array( 'Organization', 'WebSite', 'BlogPosting' ),
+                $html             = '<html><head>'
+                . '<meta name="description" content="' . $meta_description . '" />'
+                . '<meta name="robots" content="index,follow" />'
+                . '<link rel="canonical" href="https://example.com/sample-page" />'
+                . '<meta property="og:title" content="OG Title" />'
+                . '<meta property="og:description" content="OG description content." />'
+                . '<meta property="og:type" content="article" />'
+                . '<meta property="og:url" content="https://example.com/sample-page" />'
+                . '<meta property="og:image" content="https://example.com/og-image.jpg" />'
+                . '<meta name="twitter:card" content="summary_large_image" />'
+                . '<meta name="twitter:title" content="Twitter Title" />'
+                . '<meta name="twitter:description" content="Twitter description goes here." />'
+                . '<meta name="twitter:image" content="https://example.com/twitter-image.jpg" />'
+                . '<script type="application/ld+json">' . json_encode( // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+                        array(
+                                '@context' => 'https://schema.org',
+                                '@type'    => array( 'Organization', 'WebSite', 'BlogPosting' ),
 				'name'     => 'Example',
 			),
 			JSON_UNESCAPED_SLASHES

@@ -284,40 +284,8 @@ class Context {
 	 * @return array<int, array{level:int,text:string}>
 	 */
 	public function headings(): array {
-		$dom = $this->dom();
-
-		if ( null === $dom ) {
-			return array();
-		}
-
-		$result = array();
-
-		for ( $level = 1; $level <= 6; $level++ ) {
-			$tag   = 'h' . $level;
-			$nodes = $dom->getElementsByTagName( $tag );
-
-			foreach ( $nodes as $node ) {
-								/**
-								 * DOM element instance.
-								 *
-								 * @var DOMElement $node
-								 */
-								$result[] = array(
-									'level' => $level,
-									'text'  => trim( $node->{'textContent'} ?? '' ),
-								);
-			}
-		}
-
-		usort(
-			$result,
-			static function ( array $a, array $b ): int {
-				return $a['level'] <=> $b['level'];
-			}
-		);
-
-		return $result;
-	}
+                return $this->ordered_headings();
+        }
 
 	/**
 	 * Retrieve all heading elements preserving document order.

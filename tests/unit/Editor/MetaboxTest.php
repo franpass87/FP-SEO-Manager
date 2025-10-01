@@ -44,16 +44,21 @@ class MetaboxTest extends TestCase {
 		$this->updated_meta = array();
 		$this->deleted_meta = array();
 
-		when( 'sanitize_text_field' )->alias(
-			static function ( $value ) {
-				return $value;
-			}
-		);
+                when( 'sanitize_text_field' )->alias(
+                        static function ( $value ) {
+                                return $value;
+                        }
+                );
+                when( 'esc_url_raw' )->alias(
+                        static function ( $value ) {
+                                return $value;
+                        }
+                );
 
-		when( 'wp_unslash' )->alias(
-			static function ( $value ) {
-				return $value;
-			}
+                when( 'wp_unslash' )->alias(
+                        static function ( $value ) {
+                                return $value;
+                        }
 		);
 
 		when( 'wp_verify_nonce' )->justReturn( true );

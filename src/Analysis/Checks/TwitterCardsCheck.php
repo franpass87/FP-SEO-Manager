@@ -49,17 +49,21 @@ class TwitterCardsCheck implements CheckInterface {
 	 * @return Result
 	 */
 	public function run( Context $context ): Result {
-		$required = array( 'twitter:card', 'twitter:title', 'twitter:description' );
-		$missing  = array();
-		$present  = array();
+                $required = array( 'twitter:card', 'twitter:title', 'twitter:description', 'twitter:image' );
+                $missing  = array();
+                $present  = array();
 
-		foreach ( $required as $key ) {
-			$value = (string) $context->meta_content( 'name', $key );
+                foreach ( $required as $key ) {
+                        $value = (string) $context->meta_content( 'name', $key );
 
-			if ( '' === trim( $value ) ) {
-				$missing[] = $key;
-				continue;
-			}
+                        if ( 'twitter:image' === $key && '' === trim( $value ) ) {
+                                $value = (string) $context->meta_content( 'name', 'twitter:image:src' );
+                        }
+
+                        if ( '' === trim( $value ) ) {
+                                $missing[] = $key;
+                                continue;
+                        }
 
 			$present[ $key ] = $value;
 		}
@@ -76,7 +80,7 @@ class TwitterCardsCheck implements CheckInterface {
 		}
 
 		$status = count( $missing ) >= 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
-		$hint   = I18n::translate( 'Add missing Twitter card tags to control social previews.' );
+                $hint   = I18n::translate( 'Add missing Twitter card tags (card type, title, description, or image) to control social previews.' );
 
 		return new Result(
 			$status,

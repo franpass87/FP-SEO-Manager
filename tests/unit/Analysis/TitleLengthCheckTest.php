@@ -9,15 +9,28 @@ declare(strict_types=1);
 
 namespace FP\SEO\Tests\Unit\Analysis;
 
+use Brain\Monkey;
 use FP\SEO\Analysis\Checks\TitleLengthCheck;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use PHPUnit\Framework\TestCase;
+use function Brain\Monkey\Functions\when;
 
 /**
  * Title length check unit tests.
  */
 final class TitleLengthCheckTest extends TestCase {
+        protected function setUp(): void {
+                parent::setUp();
+                Monkey\setUp();
+                when( '__' )->returnArg( 1 );
+                when( 'esc_html__' )->returnArg( 1 );
+        }
+
+        protected function tearDown(): void {
+                Monkey\tearDown();
+                parent::tearDown();
+        }
 	/**
 	 * Ensures ideal title lengths pass.
 	 *

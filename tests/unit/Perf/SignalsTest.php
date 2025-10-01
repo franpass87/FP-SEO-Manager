@@ -177,11 +177,11 @@ class SignalsTest extends TestCase {
 	/**
 	 * When PSI is disabled the service should fallback to heuristics.
 	 */
-	public function test_collect_uses_heuristics_when_psi_disabled(): void {
-		when( 'get_option' )->alias(
-			static function ( string $option, $default_value = false ) {
-				if ( Options::OPTION_KEY === $option ) {
-					return array();
+        public function test_collect_uses_heuristics_when_psi_disabled(): void {
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array();
 				}
 
 				return $default_value;
@@ -207,7 +207,50 @@ class SignalsTest extends TestCase {
 		);
 
 		self::assertSame( 'local', $result['source'] );
-		self::assertNotEmpty( $result['opportunities'] );
-		self::assertArrayHasKey( 'image_alt_coverage', $result['metrics'] );
-	}
+                self::assertNotEmpty( $result['opportunities'] );
+                self::assertArrayHasKey( 'image_alt_coverage', $result['metrics'] );
+        }
+
+        /**
+         * Ensures heuristics toggles disable specific metrics and opportunities.
+         */
+        public function test_collect_heuristics_respects_disabled_toggles(): void {
+                when( 'get_option' )->alias(
+                        static function ( string $option, $default_value = false ) {
+                                if ( Options::OPTION_KEY === $option ) {
+                                        return array(
+                                                'performance' => array(
+                                                        'heuristics' => array(
+                                                                'image_alt_coverage' => false,
+                                                                'inline_css'         => false,
+                                                                'image_count'        => false,
+                                                                'heading_depth'      => false,
+                                                        ),
+                                                ),
+                                        );
+                                }
+
+                                return $default_value;
+                        }
+                );
+
+                $signals = new Signals();
+                $result  = $signals->collect(
+                        '',
+                        array(
+                                'images'           => array(
+                                        'total'       => 20,
+                                        'missing_alt' => 10,
+                                ),
+                                'inline_css_bytes' => 100000,
+                                'headings'         => array(
+                                        'depth' => 6,
+                                ),
+                        )
+                );
+
+                self::assertSame( 'local', $result['source'] );
+                self::assertSame( array(), $result['metrics'] );
+                self::assertSame( array(), $result['opportunities'] );
+        }
 }
