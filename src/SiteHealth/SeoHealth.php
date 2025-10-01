@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\SiteHealth;
 
+use FP\SEO\Perf\Signals;
 use FP\SEO\Utils\Options;
 use FP\SEO\Utils\UrlNormalizer;
 use function esc_html;
@@ -18,11 +19,25 @@ use function wp_remote_retrieve_response_code;
  * Registers Site Health checks for the plugin.
  */
 class SeoHealth {
-	/**
-	 * Hooks Site Health test registration.
-	 */
-	public function register(): void {
-		add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
+        /**
+         * Signals provider for PSI data.
+         *
+         * @var Signals
+         */
+        private Signals $signals;
+
+        /**
+         * Constructor.
+         */
+        public function __construct( ?Signals $signals = null ) {
+                $this->signals = $signals ?? new Signals();
+        }
+
+        /**
+         * Hooks Site Health test registration.
+         */
+        public function register(): void {
+                add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
 	}
 
 	/**
@@ -223,108 +238,83 @@ class SeoHealth {
 		}
 
                 $request_url = UrlNormalizer::normalize( $home_url );
+                $report      = $this->signals->collect( $request_url );
 
-                $endpoint = add_query_arg(
-                        array(
-                                'url'      => $request_url,
-                                'key'      => $api_key,
-                                'strategy' => 'mobile',
-                        ),
-                        'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
-                );
-
-		$response = wp_remote_get(
-			$endpoint,
-			array(
-				'timeout' => 15,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'label'       => __( 'Unable to contact PageSpeed Insights API', 'fp-seo-performance' ),
-				'status'      => 'recommended',
-				'badge'       => $badge,
-				'description' => __( 'The PSI API request failed. Verify the API key and network connectivity.', 'fp-seo-performance' ),
-				'actions'     => array(
-					sprintf(
-						'<a href="%s">%s</a>',
-						esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
-						esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
-					),
-				),
-			);
-		}
-
-                $body    = (string) wp_remote_retrieve_body( $response );
-                $payload = json_decode( $body, true );
-                $score   = null;
-
-                if ( is_array( $payload ) ) {
-                        $error_message = $this->extract_psi_error_message( $payload );
-
-                        if ( null !== $error_message ) {
-                                return array(
-                                        'label'       => __( 'PageSpeed Insights API returned an error', 'fp-seo-performance' ),
-                                        'status'      => 'recommended',
-                                        'badge'       => $badge,
-                                        'description' => sprintf(
-                                                '%s %s',
-                                                esc_html__( 'The PageSpeed Insights API responded with an error:', 'fp-seo-performance' ),
-                                                esc_html( $error_message )
+                if ( 'psi' !== (string) ( $report['source'] ?? '' ) ) {
+                        return array(
+                                'label'       => __( 'PageSpeed Insights data unavailable', 'fp-seo-performance' ),
+                                'status'      => 'recommended',
+                                'badge'       => $badge,
+                                'description' => __( 'The performance signals service did not return PageSpeed Insights metrics. Try refreshing the cache or verify PSI configuration.', 'fp-seo-performance' ),
+                                'actions'     => array(
+                                        sprintf(
+                                                '<a href="%s">%s</a>',
+                                                esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
+                                                esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
                                         ),
-                                        'actions'     => array(
-                                                sprintf(
-                                                        '<a href="%s">%s</a>',
-                                                        esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
-                                                        esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
-                                                ),
-                                        ),
-                                );
-                        }
+                                ),
+                        );
                 }
 
-                if ( is_array( $payload ) ) {
-                        $category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
-			if ( is_numeric( $category ) ) {
-				$score = (int) round( (float) $category * 100 );
-			}
-		}
+                $error = isset( $report['error'] ) ? trim( (string) $report['error'] ) : '';
 
-		if ( null === $score ) {
-			return array(
-				'label'       => __( 'Unexpected PageSpeed Insights response', 'fp-seo-performance' ),
-				'status'      => 'recommended',
-				'badge'       => $badge,
-				'description' => __( 'The PageSpeed Insights response did not include a performance score. Double-check the queried URL and API quota.', 'fp-seo-performance' ),
-				'actions'     => array(
-					sprintf(
-						'<a href="%s" target="_blank" rel="noopener">%s</a>',
-						esc_url( $endpoint ),
-						esc_html__( 'Open PSI report', 'fp-seo-performance' )
-					),
-				),
-			);
-		}
+                if ( '' !== $error ) {
+                        return array(
+                                'label'       => __( 'PageSpeed Insights API returned an error', 'fp-seo-performance' ),
+                                'status'      => 'recommended',
+                                'badge'       => $badge,
+                                'description' => sprintf(
+                                        '%s %s',
+                                        esc_html__( 'The PageSpeed Insights API responded with an error:', 'fp-seo-performance' ),
+                                        esc_html( $error )
+                                ),
+                                'actions'     => array(
+                                        sprintf(
+                                                '<a href="%s">%s</a>',
+                                                esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
+                                                esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
+                                        ),
+                                ),
+                        );
+                }
 
-		return array(
-			'label'       => __( 'PageSpeed Insights score available', 'fp-seo-performance' ),
-			'status'      => 'good',
-			'badge'       => $badge,
-			'description' => sprintf(
-				/* translators: %d: PSI performance score. */
-				esc_html__( 'Google PageSpeed Insights reports a performance score of %d for the homepage.', 'fp-seo-performance' ),
-				$score
-			),
-			'actions'     => array(
-				sprintf(
-					'<a href="%s" target="_blank" rel="noopener">%s</a>',
-					esc_url( $endpoint ),
-					esc_html__( 'View detailed PSI report', 'fp-seo-performance' )
-				),
-			),
-		);
-	}
+                $score    = $report['performance_score'] ?? null;
+                $endpoint = (string) ( $report['endpoint'] ?? '' );
+
+                if ( null === $score ) {
+                        return array(
+                                'label'       => __( 'Unexpected PageSpeed Insights response', 'fp-seo-performance' ),
+                                'status'      => 'recommended',
+                                'badge'       => $badge,
+                                'description' => __( 'The PageSpeed Insights response did not include a performance score. Double-check the queried URL and API quota.', 'fp-seo-performance' ),
+                                'actions'     => array(
+                                        sprintf(
+                                                '<a href="%s" target="_blank" rel="noopener">%s</a>',
+                                                esc_url( $endpoint ?: 'https://pagespeed.web.dev/' ),
+                                                esc_html__( 'Open PSI report', 'fp-seo-performance' )
+                                        ),
+                                ),
+                        );
+                }
+
+                return array(
+                        'label'       => __( 'PageSpeed Insights score available', 'fp-seo-performance' ),
+                        'status'      => 'good',
+                        'badge'       => $badge,
+                        'description' => sprintf(
+                                /* translators: %d: PSI performance score. */
+                                esc_html__( 'Google PageSpeed Insights reports a performance score of %d for the homepage.', 'fp-seo-performance' ),
+                                (int) $score
+                        ),
+                        'actions'     => array(
+                                sprintf(
+                                        '<a href="%s" target="_blank" rel="noopener">%s</a>',
+                                        esc_url( $endpoint ?: 'https://pagespeed.web.dev/' ),
+                                        esc_html__( 'View detailed PSI report', 'fp-seo-performance' )
+                                ),
+                        ),
+                );
+        }
 
 	/**
 	 * Provides the badge used for SEO checks.

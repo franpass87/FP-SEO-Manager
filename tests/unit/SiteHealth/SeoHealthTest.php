@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace FP\SEO\Tests\Unit\SiteHealth;
 
 use Brain\Monkey;
+use FP\SEO\Perf\Signals;
 use FP\SEO\SiteHealth\SeoHealth;
 use FP\SEO\Utils\Options;
 use PHPUnit\Framework\TestCase;
@@ -165,13 +166,14 @@ class SeoHealthTest extends TestCase {
                 self::assertStringContainsString( 'HTTP 503', $result['description'] );
         }
 
-	/**
-	 * Confirms performance test prompts for API key when PSI disabled.
-	 */
+        /**
+         * Confirms performance test prompts for API key when PSI disabled.
+         */
         public function test_run_performance_test_prompts_for_api_key(): void {
-                when( 'wp_remote_get' )->justReturn( array() );
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::never() )->method( 'collect' );
 
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
                 self::assertSame( 'recommended', $result['status'] );
@@ -180,11 +182,9 @@ class SeoHealthTest extends TestCase {
         }
 
         /**
-         * Nested encoded query values should stay encoded when Site Health requests PSI.
+         * Confirms PSI score renders when cached signals provide data.
          */
-        public function test_run_performance_test_preserves_nested_query_encoding(): void {
-                $nested_url = 'https://example.com/?redirect=https%3A%2F%2Fdest.test%2F%3Fa%3Db%2526c%253Dd';
-
+        public function test_run_performance_test_uses_cached_signals(): void {
                 when( 'get_option' )->alias(
                         static function ( string $option, $default_value = false ) {
                                 if ( 'blog_public' === $option ) {
@@ -204,45 +204,30 @@ class SeoHealthTest extends TestCase {
                         }
                 );
 
-                when( 'home_url' )->justReturn( $nested_url );
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 95,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( array $args, string $url ) use ( &$captured_args ): string {
-                                $captured_args = $args;
-
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->justReturn(
-                        array(
-                                'body' => wp_json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.95,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                ),
-                        )
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( $nested_url, $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
+                self::assertStringContainsString( '95', $result['description'] );
+                self::assertStringContainsString( 'https://example.com/report', $result['actions'][0] ?? '' );
         }
 
-        public function test_run_performance_test_preserves_plus_sign_query_encodings(): void {
-                $home_url = 'https://example.com/?q=cat%2Bdog';
-
+        /**
+         * Signals error messages should surface actionable guidance.
+         */
+        public function test_run_performance_test_handles_signals_error(): void {
                 when( 'get_option' )->alias(
                         static function ( string $option, $default_value = false ) {
                                 if ( 'blog_public' === $option ) {
@@ -262,46 +247,27 @@ class SeoHealthTest extends TestCase {
                         }
                 );
 
-                when( 'home_url' )->justReturn( $home_url );
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->willReturn(
+                                array(
+                                        'source' => 'psi',
+                                        'error'  => 'API quota exceeded',
+                                )
+                        );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( array $args, string $url ) use ( &$captured_args ): string {
-                                $captured_args = $args;
-
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->justReturn(
-                        array(
-                                'body' => wp_json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.95,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                ),
-                        )
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( $home_url, $captured_args['url'] );
-                self::assertSame( 'good', $result['status'] );
+                self::assertSame( 'recommended', $result['status'] );
+                self::assertStringContainsString( 'API quota exceeded', $result['description'] );
         }
 
-        public function test_run_performance_test_decodes_percent_encoded_host(): void {
-                $home_url     = 'https://%65xample.com/?id=42';
-                $expected_url = 'https://example.com/?id=42';
-
+        /**
+         * Missing scores should produce a recommended notice with fallback links.
+         */
+        public function test_run_performance_test_handles_missing_score(): void {
                 when( 'get_option' )->alias(
                         static function ( string $option, $default_value = false ) {
                                 if ( 'blog_public' === $option ) {
@@ -321,44 +287,28 @@ class SeoHealthTest extends TestCase {
                         }
                 );
 
-                when( 'home_url' )->justReturn( $home_url );
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->willReturn(
+                                array(
+                                        'source'   => 'psi',
+                                        'endpoint' => 'https://example.com/report',
+                                )
+                        );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( array $args, string $url ) use ( &$captured_args ): string {
-                                $captured_args = $args;
-
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->justReturn(
-                        array(
-                                'body' => wp_json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.94,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                ),
-                        )
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( $expected_url, $captured_args['url'] );
-                self::assertSame( 'good', $result['status'] );
+                self::assertSame( 'recommended', $result['status'] );
+                self::assertStringContainsString( 'did not include a performance score', $result['description'] );
         }
 
-        public function test_run_performance_test_decodes_fully_encoded_home_url(): void {
-                $encoded_home_url = 'https%3A%2F%2Fexample.com%2Fdownload%252Ffile';
+        /**
+         * Home URLs should be normalized before requesting PSI signals.
+         */
+        public function test_run_performance_test_normalizes_home_url_before_collect(): void {
+                $encoded_home_url = 'https%3A%2F%2Fexample.com%2Fdownload%252Ffile?q=cat%252Bdog';
 
                 when( 'get_option' )->alias(
                         static function ( string $option, $default_value = false ) {
@@ -381,92 +331,22 @@ class SeoHealthTest extends TestCase {
 
                 when( 'home_url' )->justReturn( $encoded_home_url );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( array $args, string $url ) use ( &$captured_args ): string {
-                                $captured_args = $args;
+                $signals = $this->createMock( \FP\SEO\Perf\Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/download%2Ffile?q=cat%2Bdog' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 90,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->justReturn(
-                        array(
-                                'body' => wp_json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.95,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                ),
-                        )
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( 'https://example.com/download%2Ffile', $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
-        }
-
-        public function test_run_performance_test_collapses_double_encoded_reserved_sequences(): void {
-                when( 'get_option' )->alias(
-                        static function ( string $option, $default_value = false ) {
-                                if ( 'blog_public' === $option ) {
-                                        return '1';
-                                }
-
-                                if ( Options::OPTION_KEY === $option ) {
-                                        return array(
-                                                'performance' => array(
-                                                        'enable_psi'  => true,
-                                                        'psi_api_key' => 'abc123',
-                                                ),
-                                        );
-                                }
-
-                                return $default_value;
-                        }
-                );
-
-                when( 'home_url' )->justReturn( 'https://example.com/download%252Ffile/?q=cat%252Bdog' );
-
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( array $args, string $url ) use ( &$captured_args ): string {
-                                $captured_args = $args;
-
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->justReturn(
-                        array(
-                                'body' => wp_json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.95,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                ),
-                        )
-                );
-
-                $health = new SeoHealth();
-                $health->run_performance_test();
-
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( 'https://example.com/download%2Ffile/?q=cat%2Bdog', $captured_args['url'] );
+                self::assertStringContainsString( '90', $result['description'] );
         }
 }

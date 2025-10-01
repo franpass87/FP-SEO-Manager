@@ -98,22 +98,24 @@ class SignalsTest extends TestCase {
 			}
 		);
 
-		expect( 'get_transient' )->once()->andReturn(
-			array(
-				'source'        => 'psi',
-				'url'           => 'https://example.com/',
-				'endpoint'      => 'mock',
-				'metrics'       => array(),
-				'opportunities' => array(),
-			)
-		);
+                expect( 'get_transient' )->once()->andReturn(
+                        array(
+                                'source'        => 'psi',
+                                'url'           => 'https://example.com/',
+                                'endpoint'      => 'mock',
+                                'metrics'       => array(),
+                                'opportunities' => array(),
+                                'performance_score' => 88,
+                        )
+                );
 		expect( 'wp_remote_get' )->never();
 
 		$signals = new Signals();
-		$result  = $signals->collect( 'https://example.com/' );
+                $result  = $signals->collect( 'https://example.com/' );
 
-		self::assertSame( 'psi', $result['source'] );
-		self::assertTrue( $result['cached'] );
+                self::assertSame( 'psi', $result['source'] );
+                self::assertTrue( $result['cached'] );
+                self::assertSame( 88, $result['performance_score'] );
 	}
 
 	/**
@@ -133,16 +135,21 @@ class SignalsTest extends TestCase {
 					),
 				),
 			),
-			'lighthouseResult'  => array(
-				'audits' => array(
-					'unused-css' => array(
-						'details'     => array( 'type' => 'opportunity' ),
-						'title'       => 'Reduce unused CSS',
-						'description' => 'Remove unused rules.',
-						'score'       => 0.5,
-					),
-				),
-			),
+                        'lighthouseResult'  => array(
+                                'audits' => array(
+                                        'unused-css' => array(
+                                                'details'     => array( 'type' => 'opportunity' ),
+                                                'title'       => 'Reduce unused CSS',
+                                                'description' => 'Remove unused rules.',
+                                                'score'       => 0.5,
+                                        ),
+                                ),
+                                'categories' => array(
+                                        'performance' => array(
+                                                'score' => 0.91,
+                                        ),
+                                ),
+                        ),
 		);
 
 		$payload_json = wp_json_encode( $payload );
@@ -168,16 +175,25 @@ class SignalsTest extends TestCase {
 				'body' => $payload_json,
 			)
 		);
-		expect( 'set_transient' )->once()->andReturn( true );
+                expect( 'set_transient' )->once()->withArgs(
+                        static function ( $key, $value, $ttl ) {
+                                return is_string( $key )
+                                        && is_array( $value )
+                                        && array_key_exists( 'performance_score', $value )
+                                        && 91 === $value['performance_score']
+                                        && is_int( $ttl );
+                        }
+                )->andReturn( true );
 
-		$signals = new Signals();
-		$result  = $signals->collect( 'https://example.com/' );
+                $signals = new Signals();
+                $result  = $signals->collect( 'https://example.com/' );
 
-		self::assertSame( 'psi', $result['source'] );
-		self::assertArrayHasKey( 'lcp', $result['metrics'] );
-		self::assertSame( 'fast', $result['metrics']['lcp']['category'] );
-		self::assertCount( 1, $result['opportunities'] );
+                self::assertSame( 'psi', $result['source'] );
+                self::assertArrayHasKey( 'lcp', $result['metrics'] );
+                self::assertSame( 'fast', $result['metrics']['lcp']['category'] );
+                self::assertCount( 1, $result['opportunities'] );
                 self::assertFalse( $result['cached'] );
+                self::assertSame( 91, $result['performance_score'] );
         }
 
         /**
@@ -237,6 +253,7 @@ class SignalsTest extends TestCase {
                 self::assertIsArray( $captured_args );
                 self::assertSame( $raw_url, $captured_args['url'] ?? null );
                 self::assertSame( 'psi', $result['source'] );
+                self::assertSame( 90, $result['performance_score'] );
         }
 
         /**

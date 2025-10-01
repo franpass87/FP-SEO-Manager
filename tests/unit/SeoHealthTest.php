@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace FP\SEO\Tests\Unit;
 
 use Brain\Monkey;
+use FP\SEO\Perf\Signals;
 use FP\SEO\SiteHealth\SeoHealth;
 use PHPUnit\Framework\TestCase;
 use function Brain\Monkey\Functions\expect;
@@ -80,46 +81,24 @@ class SeoHealthTest extends TestCase
                 );
 
                 when( 'home_url' )->justReturn( 'https://example.com/' );
-                when( 'is_wp_error' )->justReturn( false );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( $args, $url ) use ( &$captured_args ) {
-                                $captured_args = $args;
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 85,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->alias(
-                        static function () {
-                                return array();
-                        }
-                );
-
-                when( 'wp_remote_retrieve_body' )->alias(
-                        static function () {
-                                return json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.85,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                );
-                        }
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( 'https://example.com/', $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
+                self::assertStringContainsString( '85', $result['description'] );
         }
 
         /**
@@ -182,46 +161,24 @@ class SeoHealthTest extends TestCase
                 );
 
                 when( 'home_url' )->justReturn( 'https://example.com/about%20us/' );
-                when( 'is_wp_error' )->justReturn( false );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( $args, $url ) use ( &$captured_args ) {
-                                $captured_args = $args;
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/about us/' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 90,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->alias(
-                        static function () {
-                                return array();
-                        }
-                );
-
-                when( 'wp_remote_retrieve_body' )->alias(
-                        static function () {
-                                return json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.9,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                );
-                        }
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( 'https://example.com/about us/', $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
+                self::assertStringContainsString( '90', $result['description'] );
         }
 
         public function test_run_performance_test_preserves_plus_sign_query_encodings(): void
@@ -242,46 +199,24 @@ class SeoHealthTest extends TestCase
                 );
 
                 when( 'home_url' )->justReturn( 'https://example.com/?q=cat%2Bdog' );
-                when( 'is_wp_error' )->justReturn( false );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( $args, $url ) use ( &$captured_args ) {
-                                $captured_args = $args;
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/?q=cat%2Bdog' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 91,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->alias(
-                        static function () {
-                                return array();
-                        }
-                );
-
-                when( 'wp_remote_retrieve_body' )->alias(
-                        static function () {
-                                return json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.9,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                );
-                        }
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertArrayHasKey( 'url', $captured_args );
-                self::assertSame( 'https://example.com/?q=cat%2Bdog', $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
+                self::assertStringContainsString( '91', $result['description'] );
         }
 
         /**
@@ -305,45 +240,24 @@ class SeoHealthTest extends TestCase
                 );
 
                 when( 'home_url' )->justReturn( 'https://example.com/?ref=summer&amp;utm=promo' );
-                when( 'is_wp_error' )->justReturn( false );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( $args, $url ) use ( &$captured_args ) {
-                                $captured_args = $args;
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/?ref=summer&utm=promo' )
+                        ->willReturn(
+                                array(
+                                        'source'            => 'psi',
+                                        'performance_score' => 93,
+                                        'endpoint'          => 'https://example.com/report',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->alias(
-                        static function () {
-                                return array();
-                        }
-                );
-
-                when( 'wp_remote_retrieve_body' )->alias(
-                        static function () {
-                                return json_encode(
-                                        array(
-                                                'lighthouseResult' => array(
-                                                        'categories' => array(
-                                                                'performance' => array(
-                                                                        'score' => 0.93,
-                                                                ),
-                                                        ),
-                                                ),
-                                        )
-                                );
-                        }
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertSame( 'https://example.com/?ref=summer&utm=promo', $captured_args['url'] );
                 self::assertSame( 'good', $result['status'] );
+                self::assertStringContainsString( '93', $result['description'] );
         }
 
         /**
@@ -367,42 +281,21 @@ class SeoHealthTest extends TestCase
                 );
 
                 when( 'home_url' )->justReturn( 'https://example.com/' );
-                when( 'is_wp_error' )->justReturn( false );
 
-                $captured_args = null;
-                when( 'add_query_arg' )->alias(
-                        static function ( $args, $url ) use ( &$captured_args ) {
-                                $captured_args = $args;
+                $signals = $this->createMock( Signals::class );
+                $signals->expects( self::once() )
+                        ->method( 'collect' )
+                        ->with( 'https://example.com/' )
+                        ->willReturn(
+                                array(
+                                        'source' => 'psi',
+                                        'error'  => 'API key has been revoked.',
+                                )
+                        );
 
-                                return $url . '?' . http_build_query( $args );
-                        }
-                );
-
-                when( 'wp_remote_get' )->alias(
-                        static function () {
-                                return array(
-                                        'body' => json_encode(
-                                                array(
-                                                        'error' => array(
-                                                                'code'    => 400,
-                                                                'message' => 'API key has been revoked.',
-                                                                'errors'  => array(
-                                                                        array(
-                                                                                'message' => 'Please generate a new API key.',
-                                                                        ),
-                                                                ),
-                                                        ),
-                                                )
-                                        ),
-                                );
-                        }
-                );
-
-                $health = new SeoHealth();
+                $health = new SeoHealth( $signals );
                 $result = $health->run_performance_test();
 
-                self::assertIsArray( $captured_args );
-                self::assertSame( 'https://example.com/', $captured_args['url'] );
                 self::assertSame( 'recommended', $result['status'] );
                 self::assertSame( 'PageSpeed Insights API returned an error', $result['label'] );
                 self::assertStringContainsString( 'API key has been revoked.', $result['description'] );
