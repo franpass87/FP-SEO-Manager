@@ -14,6 +14,7 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\PostTypes;
 use WP_Post;
 use function absint;
 use function admin_url;
@@ -24,7 +25,6 @@ use function current_user_can;
 use function delete_post_meta;
 use function get_current_screen;
 use function get_post_meta;
-use function get_post_types;
 use function in_array;
 use function esc_url_raw;
 use function is_array;
@@ -48,7 +48,7 @@ class Metabox {
 	private const NONCE_ACTION = 'fp_seo_performance_meta';
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
-	private const META_EXCLUDE = '_fp_seo_performance_exclude';
+        public const META_EXCLUDE  = '_fp_seo_performance_exclude';
 
 	/**
 	 * Hooks WordPress actions for registering and saving the metabox.
@@ -271,14 +271,8 @@ class Metabox {
 	 * @return string[]
 	 */
 	private function get_supported_post_types(): array {
-		$post_types = (array) get_post_types( array( 'show_ui' => true ), 'names' );
-
-		if ( empty( $post_types ) ) {
-			return array( 'post', 'page' );
-		}
-
-		return array_values( $post_types );
-	}
+                return PostTypes::analyzable();
+        }
 	/**
 	 * Determine if a post is excluded from analysis.
 	 *

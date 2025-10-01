@@ -14,6 +14,7 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\PostTypes;
 use WP_Post;
 use WP_Query;
 use function __;
@@ -73,7 +74,7 @@ class BulkAuditPage {
 	private const AJAX_ACTION   = 'fp_seo_performance_bulk_analyze';
 	private const EXPORT_ACTION = 'fp_seo_performance_bulk_export';
 	private const NONCE_ACTION  = 'fp_seo_performance_bulk';
-        private const CACHE_KEY     = 'fp_seo_performance_bulk_results';
+        public const CACHE_KEY      = 'fp_seo_performance_bulk_results';
         private const CACHE_TTL     = 86400;
         private const CACHE_LIMIT   = 500;
 
@@ -393,9 +394,9 @@ class BulkAuditPage {
 		 *
 		 * @return string[]
 		 */
-	private function get_allowed_post_types(): array {
-			return array( 'post', 'page' );
-	}
+        private function get_allowed_post_types(): array {
+                        return PostTypes::analyzable();
+        }
 
 		/**
 		 * Retrieve allowed post statuses.
