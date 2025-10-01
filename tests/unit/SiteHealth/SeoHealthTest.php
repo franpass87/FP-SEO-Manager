@@ -76,12 +76,17 @@ class SeoHealthTest extends TestCase {
 								return false;
 					}
 				);
-				when( 'wp_remote_retrieve_body' )->alias(
-					static function ( $response ) {
-								return is_array( $response ) ? ( $response['body'] ?? '' ) : '';
-					}
-				);
-	}
+                when( 'wp_remote_retrieve_body' )->alias(
+                        static function ( $response ) {
+                                return is_array( $response ) ? ( $response['body'] ?? '' ) : '';
+                        }
+                );
+                when( 'wp_remote_retrieve_response_code' )->alias(
+                        static function ( $response ): int {
+                                return is_array( $response ) ? (int) ( $response['code'] ?? 200 ) : 200;
+                        }
+                );
+        }
 
 	/**
 	 * Tear down Brain Monkey.
@@ -121,18 +126,37 @@ class SeoHealthTest extends TestCase {
 			. '<link rel="canonical" href="https://example.com/">'
 			. '<meta name="robots" content="index,follow">';
 
-		when( 'wp_remote_get' )->justReturn(
-			array(
-				'body' => $html,
-			)
-		);
+                when( 'wp_remote_get' )->justReturn(
+                        array(
+                                'body' => $html,
+                                'code' => 200,
+                        )
+                );
 
 		$health = new SeoHealth();
 		$result = $health->run_seo_test();
 
 		self::assertSame( 'good', $result['status'] );
 		self::assertSame( 'Homepage exposes SEO metadata', $result['label'] );
-	}
+        }
+
+        /**
+         * Ensures HTTP errors are surfaced with actionable messaging.
+         */
+        public function test_run_seo_test_reports_http_error(): void {
+                when( 'wp_remote_get' )->justReturn(
+                        array(
+                                'body' => '',
+                                'code' => 503,
+                        )
+                );
+
+                $health = new SeoHealth();
+                $result = $health->run_seo_test();
+
+                self::assertSame( 'critical', $result['status'] );
+                self::assertStringContainsString( 'HTTP 503', $result['description'] );
+        }
 
 	/**
 	 * Confirms performance test prompts for API key when PSI disabled.

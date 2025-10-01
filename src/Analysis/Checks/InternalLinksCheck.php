@@ -14,12 +14,19 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Utils\I18n;
 use DOMElement;
+use function function_exists;
+use function home_url;
 use function ceil;
 use function count;
+use function in_array;
 use function max;
+use function parse_url;
 use function preg_match;
 use function preg_split;
+use function strtolower;
+use function str_starts_with;
 use function trim;
+use function wp_parse_url;
 use const PREG_SPLIT_NO_EMPTY;
 
 /**
@@ -62,23 +69,62 @@ class InternalLinksCheck implements CheckInterface {
 				$words = array();
 		}
 
-			$word_count = count( $words );
-			$anchors    = $context->anchors();
-			$link_count = 0;
+                $word_count = count( $words );
+                $anchors    = $context->anchors();
+                $link_count = 0;
 
-		foreach ( $anchors as $anchor ) {
-					$href = trim( (string) $anchor->getAttribute( 'href' ) );
+                $site_host = '';
+                $site_url  = home_url( '/' );
 
-			if ( '' === $href ) {
-				continue;
-			}
+                if ( '' !== $site_url ) {
+                        $parts = function_exists( 'wp_parse_url' ) ? wp_parse_url( $site_url ) : parse_url( $site_url );
 
-			if ( preg_match( '#^(mailto:|tel:|javascript:)#i', $href ) ) {
-				continue;
-			}
+                        if ( is_array( $parts ) && isset( $parts['host'] ) ) {
+                                $site_host = strtolower( (string) $parts['host'] );
+                        }
+                }
 
-					++$link_count;
-		}
+                foreach ( $anchors as $anchor ) {
+                        $href = trim( (string) $anchor->getAttribute( 'href' ) );
+
+                        if ( '' === $href ) {
+                                continue;
+                        }
+
+                        if ( str_starts_with( $href, '#' ) ) {
+                                continue;
+                        }
+
+                        if ( preg_match( '#^(mailto:|tel:|javascript:)#i', $href ) ) {
+                                continue;
+                        }
+
+                        $parsed = function_exists( 'wp_parse_url' ) ? wp_parse_url( $href ) : parse_url( $href );
+
+                        if ( false === $parsed ) {
+                                continue;
+                        }
+
+                        if ( isset( $parsed['host'] ) && '' !== $parsed['host'] ) {
+                                if ( '' === $site_host ) {
+                                        continue;
+                                }
+
+                                if ( strtolower( (string) $parsed['host'] ) !== $site_host ) {
+                                        continue;
+                                }
+                        }
+
+                        if ( isset( $parsed['scheme'] ) && '' !== $parsed['scheme'] ) {
+                                $scheme = strtolower( (string) $parsed['scheme'] );
+
+                                if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+                                        continue;
+                                }
+                        }
+
+                        ++$link_count;
+                }
 
 			$required = 0;
 

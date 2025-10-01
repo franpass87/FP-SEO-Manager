@@ -24,3 +24,4 @@ if ( ! function_exists( 'tests_add_filter' ) ) {
 			return add_filter( $tag, $function_to_add, $priority, $accepted_args );
 	}
 }
+

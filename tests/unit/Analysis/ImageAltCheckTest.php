@@ -9,15 +9,28 @@ declare(strict_types=1);
 
 namespace FP\SEO\Tests\Unit\Analysis;
 
+use Brain\Monkey;
 use FP\SEO\Analysis\Checks\ImageAltCheck;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use PHPUnit\Framework\TestCase;
+use function Brain\Monkey\Functions\when;
 
 /**
  * Image alt check unit tests.
  */
 final class ImageAltCheckTest extends TestCase {
+        protected function setUp(): void {
+                parent::setUp();
+                Monkey\setUp();
+                when( '__' )->returnArg( 1 );
+                when( 'esc_html__' )->returnArg( 1 );
+        }
+
+        protected function tearDown(): void {
+                Monkey\tearDown();
+                parent::tearDown();
+        }
 	/**
 	 * Ensures full alt coverage passes.
 	 *

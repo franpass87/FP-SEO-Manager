@@ -19,6 +19,7 @@ use function add_action;
 use function add_query_arg;
 use function admin_url;
 use function current_user_can;
+use function esc_attr;
 use function get_post;
 use function get_post_meta;
 use function get_post_type;
@@ -107,17 +108,19 @@ class AdminBarBadge {
 						),
 						admin_url( 'admin.php' )
 					),
-					'meta'  => array(
-						'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
-						'title' => sprintf(
-							'%s: %s',
-							I18n::translate( 'Analyzer status' ),
-							$this->status_description( $score_status )
-						),
-					),
-				)
-			);
-	}
+                                        'meta'  => array(
+                                                'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
+                                                'title' => esc_attr(
+                                                        sprintf(
+                                                                '%s: %s',
+                                                                I18n::translate( 'Analyzer status' ),
+                                                                $this->status_description( $score_status )
+                                                        )
+                                                ),
+                                        ),
+                                )
+                        );
+        }
 
 		/**
 		 * Determine whether the badge should render for the current request.

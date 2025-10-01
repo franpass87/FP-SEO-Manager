@@ -26,6 +26,7 @@ use function get_current_screen;
 use function get_post_meta;
 use function get_post_types;
 use function in_array;
+use function esc_url_raw;
 use function is_array;
 use function sanitize_text_field;
 use function update_post_meta;
@@ -236,7 +237,7 @@ class Metabox {
 		$title     = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['title'] ) ) : '';
 		$excerpt   = isset( $_POST['excerpt'] ) ? wp_kses_post( wp_unslash( (string) $_POST['excerpt'] ) ) : '';
 		$meta      = isset( $_POST['metaDescription'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['metaDescription'] ) ) : '';
-		$canonical = isset( $_POST['canonical'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['canonical'] ) ) : null;
+                $canonical = isset( $_POST['canonical'] ) ? esc_url_raw( wp_unslash( (string) $_POST['canonical'] ) ) : null;
 		$robots    = isset( $_POST['robots'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['robots'] ) ) : null;
 
 		if ( '' === $meta ) {

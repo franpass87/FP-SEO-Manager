@@ -139,11 +139,11 @@ class OptionsTest extends TestCase {
 		/**
 		 * Ensures scoring weights are normalized and warn on invalid input.
 		 */
-	public function test_sanitize_normalizes_scoring_weights(): void {
-			$captured = array();
-			when( 'add_settings_error' )->alias(
-				static function ( $setting, $code, $message, $type = 'error' ) use ( &$captured ): void {
-							$captured[] = array(
+        public function test_sanitize_normalizes_scoring_weights(): void {
+                        $captured = array();
+                        when( 'add_settings_error' )->alias(
+                                static function ( $setting, $code, $message, $type = 'error' ) use ( &$captured ): void {
+                                                        $captured[] = array(
 								'setting' => $setting,
 								'code'    => $code,
 								'message' => $message,
@@ -170,8 +170,23 @@ class OptionsTest extends TestCase {
 			self::assertSame( 0.0, $sanitized['scoring']['weights']['h1_presence'] );
 			self::assertSame( 5.0, $sanitized['scoring']['weights']['internal_links'] );
 
-			$notice = end( $captured );
-			self::assertSame( 'fp_seo_perf_scoring_weights', $notice['code'] );
-			self::assertSame( 'warning', $notice['type'] );
-	}
+                        $notice = end( $captured );
+                        self::assertSame( 'fp_seo_perf_scoring_weights', $notice['code'] );
+                        self::assertSame( 'warning', $notice['type'] );
+        }
+
+        /**
+         * Ensures unsupported languages fallback to the default option.
+         */
+        public function test_sanitize_resets_unsupported_language(): void {
+                $sanitized = Options::sanitize(
+                        array(
+                                'general' => array(
+                                        'language' => 'pt',
+                                ),
+                        )
+                );
+
+                self::assertSame( Options::get_defaults()['general']['language'], $sanitized['general']['language'] );
+        }
 }

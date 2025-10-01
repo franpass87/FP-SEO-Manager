@@ -43,11 +43,11 @@ class BulkAuditPageTest extends TestCase {
 		/**
 		 * Ensures the register method wires expected hooks.
 		 */
-	public function test_register_adds_expected_hooks(): void {
-			$calls = array();
+        public function test_register_adds_expected_hooks(): void {
+                        $calls = array();
 
-			when( 'add_action' )->alias(
-				static function ( string $hook, $callback ) use ( &$calls ) {
+                        when( 'add_action' )->alias(
+                                static function ( string $hook, $callback ) use ( &$calls ) {
 							$calls[] = array( $hook, $callback );
 							return true;
 				}
@@ -71,9 +71,67 @@ class BulkAuditPageTest extends TestCase {
 				$calls
 			);
 
-			self::assertContains(
-				array( 'admin_post_fp_seo_performance_bulk_export', array( $page, 'handle_export' ) ),
-				$calls
-			);
-	}
+                        self::assertContains(
+                                array( 'admin_post_fp_seo_performance_bulk_export', array( $page, 'handle_export' ) ),
+                                $calls
+                        );
+        }
+
+        /**
+         * Ensures cached results are trimmed when exceeding the limit.
+         */
+        public function test_persist_result_trims_cache_size(): void {
+                $reflection = new \ReflectionClass( BulkAuditPage::class );
+                $limit      = null;
+
+                foreach ( $reflection->getReflectionConstants() as $constant ) {
+                        if ( 'CACHE_LIMIT' === $constant->getName() ) {
+                                $limit = (int) $constant->getValue();
+                                break;
+                        }
+                }
+
+                self::assertIsInt( $limit );
+
+                $existing = array();
+
+                for ( $i = 1; $i <= $limit; $i++ ) {
+                        $existing[ $i ] = array(
+                                'post_id' => $i,
+                                'updated' => $i,
+                        );
+                }
+
+                $captured = array();
+
+                when( 'get_transient' )->alias(
+                        static function () use ( $existing ) {
+                                return $existing;
+                        }
+                );
+                when( 'set_transient' )->alias(
+                        static function ( $key, $value, $ttl ) use ( &$captured ): bool {
+                                $captured = array( $key, $value, $ttl );
+                                return true;
+                        }
+                );
+
+                $page   = new BulkAuditPage();
+                $method = new \ReflectionMethod( BulkAuditPage::class, 'persist_result' );
+                $method->setAccessible( true );
+                $method->invoke(
+                        $page,
+                        array(
+                                'post_id' => $limit + 1,
+                                'updated' => $limit + 1,
+                        )
+                );
+
+                self::assertNotEmpty( $captured );
+                $cache = $captured[1];
+
+                self::assertCount( $limit, $cache );
+                self::assertArrayNotHasKey( 1, $cache );
+                self::assertArrayHasKey( $limit + 1, $cache );
+        }
 }
