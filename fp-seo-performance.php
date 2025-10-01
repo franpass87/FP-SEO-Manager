@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://example.com/plugins/fp-seo-performance
  * Description: SEO and performance assistant for WordPress editors.
- * Version: 0.1.0
+ * Version: 0.1.2
  * Author: FP
  * Author URI: https://example.com
  * Text Domain: fp-seo-performance
