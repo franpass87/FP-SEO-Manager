@@ -1,17 +1,19 @@
 <?php
 /**
  * Plugin Name: FP SEO Performance
- * Plugin URI: https://example.com/plugins/fp-seo-performance
- * Description: SEO and performance assistant for WordPress editors.
+ * Plugin URI: https://francescopasseri.com
+ * Description: FP SEO Performance provides an on-page SEO analyzer with configurable checks, bulk audits, and admin-facing guidance for WordPress editors.
  * Version: 0.1.2
- * Author: FP
- * Author URI: https://example.com
+ * Author: Francesco Passeri
+ * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
  * Domain Path: /languages
  * Requires at least: 6.2
  * Requires PHP: 8.0
  *
  * @package FP\SEO
+ * @author Francesco Passeri
+ * @link https://francescopasseri.com
  */
 
 declare(strict_types=1);

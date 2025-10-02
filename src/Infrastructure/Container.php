@@ -3,6 +3,8 @@
  * Dependency injection container.
  *
  * @package FP\SEO
+ * @author Francesco Passeri
+ * @link https://francescopasseri.com
  */
 
 declare(strict_types=1);

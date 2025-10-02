@@ -3,6 +3,8 @@
  * Check for H1 presence and uniqueness.
  *
  * @package FP\SEO
+ * @author Francesco Passeri
+ * @link https://francescopasseri.com
  */
 
 declare(strict_types=1);

@@ -1,0 +1,23 @@
+{
+  "name": "fp-seo-performance",
+  "version": "0.1.2",
+  "description": "Provides an on-page SEO analyzer with configurable checks, bulk audits, and admin guidance for editors.",
+  "author": "Francesco Passeri <info@francescopasseri.com> (https://francescopasseri.com)",
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://francescopasseri.com",
+  "bugs": {
+    "url": "https://francescopasseri.com/contact/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/franpass87/FP-SEO-Manager.git"
+  },
+  "scripts": {
+    "sync:author": "node tools/sync-author-metadata.js --apply=${APPLY:-false}",
+    "sync:docs": "node tools/sync-author-metadata.js --docs --apply=${APPLY:-false}",
+    "changelog:from-git": "conventional-changelog -p angular -i CHANGELOG.md -s || true"
+  },
+  "devDependencies": {
+    "conventional-changelog-cli": "^3.0.0"
+  }
+}
