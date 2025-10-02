@@ -3,6 +3,8 @@
  * Admin menu registration for the plugin.
  *
  * @package FP\SEO
+ * @author Francesco Passeri
+ * @link https://francescopasseri.com
  */
 
 declare(strict_types=1);

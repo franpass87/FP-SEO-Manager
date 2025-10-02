@@ -1,6 +1,6 @@
 {
     "name": "fp/fp-seo-performance",
-    "description": "FP SEO Performance plugin",
+    "description": "Provides an on-page SEO analyzer with configurable checks, bulk audits, and admin guidance for editors.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
@@ -34,7 +34,10 @@
         ],
         "phpcs": "vendor/bin/phpcs",
         "phpstan": "vendor/bin/phpstan analyse",
-        "rector": "vendor/bin/rector process"
+        "rector": "vendor/bin/rector process",
+        "sync:author": "node tools/sync-author-metadata.js --apply=${APPLY:-false}",
+        "sync:docs": "node tools/sync-author-metadata.js --docs --apply=${APPLY:-false}",
+        "changelog:from-git": "conventional-changelog -p angular -i CHANGELOG.md -s || true"
     },
     "config": {
         "allow-plugins": {
@@ -46,5 +49,17 @@
         },
         "optimize-autoloader": true,
         "sort-packages": true
-    }
+    },
+    "homepage": "https://francescopasseri.com",
+    "support": {
+        "issues": "https://francescopasseri.com/contact/"
+    },
+    "authors": [
+        {
+            "name": "Francesco Passeri",
+            "email": "info@francescopasseri.com",
+            "homepage": "https://francescopasseri.com",
+            "role": "Developer"
+        }
+    ]
 }
