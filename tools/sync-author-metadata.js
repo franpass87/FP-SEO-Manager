@@ -154,8 +154,8 @@ function updatePackageJson() {
     data.bugs = { url: 'https://francescopasseri.com/contact/' };
     data.repository = data.repository || { type: 'git', url: 'https://github.com/franpass87/FP-SEO-Manager.git' };
     data.scripts = data.scripts || {};
-    data.scripts['sync:author'] = 'node tools/sync-author-metadata.js --apply=${APPLY:-false}';
-    data.scripts['sync:docs'] = 'node tools/sync-author-metadata.js --docs --apply=${APPLY:-false}';
+    data.scripts['sync:author'] = 'cross-env APPLY=false node tools/sync-author-metadata.js --apply';
+    data.scripts['sync:docs'] = 'cross-env APPLY=false node tools/sync-author-metadata.js --docs --apply';
     data.scripts['changelog:from-git'] = 'conventional-changelog -p angular -i CHANGELOG.md -s || true';
   }, 'Updated package metadata and scripts.');
 }
