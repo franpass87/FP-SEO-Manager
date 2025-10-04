@@ -286,8 +286,8 @@ class Context {
 	 * @return array<int, array{level:int,text:string}>
 	 */
 	public function headings(): array {
-                return $this->ordered_headings();
-        }
+				return $this->ordered_headings();
+	}
 
 	/**
 	 * Retrieve all heading elements preserving document order.

@@ -51,23 +51,23 @@ class OgCardsCheck implements CheckInterface {
 	 * @return Result
 	 */
 	public function run( Context $context ): Result {
-                $required = array( 'og:title', 'og:description', 'og:type', 'og:url', 'og:image' );
-                $missing  = array();
-                $present  = array();
+				$required = array( 'og:title', 'og:description', 'og:type', 'og:url', 'og:image' );
+				$missing  = array();
+				$present  = array();
 
-                foreach ( $required as $key ) {
-                        $value = (string) $context->meta_content( 'property', $key );
+		foreach ( $required as $key ) {
+				$value = (string) $context->meta_content( 'property', $key );
 
-                        if ( 'og:image' === $key && '' === trim( $value ) ) {
-                                $value = (string) $context->meta_content( 'property', 'og:image:secure_url' );
-                        }
+			if ( 'og:image' === $key && '' === trim( $value ) ) {
+						$value = (string) $context->meta_content( 'property', 'og:image:secure_url' );
+			}
 
-                        if ( '' === trim( $value ) ) {
-                                $missing[] = $key;
-                                continue;
-                        }
+			if ( '' === trim( $value ) ) {
+							$missing[] = $key;
+							continue;
+			}
 
-			$present[ $key ] = $value;
+							$present[ $key ] = $value;
 		}
 
 		if ( empty( $missing ) ) {
@@ -81,8 +81,8 @@ class OgCardsCheck implements CheckInterface {
 			);
 		}
 
-		$status = count( $missing ) > 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
-                $hint   = I18n::translate( 'Add missing Open Graph tags (title, description, URL, or image) to improve social sharing previews.' );
+		$status       = count( $missing ) > 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
+				$hint = I18n::translate( 'Add missing Open Graph tags (title, description, URL, or image) to improve social sharing previews.' );
 
 		return new Result(
 			$status,

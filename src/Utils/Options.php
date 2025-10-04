@@ -19,22 +19,22 @@ class Options {
 	public const OPTION_KEY   = 'fp_seo_perf_options';
 	public const OPTION_GROUP = 'fp_seo_performance';
 
-        private const DEFAULT_LANGUAGE = 'en';
+	private const DEFAULT_LANGUAGE = 'en';
 
-        /**
-         * Provides the available UI languages.
-         *
-         * @return array<string, string>
-         */
-        public static function get_language_choices(): array {
-                return array(
-                        'en' => __( 'English', 'fp-seo-performance' ),
-                        'es' => __( 'Spanish', 'fp-seo-performance' ),
-                        'fr' => __( 'French', 'fp-seo-performance' ),
-                        'de' => __( 'German', 'fp-seo-performance' ),
-                        'it' => __( 'Italian', 'fp-seo-performance' ),
-                );
-        }
+		/**
+		 * Provides the available UI languages.
+		 *
+		 * @return array<string, string>
+		 */
+	public static function get_language_choices(): array {
+			return array(
+				'en' => __( 'English', 'fp-seo-performance' ),
+				'es' => __( 'Spanish', 'fp-seo-performance' ),
+				'fr' => __( 'French', 'fp-seo-performance' ),
+				'de' => __( 'German', 'fp-seo-performance' ),
+				'it' => __( 'Italian', 'fp-seo-performance' ),
+			);
+	}
 
 	/**
 	 * Keys available for analysis checks toggles.
@@ -103,16 +103,16 @@ class Options {
 			'scoring'     => array(
 				'weights' => self::default_scoring_weights(),
 			),
-                        'performance' => array(
-                                'enable_psi'  => false,
-                                'psi_api_key' => '',
-                                'heuristics'  => array(
-                                        'image_alt_coverage' => true,
-                                        'inline_css'         => true,
-                                        'image_count'        => true,
-                                        'heading_depth'      => true,
-                                ),
-                        ),
+			'performance' => array(
+				'enable_psi'  => false,
+				'psi_api_key' => '',
+				'heuristics'  => array(
+					'image_alt_coverage' => true,
+					'inline_css'         => true,
+					'image_count'        => true,
+					'heading_depth'      => true,
+				),
+			),
 			'advanced'    => array(
 				'capability'        => 'manage_options',
 				'telemetry_enabled' => false,
@@ -451,23 +451,23 @@ class Options {
 	 * @param string $value Raw language input.
 	 */
 	private static function sanitize_language( string $value ): string {
-                $value = strtolower( trim( $value ) );
-                $value = preg_replace( '/[^a-z\-]/', '', $value );
+				$value = strtolower( trim( $value ) );
+				$value = preg_replace( '/[^a-z\-]/', '', $value );
 
-                if ( ! is_string( $value ) || '' === $value ) {
-                        return self::DEFAULT_LANGUAGE;
-                }
+		if ( ! is_string( $value ) || '' === $value ) {
+				return self::DEFAULT_LANGUAGE;
+		}
 
-                if ( strlen( $value ) > 10 ) {
-                        $value = substr( $value, 0, 10 );
-                }
+		if ( strlen( $value ) > 10 ) {
+				$value = substr( $value, 0, 10 );
+		}
 
-                if ( ! isset( self::get_language_choices()[ $value ] ) ) {
-                        return self::DEFAULT_LANGUAGE;
-                }
+		if ( ! isset( self::get_language_choices()[ $value ] ) ) {
+				return self::DEFAULT_LANGUAGE;
+		}
 
-                return $value;
-        }
+				return $value;
+	}
 
 	/**
 	 * Sanitizes plain text values.

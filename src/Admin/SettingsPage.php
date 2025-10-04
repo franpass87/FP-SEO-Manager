@@ -322,27 +322,27 @@ class SettingsPage {
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Local heuristics', 'fp-seo-performance' ); ?></th>
 				<td>
-                                        <label>
-                                                <input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][image_alt_coverage]" value="1" <?php checked( $performance['heuristics']['image_alt_coverage'] ); ?> />
-                                                <?php esc_html_e( 'Monitor image alternative text coverage.', 'fp-seo-performance' ); ?>
-                                        </label>
-                                        <br />
-                                        <label>
-                                                <input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][inline_css]" value="1" <?php checked( $performance['heuristics']['inline_css'] ); ?> />
-                                                <?php esc_html_e( 'Flag large inline CSS blocks.', 'fp-seo-performance' ); ?>
-                                        </label>
-                                        <br />
-                                        <label>
-                                                <input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][image_count]" value="1" <?php checked( $performance['heuristics']['image_count'] ); ?> />
-                                                <?php esc_html_e( 'Warn when pages embed many images.', 'fp-seo-performance' ); ?>
-                                        </label>
-                                        <br />
-                                        <label>
-                                                <input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][heading_depth]" value="1" <?php checked( $performance['heuristics']['heading_depth'] ); ?> />
-                                                <?php esc_html_e( 'Highlight deeply nested heading structures.', 'fp-seo-performance' ); ?>
-                                        </label>
-                                </td>
-                        </tr>
+										<label>
+												<input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][image_alt_coverage]" value="1" <?php checked( $performance['heuristics']['image_alt_coverage'] ); ?> />
+												<?php esc_html_e( 'Monitor image alternative text coverage.', 'fp-seo-performance' ); ?>
+										</label>
+										<br />
+										<label>
+												<input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][inline_css]" value="1" <?php checked( $performance['heuristics']['inline_css'] ); ?> />
+												<?php esc_html_e( 'Flag large inline CSS blocks.', 'fp-seo-performance' ); ?>
+										</label>
+										<br />
+										<label>
+												<input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][image_count]" value="1" <?php checked( $performance['heuristics']['image_count'] ); ?> />
+												<?php esc_html_e( 'Warn when pages embed many images.', 'fp-seo-performance' ); ?>
+										</label>
+										<br />
+										<label>
+												<input type="checkbox" name="<?php echo esc_attr( Options::OPTION_KEY ); ?>[performance][heuristics][heading_depth]" value="1" <?php checked( $performance['heuristics']['heading_depth'] ); ?> />
+												<?php esc_html_e( 'Highlight deeply nested heading structures.', 'fp-seo-performance' ); ?>
+										</label>
+								</td>
+						</tr>
 			</tbody>
 		</table>
 		<?php
@@ -398,9 +398,9 @@ class SettingsPage {
 	 *
 	 * @return array<string, string> Map of locale codes to labels.
 	 */
-        private function get_language_choices(): array {
-                return Options::get_language_choices();
-        }
+	private function get_language_choices(): array {
+			return Options::get_language_choices();
+	}
 
 	/**
 	 * Resolves a human readable label for a check key.

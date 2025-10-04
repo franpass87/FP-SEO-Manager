@@ -3,7 +3,6 @@
     <description>WordPress Coding Standards for FP SEO Performance plugin.</description>
     <file>fp-seo-performance.php</file>
     <file>src</file>
-    <file>tests</file>
     <exclude-pattern>vendor/</exclude-pattern>
     <exclude-pattern>build/</exclude-pattern>
 

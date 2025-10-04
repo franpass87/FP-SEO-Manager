@@ -22,7 +22,7 @@ use function ceil;
 use function count;
 use function in_array;
 use function max;
-use function parse_url;
+use function parse_url; // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 use function preg_match;
 use function preg_split;
 use function strtolower;
@@ -71,62 +71,62 @@ class InternalLinksCheck implements CheckInterface {
 				$words = array();
 		}
 
-                $word_count = count( $words );
-                $anchors    = $context->anchors();
-                $link_count = 0;
+				$word_count = count( $words );
+				$anchors    = $context->anchors();
+				$link_count = 0;
 
-                $site_host = '';
-                $site_url  = home_url( '/' );
+				$site_host = '';
+				$site_url  = home_url( '/' );
 
-                if ( '' !== $site_url ) {
-                        $parts = function_exists( 'wp_parse_url' ) ? wp_parse_url( $site_url ) : parse_url( $site_url );
+		if ( '' !== $site_url ) {
+						$parts = function_exists( 'wp_parse_url' ) ? wp_parse_url( $site_url ) : parse_url( $site_url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 
-                        if ( is_array( $parts ) && isset( $parts['host'] ) ) {
-                                $site_host = strtolower( (string) $parts['host'] );
-                        }
-                }
+			if ( is_array( $parts ) && isset( $parts['host'] ) ) {
+										$site_host = strtolower( (string) $parts['host'] );
+			}
+		}
 
-                foreach ( $anchors as $anchor ) {
-                        $href = trim( (string) $anchor->getAttribute( 'href' ) );
+		foreach ( $anchors as $anchor ) {
+				$href = trim( (string) $anchor->getAttribute( 'href' ) );
 
-                        if ( '' === $href ) {
-                                continue;
-                        }
+			if ( '' === $href ) {
+						continue;
+			}
 
-                        if ( str_starts_with( $href, '#' ) ) {
-                                continue;
-                        }
+			if ( str_starts_with( $href, '#' ) ) {
+							continue;
+			}
 
-                        if ( preg_match( '#^(mailto:|tel:|javascript:)#i', $href ) ) {
-                                continue;
-                        }
+			if ( preg_match( '#^(mailto:|tel:|javascript:)#i', $href ) ) {
+				continue;
+			}
 
-                        $parsed = function_exists( 'wp_parse_url' ) ? wp_parse_url( $href ) : parse_url( $href );
+								$parsed = function_exists( 'wp_parse_url' ) ? wp_parse_url( $href ) : parse_url( $href ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 
-                        if ( false === $parsed ) {
-                                continue;
-                        }
+			if ( false === $parsed ) {
+				continue;
+			}
 
-                        if ( isset( $parsed['host'] ) && '' !== $parsed['host'] ) {
-                                if ( '' === $site_host ) {
-                                        continue;
-                                }
+			if ( isset( $parsed['host'] ) && '' !== $parsed['host'] ) {
+				if ( '' === $site_host ) {
+						continue;
+				}
 
-                                if ( strtolower( (string) $parsed['host'] ) !== $site_host ) {
-                                        continue;
-                                }
-                        }
+				if ( strtolower( (string) $parsed['host'] ) !== $site_host ) {
+						continue;
+				}
+			}
 
-                        if ( isset( $parsed['scheme'] ) && '' !== $parsed['scheme'] ) {
-                                $scheme = strtolower( (string) $parsed['scheme'] );
+			if ( isset( $parsed['scheme'] ) && '' !== $parsed['scheme'] ) {
+				$scheme = strtolower( (string) $parsed['scheme'] );
 
-                                if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
-                                        continue;
-                                }
-                        }
+				if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+						continue;
+				}
+			}
 
-                        ++$link_count;
-                }
+							++$link_count;
+		}
 
 			$required = 0;
 
