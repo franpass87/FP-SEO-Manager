@@ -39,8 +39,8 @@ class AdminBarBadge {
 		 * Hook registrations.
 		 */
 	public function register(): void {
-                        add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
-                        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+						add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
+						add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
 	}
 
 		/**
@@ -110,19 +110,19 @@ class AdminBarBadge {
 						),
 						admin_url( 'admin.php' )
 					),
-                                        'meta'  => array(
-                                                'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
-                                                'title' => esc_attr(
-                                                        sprintf(
-                                                                '%s: %s',
-                                                                I18n::translate( 'Analyzer status' ),
-                                                                $this->status_description( $score_status )
-                                                        )
-                                                ),
-                                        ),
-                                )
-                        );
-        }
+					'meta'  => array(
+						'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
+						'title' => esc_attr(
+							sprintf(
+								'%s: %s',
+								I18n::translate( 'Analyzer status' ),
+								$this->status_description( $score_status )
+							)
+						),
+					),
+				)
+			);
+	}
 
 		/**
 		 * Determine whether the badge should render for the current request.

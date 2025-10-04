@@ -58,89 +58,89 @@ class Analyzer {
 		$checks = $this->checks;
 
 		if ( empty( $checks ) ) {
-                $checks = $this->default_checks();
-        }
+				$checks = $this->default_checks();
+		}
 
-        $available_ids = array();
+		$available_ids = array();
 
-        foreach ( $checks as $check ) {
-                $available_ids[ $check->id() ] = true;
-        }
+		foreach ( $checks as $check ) {
+				$available_ids[ $check->id() ] = true;
+		}
 
-        $options    = Options::get();
-        $configured = array();
+		$options    = Options::get();
+		$configured = array();
 
-        if ( isset( $options['analysis']['checks'] ) && is_array( $options['analysis']['checks'] ) ) {
-                foreach ( $options['analysis']['checks'] as $id => $enabled ) {
-                        $id = (string) $id;
+		if ( isset( $options['analysis']['checks'] ) && is_array( $options['analysis']['checks'] ) ) {
+			foreach ( $options['analysis']['checks'] as $id => $enabled ) {
+					$id = (string) $id;
 
-                        if ( isset( $available_ids[ $id ] ) ) {
-                                $configured[ $id ] = (bool) $enabled;
-                        }
-                }
-        }
-        $enabled_ids = array();
+				if ( isset( $available_ids[ $id ] ) ) {
+						$configured[ $id ] = (bool) $enabled;
+				}
+			}
+		}
+		$enabled_ids = array();
 
-        if ( ! empty( $configured ) ) {
-                foreach ( $configured as $id => $enabled ) {
-                        $id = (string) $id;
+		if ( ! empty( $configured ) ) {
+			foreach ( $configured as $id => $enabled ) {
+					$id = (string) $id;
 
-                        if ( empty( $enabled ) || ! isset( $available_ids[ $id ] ) ) {
-                                continue;
-                        }
+				if ( empty( $enabled ) || ! isset( $available_ids[ $id ] ) ) {
+						continue;
+				}
 
-                        $enabled_ids[ $id ] = true;
-                }
-        }
+					$enabled_ids[ $id ] = true;
+			}
+		}
 
-        if ( empty( $enabled_ids ) ) {
-                $enabled_ids = $available_ids;
-        }
+		if ( empty( $enabled_ids ) ) {
+				$enabled_ids = $available_ids;
+		}
 
-        $filtered = array_keys( $enabled_ids );
+		$filtered = array_keys( $enabled_ids );
 
-        if ( function_exists( 'apply_filters' ) ) {
-                $maybe_filtered = apply_filters( 'fp_seo_perf_checks_enabled', $filtered, $context );
+		if ( function_exists( 'apply_filters' ) ) {
+				$maybe_filtered = apply_filters( 'fp_seo_perf_checks_enabled', $filtered, $context );
 
-                if ( is_array( $maybe_filtered ) ) {
-                        $filtered = $maybe_filtered;
-                }
-        }
+			if ( is_array( $maybe_filtered ) ) {
+					$filtered = $maybe_filtered;
+			}
+		}
 
-        $enabled_ids = array();
+		$enabled_ids = array();
 
-        foreach ( $filtered as $id ) {
-                $id = (string) $id;
+		foreach ( $filtered as $id ) {
+				$id = (string) $id;
 
-                if ( isset( $available_ids[ $id ] ) && isset( $configured[ $id ] ) ) {
-                        if ( ! empty( $configured[ $id ] ) ) {
-                                $enabled_ids[ $id ] = true;
-                        }
+			if ( isset( $available_ids[ $id ] ) && isset( $configured[ $id ] ) ) {
+				if ( ! empty( $configured[ $id ] ) ) {
+						$enabled_ids[ $id ] = true;
+				}
 
-                        continue;
-                }
+					continue;
+			}
 
-                if ( isset( $available_ids[ $id ] ) && empty( $configured ) ) {
-                        $enabled_ids[ $id ] = true;
-                }
-        }
+			if ( isset( $available_ids[ $id ] ) && empty( $configured ) ) {
+					$enabled_ids[ $id ] = true;
+			}
+		}
 
-        if ( empty( $enabled_ids ) && ! empty( $configured ) ) {
-                return array(
-                        'status'  => Result::STATUS_PASS,
-                        'summary' => array(
-                                Result::STATUS_PASS => 0,
-                                Result::STATUS_WARN => 0,
-                                Result::STATUS_FAIL => 0,
-                                'total'             => 0,
-                        ),
-                        'checks'  => array(),
-                );
-        }
+		if ( empty( $enabled_ids ) && ! empty( $configured ) ) {
+				return array(
+					'status'  => Result::STATUS_PASS,
+					'summary' => array(
+						Result::STATUS_PASS => 0,
+						Result::STATUS_WARN => 0,
+						Result::STATUS_FAIL => 0,
+						'total'             => 0,
+					),
+					'checks'  => array(),
+				);
+		}
 
-        if ( empty( $enabled_ids ) ) {
-                $enabled_ids = $available_ids;
-        }
+		if ( empty( $enabled_ids ) ) {
+				$enabled_ids = $available_ids;
+		}
 
 		$results = array();
 		$summary = array(

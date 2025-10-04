@@ -50,16 +50,16 @@ class Metabox {
 	private const NONCE_ACTION = 'fp_seo_performance_meta';
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
-        public const META_EXCLUDE  = '_fp_seo_performance_exclude';
+	public const META_EXCLUDE  = '_fp_seo_performance_exclude';
 
 	/**
 	 * Hooks WordPress actions for registering and saving the metabox.
 	 */
 	public function register(): void {
-                add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 10, 0 );
-                add_action( 'save_post', array( $this, 'save_meta' ) );
-                add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
-                add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
+				add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 10, 0 );
+				add_action( 'save_post', array( $this, 'save_meta' ) );
+				add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+				add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 	}
 
 	/**
@@ -235,12 +235,12 @@ class Metabox {
 			wp_send_json_success( array( 'excluded' => true ) );
 		}
 
-		$content   = isset( $_POST['content'] ) ? wp_kses_post( wp_unslash( (string) $_POST['content'] ) ) : '';
-		$title     = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['title'] ) ) : '';
-		$excerpt   = isset( $_POST['excerpt'] ) ? wp_kses_post( wp_unslash( (string) $_POST['excerpt'] ) ) : '';
-		$meta      = isset( $_POST['metaDescription'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['metaDescription'] ) ) : '';
-                $canonical = isset( $_POST['canonical'] ) ? esc_url_raw( wp_unslash( (string) $_POST['canonical'] ) ) : null;
-		$robots    = isset( $_POST['robots'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['robots'] ) ) : null;
+		$content           = isset( $_POST['content'] ) ? wp_kses_post( wp_unslash( (string) $_POST['content'] ) ) : '';
+		$title             = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['title'] ) ) : '';
+		$excerpt           = isset( $_POST['excerpt'] ) ? wp_kses_post( wp_unslash( (string) $_POST['excerpt'] ) ) : '';
+		$meta              = isset( $_POST['metaDescription'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['metaDescription'] ) ) : '';
+				$canonical = isset( $_POST['canonical'] ) ? esc_url_raw( wp_unslash( (string) $_POST['canonical'] ) ) : null;
+		$robots            = isset( $_POST['robots'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['robots'] ) ) : null;
 
 		if ( '' === $meta ) {
 			$meta = wp_strip_all_tags( $excerpt );
@@ -273,8 +273,8 @@ class Metabox {
 	 * @return string[]
 	 */
 	private function get_supported_post_types(): array {
-                return PostTypes::analyzable();
-        }
+				return PostTypes::analyzable();
+	}
 	/**
 	 * Determine if a post is excluded from analysis.
 	 *

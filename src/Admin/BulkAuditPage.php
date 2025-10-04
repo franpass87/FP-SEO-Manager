@@ -76,9 +76,9 @@ class BulkAuditPage {
 	private const AJAX_ACTION   = 'fp_seo_performance_bulk_analyze';
 	private const EXPORT_ACTION = 'fp_seo_performance_bulk_export';
 	private const NONCE_ACTION  = 'fp_seo_performance_bulk';
-        public const CACHE_KEY      = 'fp_seo_performance_bulk_results';
-        private const CACHE_TTL     = 86400;
-        private const CACHE_LIMIT   = 500;
+	public const CACHE_KEY      = 'fp_seo_performance_bulk_results';
+	private const CACHE_TTL     = 86400;
+	private const CACHE_LIMIT   = 500;
 
 		/**
 		 * Hooks WordPress actions for the page.
@@ -396,9 +396,9 @@ class BulkAuditPage {
 		 *
 		 * @return string[]
 		 */
-        private function get_allowed_post_types(): array {
-                        return PostTypes::analyzable();
-        }
+	private function get_allowed_post_types(): array {
+					return PostTypes::analyzable();
+	}
 
 		/**
 		 * Retrieve allowed post statuses.
@@ -452,20 +452,20 @@ class BulkAuditPage {
 	private function query_posts( string $post_type, string $status ): array {
 			$types = $this->get_allowed_post_types();
 
-                $args = array(
-                        'post_type'      => 'all' === $post_type ? $types : $post_type,
-                        'post_status'    => 'any' === $status ? $this->get_allowed_statuses() : $status,
-                        'posts_per_page' => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
-                        'orderby'        => 'date',
-                        'order'          => 'DESC',
-                        'no_found_rows'  => true,
-                        'update_post_meta_cache' => false,
-                        'update_post_term_cache' => false,
-                );
+				$args = array(
+					'post_type'                  => 'all' === $post_type ? $types : $post_type,
+					'post_status'                => 'any' === $status ? $this->get_allowed_statuses() : $status,
+					'posts_per_page'             => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
+						'orderby'                => 'date',
+						'order'                  => 'DESC',
+						'no_found_rows'          => true,
+						'update_post_meta_cache' => false,
+						'update_post_term_cache' => false,
+				);
 
-                $query = new WP_Query( $args );
+				$query = new WP_Query( $args );
 
-                return $query->posts;
+				return $query->posts;
 	}
 
 		/**
@@ -493,29 +493,29 @@ class BulkAuditPage {
 		 *
 		 * @param array<string, mixed> $result Result payload.
 		 */
-        private function persist_result( array $result ): void {
-                $cached = $this->get_cached_results();
+	private function persist_result( array $result ): void {
+			$cached = $this->get_cached_results();
 
-                if ( isset( $result['post_id'] ) ) {
-                        $cached[ (int) $result['post_id'] ] = $result;
-                }
+		if ( isset( $result['post_id'] ) ) {
+				$cached[ (int) $result['post_id'] ] = $result;
+		}
 
-                if ( count( $cached ) > self::CACHE_LIMIT ) {
-                        uasort(
-                                $cached,
-                                static function ( array $a, array $b ): int {
-                                        $a_updated = isset( $a['updated'] ) ? (int) $a['updated'] : 0;
-                                        $b_updated = isset( $b['updated'] ) ? (int) $b['updated'] : 0;
+		if ( count( $cached ) > self::CACHE_LIMIT ) {
+				uasort(
+					$cached,
+					static function ( array $a, array $b ): int {
+								$a_updated = isset( $a['updated'] ) ? (int) $a['updated'] : 0;
+								$b_updated = isset( $b['updated'] ) ? (int) $b['updated'] : 0;
 
-                                        return $b_updated <=> $a_updated;
-                                }
-                        );
+								return $b_updated <=> $a_updated;
+					}
+				);
 
-                        $cached = array_slice( $cached, 0, self::CACHE_LIMIT, true );
-                }
+				$cached = array_slice( $cached, 0, self::CACHE_LIMIT, true );
+		}
 
-                set_transient( self::CACHE_KEY, $cached, $this->get_cache_duration() );
-        }
+			set_transient( self::CACHE_KEY, $cached, $this->get_cache_duration() );
+	}
 
 		/**
 		 * Calculate the cache duration.

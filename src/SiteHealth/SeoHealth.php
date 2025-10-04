@@ -21,25 +21,27 @@ use function wp_remote_retrieve_response_code;
  * Registers Site Health checks for the plugin.
  */
 class SeoHealth {
-        /**
-         * Signals provider for PSI data.
-         *
-         * @var Signals
-         */
-        private Signals $signals;
+		/**
+		 * Signals provider for PSI data.
+		 *
+		 * @var Signals
+		 */
+	private Signals $signals;
 
-        /**
-         * Constructor.
-         */
-        public function __construct( ?Signals $signals = null ) {
-                $this->signals = $signals ?? new Signals();
-        }
+		/**
+		 * Constructor.
+		 *
+		 * @param Signals|null $signals Optional signals provider.
+		 */
+	public function __construct( ?Signals $signals = null ) {
+			$this->signals = $signals ?? new Signals();
+	}
 
-        /**
-         * Hooks Site Health test registration.
-         */
-        public function register(): void {
-                add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
+		/**
+		 * Hooks Site Health test registration.
+		 */
+	public function register(): void {
+			add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
 	}
 
 	/**
@@ -68,16 +70,16 @@ class SeoHealth {
 	 * @return array<string, mixed> Site Health test result.
 	 */
 	public function run_seo_test(): array {
-		$badge    = $this->seo_badge();
-		$home_url = home_url( '/' );
-                $response = wp_remote_get(
-                        $home_url,
-                        array(
-                                'timeout'     => 10,
-                                'headers'     => array(),
-                                'redirection' => 3,
-                        )
-                );
+		$badge            = $this->seo_badge();
+		$home_url         = home_url( '/' );
+				$response = wp_remote_get(
+					$home_url,
+					array(
+						'timeout'     => 10,
+						'headers'     => array(),
+						'redirection' => 3,
+					)
+				);
 
 		if ( is_wp_error( $response ) ) {
 			return array(
@@ -95,29 +97,29 @@ class SeoHealth {
 			);
 		}
 
-                $status_code = (int) wp_remote_retrieve_response_code( $response );
+				$status_code = (int) wp_remote_retrieve_response_code( $response );
 
-                if ( 200 !== $status_code ) {
-                        return array(
-                                'label'       => __( 'Homepage returned an unexpected HTTP status', 'fp-seo-performance' ),
-                                'status'      => 'critical',
-                                'badge'       => $badge,
-                                'description' => sprintf(
-                                        /* translators: %d: HTTP status code. */
-                                        __( 'The homepage responded with HTTP %d so SEO metadata could not be verified. Resolve the issue and try again.', 'fp-seo-performance' ),
-                                        $status_code
-                                ),
-                                'actions'     => array(
-                                        sprintf(
-                                                '<a href="%s" target="_blank" rel="noopener">%s</a>',
-                                                esc_url( $home_url ),
-                                                esc_html__( 'Open homepage', 'fp-seo-performance' )
-                                        ),
-                                ),
-                        );
-                }
+		if ( 200 !== $status_code ) {
+				return array(
+					'label'       => __( 'Homepage returned an unexpected HTTP status', 'fp-seo-performance' ),
+					'status'      => 'critical',
+					'badge'       => $badge,
+					'description' => sprintf(
+							/* translators: %d: HTTP status code. */
+						__( 'The homepage responded with HTTP %d so SEO metadata could not be verified. Resolve the issue and try again.', 'fp-seo-performance' ),
+						$status_code
+					),
+					'actions'     => array(
+						sprintf(
+							'<a href="%s" target="_blank" rel="noopener">%s</a>',
+							esc_url( $home_url ),
+							esc_html__( 'Open homepage', 'fp-seo-performance' )
+						),
+					),
+				);
+		}
 
-                $body = (string) wp_remote_retrieve_body( $response );
+				$body = (string) wp_remote_retrieve_body( $response );
 
 		if ( '' === trim( $body ) ) {
 			return array(
@@ -239,84 +241,84 @@ class SeoHealth {
 			);
 		}
 
-                $request_url = UrlNormalizer::normalize( $home_url );
-                $report      = $this->signals->collect( $request_url );
+				$request_url = UrlNormalizer::normalize( $home_url );
+				$report      = $this->signals->collect( $request_url );
 
-                if ( 'psi' !== (string) ( $report['source'] ?? '' ) ) {
-                        return array(
-                                'label'       => __( 'PageSpeed Insights data unavailable', 'fp-seo-performance' ),
-                                'status'      => 'recommended',
-                                'badge'       => $badge,
-                                'description' => __( 'The performance signals service did not return PageSpeed Insights metrics. Try refreshing the cache or verify PSI configuration.', 'fp-seo-performance' ),
-                                'actions'     => array(
-                                        sprintf(
-                                                '<a href="%s">%s</a>',
-                                                esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
-                                                esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
-                                        ),
-                                ),
-                        );
-                }
+		if ( 'psi' !== (string) ( $report['source'] ?? '' ) ) {
+				return array(
+					'label'       => __( 'PageSpeed Insights data unavailable', 'fp-seo-performance' ),
+					'status'      => 'recommended',
+					'badge'       => $badge,
+					'description' => __( 'The performance signals service did not return PageSpeed Insights metrics. Try refreshing the cache or verify PSI configuration.', 'fp-seo-performance' ),
+					'actions'     => array(
+						sprintf(
+							'<a href="%s">%s</a>',
+							esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
+							esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
+						),
+					),
+				);
+		}
 
-                $error = isset( $report['error'] ) ? trim( (string) $report['error'] ) : '';
+				$error = isset( $report['error'] ) ? trim( (string) $report['error'] ) : '';
 
-                if ( '' !== $error ) {
-                        return array(
-                                'label'       => __( 'PageSpeed Insights API returned an error', 'fp-seo-performance' ),
-                                'status'      => 'recommended',
-                                'badge'       => $badge,
-                                'description' => sprintf(
-                                        '%s %s',
-                                        esc_html__( 'The PageSpeed Insights API responded with an error:', 'fp-seo-performance' ),
-                                        esc_html( $error )
-                                ),
-                                'actions'     => array(
-                                        sprintf(
-                                                '<a href="%s">%s</a>',
-                                                esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
-                                                esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
-                                        ),
-                                ),
-                        );
-                }
+		if ( '' !== $error ) {
+				return array(
+					'label'       => __( 'PageSpeed Insights API returned an error', 'fp-seo-performance' ),
+					'status'      => 'recommended',
+					'badge'       => $badge,
+					'description' => sprintf(
+						'%s %s',
+						esc_html__( 'The PageSpeed Insights API responded with an error:', 'fp-seo-performance' ),
+						esc_html( $error )
+					),
+					'actions'     => array(
+						sprintf(
+							'<a href="%s">%s</a>',
+							esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings&tab=performance' ) ),
+							esc_html__( 'Review PSI configuration', 'fp-seo-performance' )
+						),
+					),
+				);
+		}
 
-                $score    = $report['performance_score'] ?? null;
-                $endpoint = (string) ( $report['endpoint'] ?? '' );
+				$score    = $report['performance_score'] ?? null;
+				$endpoint = (string) ( $report['endpoint'] ?? '' );
 
-                if ( null === $score ) {
-                        return array(
-                                'label'       => __( 'Unexpected PageSpeed Insights response', 'fp-seo-performance' ),
-                                'status'      => 'recommended',
-                                'badge'       => $badge,
-                                'description' => __( 'The PageSpeed Insights response did not include a performance score. Double-check the queried URL and API quota.', 'fp-seo-performance' ),
-                                'actions'     => array(
-                                        sprintf(
-                                                '<a href="%s" target="_blank" rel="noopener">%s</a>',
-                                                esc_url( $endpoint ?: 'https://pagespeed.web.dev/' ),
-                                                esc_html__( 'Open PSI report', 'fp-seo-performance' )
-                                        ),
-                                ),
-                        );
-                }
+		if ( null === $score ) {
+				return array(
+					'label'       => __( 'Unexpected PageSpeed Insights response', 'fp-seo-performance' ),
+					'status'      => 'recommended',
+					'badge'       => $badge,
+					'description' => __( 'The PageSpeed Insights response did not include a performance score. Double-check the queried URL and API quota.', 'fp-seo-performance' ),
+					'actions'     => array(
+						sprintf(
+							'<a href="%s" target="_blank" rel="noopener">%s</a>',
+							esc_url( '' !== $endpoint ? $endpoint : 'https://pagespeed.web.dev/' ),
+							esc_html__( 'Open PSI report', 'fp-seo-performance' )
+						),
+					),
+				);
+		}
 
-                return array(
-                        'label'       => __( 'PageSpeed Insights score available', 'fp-seo-performance' ),
-                        'status'      => 'good',
-                        'badge'       => $badge,
-                        'description' => sprintf(
-                                /* translators: %d: PSI performance score. */
-                                esc_html__( 'Google PageSpeed Insights reports a performance score of %d for the homepage.', 'fp-seo-performance' ),
-                                (int) $score
-                        ),
-                        'actions'     => array(
-                                sprintf(
-                                        '<a href="%s" target="_blank" rel="noopener">%s</a>',
-                                        esc_url( $endpoint ?: 'https://pagespeed.web.dev/' ),
-                                        esc_html__( 'View detailed PSI report', 'fp-seo-performance' )
-                                ),
-                        ),
-                );
-        }
+				return array(
+					'label'       => __( 'PageSpeed Insights score available', 'fp-seo-performance' ),
+					'status'      => 'good',
+					'badge'       => $badge,
+					'description' => sprintf(
+							/* translators: %d: PSI performance score. */
+						esc_html__( 'Google PageSpeed Insights reports a performance score of %d for the homepage.', 'fp-seo-performance' ),
+						(int) $score
+					),
+					'actions'     => array(
+						sprintf(
+							'<a href="%s" target="_blank" rel="noopener">%s</a>',
+							esc_url( '' !== $endpoint ? $endpoint : 'https://pagespeed.web.dev/' ),
+							esc_html__( 'View detailed PSI report', 'fp-seo-performance' )
+						),
+					),
+				);
+	}
 
 	/**
 	 * Provides the badge used for SEO checks.
@@ -335,49 +337,10 @@ class SeoHealth {
 	 *
 	 * @return array<string, string> Badge metadata.
 	 */
-        private function performance_badge(): array {
-                return array(
-                        'label' => __( 'Performance', 'fp-seo-performance' ),
-                        'color' => 'orange',
-                );
-        }
-
-        /**
-         * Extracts a human readable error message from a PSI response payload.
-         *
-         * @param array<string, mixed> $payload PSI response payload.
-         */
-        private function extract_psi_error_message( array $payload ): ?string {
-                $error = $payload['error'] ?? null;
-
-                if ( ! is_array( $error ) ) {
-                        return null;
-                }
-
-                $message = $error['message'] ?? null;
-
-                if ( is_string( $message ) && '' !== trim( $message ) ) {
-                        return trim( $message );
-                }
-
-                $details = $error['errors'] ?? null;
-
-                if ( ! is_array( $details ) ) {
-                        return null;
-                }
-
-                foreach ( $details as $detail ) {
-                        if ( ! is_array( $detail ) ) {
-                                continue;
-                        }
-
-                        $detail_message = $detail['message'] ?? null;
-
-                        if ( is_string( $detail_message ) && '' !== trim( $detail_message ) ) {
-                                return trim( $detail_message );
-                        }
-                }
-
-                return null;
-        }
+	private function performance_badge(): array {
+			return array(
+				'label' => __( 'Performance', 'fp-seo-performance' ),
+				'color' => 'orange',
+			);
+	}
 }
