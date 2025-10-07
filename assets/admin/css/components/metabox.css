@@ -1,0 +1,137 @@
+/**
+ * Metabox Component Styles
+ * Stili per la metabox SEO nell'editor dei post
+ */
+
+/* Metabox Container */
+.fp-seo-performance-metabox {
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	padding: 16px;
+	display: grid;
+	gap: 16px;
+	background: #fff;
+}
+
+/* Metabox Controls */
+.fp-seo-performance-metabox__controls {
+	display: flex;
+	justify-content: flex-end;
+	font-size: 13px;
+}
+
+.fp-seo-performance-metabox__controls label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* Metabox Message */
+.fp-seo-performance-metabox__message {
+	display: none;
+	font-size: 13px;
+	color: #3c434a;
+}
+
+/* Score Display */
+.fp-seo-performance-metabox__score {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	border-radius: 6px;
+	padding: 12px;
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+}
+
+.fp-seo-performance-metabox__score[data-status="green"] {
+	border-left-color: #0f5132;
+}
+
+.fp-seo-performance-metabox__score[data-status="yellow"] {
+	background: #fff8e5;
+	border-left-color: #d97706;
+}
+
+.fp-seo-performance-metabox__score[data-status="red"] {
+	background: #fbeaea;
+	border-left-color: #9f1239;
+}
+
+.fp-seo-performance-metabox__score-label {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.fp-seo-performance-metabox__score-value {
+	font-size: 28px;
+	font-weight: 700;
+}
+
+/* Section Headings */
+.fp-seo-performance-metabox__section-heading {
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+/* Lists */
+.fp-seo-performance-metabox__indicator-list,
+.fp-seo-performance-metabox__recommendation-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 8px;
+}
+
+.fp-seo-performance-metabox__indicator-list li,
+.fp-seo-performance-metabox__recommendation-list li {
+	margin: 0;
+}
+
+.fp-seo-performance-metabox__recommendation-list li {
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+/* Indicators */
+.fp-seo-performance-indicator {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: #f6f7f7;
+}
+
+.fp-seo-performance-indicator:focus {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+.fp-seo-performance-indicator__status {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 48px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.fp-seo-performance-indicator--pass .fp-seo-performance-indicator__status {
+	background: #0f5132;
+	color: #ffffff;
+}
+
+.fp-seo-performance-indicator--warn .fp-seo-performance-indicator__status {
+	background: #d97706;
+	color: #1d2327;
+}
+
+.fp-seo-performance-indicator--fail .fp-seo-performance-indicator__status {
+	background: #9f1239;
+	color: #ffffff;
+}
