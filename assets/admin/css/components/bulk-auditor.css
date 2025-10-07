@@ -1,0 +1,53 @@
+/**
+ * Bulk Auditor Component Styles
+ * Stili per la pagina di analisi bulk dei post
+ */
+
+/* Filters Section */
+.fp-seo-performance-bulk__filters {
+	display: flex;
+	gap: 12px;
+	align-items: flex-end;
+	margin: 16px 0;
+	flex-wrap: wrap;
+}
+
+.fp-seo-performance-bulk__filters select {
+	min-width: 160px;
+}
+
+/* Toolbar */
+.fp-seo-performance-bulk__toolbar {
+	display: flex;
+	gap: 8px;
+	margin: 16px 0 12px;
+}
+
+/* Messages */
+.fp-seo-performance-bulk__messages {
+	margin-bottom: 12px;
+	font-size: 13px;
+	color: #3c434a;
+}
+
+/* Table Rows */
+.fp-seo-performance-bulk [data-fp-seo-bulk-row] {
+	outline: none;
+	cursor: pointer;
+}
+
+.fp-seo-performance-bulk [data-fp-seo-bulk-row]:focus,
+.fp-seo-performance-bulk [data-fp-seo-bulk-row]:focus-within {
+	outline: 2px solid #2271b1;
+	outline-offset: -2px;
+}
+
+.fp-seo-performance-bulk [data-fp-seo-bulk-row][aria-selected="true"] {
+	background-color: #f0f6fc;
+}
+
+/* Empty State */
+.fp-seo-performance-bulk__empty {
+	text-align: center;
+	color: #6c7781;
+}

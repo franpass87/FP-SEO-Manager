@@ -1,0 +1,11 @@
+/**
+ * FP SEO Performance - Admin Styles
+ * File principale che importa tutti i componenti CSS modulari
+ *
+ * @package FP\SEO
+ */
+
+/* Import componenti modulari */
+@import url('components/badge.css');
+@import url('components/metabox.css');
+@import url('components/bulk-auditor.css');

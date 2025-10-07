@@ -55,36 +55,39 @@ class Assets {
 	private function register_handles(): void {
 		$version = $this->asset_version();
 
-		wp_register_style(
-			'fp-seo-performance-admin',
-			plugins_url( 'assets/admin/admin.css', FP_SEO_PERFORMANCE_FILE ),
-			array(),
-			$version
-		);
+	wp_register_style(
+		'fp-seo-performance-admin',
+		plugins_url( 'assets/admin/css/admin.css', FP_SEO_PERFORMANCE_FILE ),
+		array(),
+		$version
+	);
 
-		wp_register_script(
-			'fp-seo-performance-admin',
-			plugins_url( 'assets/admin/admin.js', FP_SEO_PERFORMANCE_FILE ),
-			array( 'jquery' ),
-			$version,
-			true
-		);
+	wp_register_script(
+		'fp-seo-performance-admin',
+		plugins_url( 'assets/admin/js/admin.js', FP_SEO_PERFORMANCE_FILE ),
+		array(),
+		$version,
+		true
+	);
 
-		wp_register_script(
-			'fp-seo-performance-editor',
-			plugins_url( 'assets/admin/editor-metabox.js', FP_SEO_PERFORMANCE_FILE ),
-			array( 'jquery' ),
-			$version,
-			true
-		);
+	wp_register_script(
+		'fp-seo-performance-editor',
+		plugins_url( 'assets/admin/js/editor-metabox.js', FP_SEO_PERFORMANCE_FILE ),
+		array(),
+		$version,
+		true
+	);
 
-		wp_register_script(
-			'fp-seo-performance-bulk',
-			plugins_url( 'assets/admin/bulk-auditor.js', FP_SEO_PERFORMANCE_FILE ),
-			array( 'jquery' ),
-			$version,
-			true
-		);
+	wp_register_script(
+		'fp-seo-performance-bulk',
+		plugins_url( 'assets/admin/js/bulk-auditor.js', FP_SEO_PERFORMANCE_FILE ),
+		array(),
+		$version,
+		true
+	);
+	
+	// Aggiungi attributi type="module" per supportare ES6 modules
+	add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
 	}
 
 	/**
@@ -95,6 +98,27 @@ class Assets {
 			&& wp_script_is( 'fp-seo-performance-admin', 'registered' )
 			&& wp_script_is( 'fp-seo-performance-editor', 'registered' )
 			&& wp_script_is( 'fp-seo-performance-bulk', 'registered' );
+	}
+
+	/**
+	 * Adds type="module" attribute to ES6 module scripts.
+	 *
+	 * @param string $tag    The script tag.
+	 * @param string $handle The script handle.
+	 * @param string $src    The script source URL.
+	 * @return string Modified script tag.
+	 */
+	public function add_type_module( string $tag, string $handle, string $src ): string {
+		$module_handles = array(
+			'fp-seo-performance-editor',
+			'fp-seo-performance-bulk',
+		);
+
+		if ( in_array( $handle, $module_handles, true ) ) {
+			$tag = str_replace( '<script ', '<script type="module" ', $tag );
+		}
+
+		return $tag;
 	}
 
 	/**
