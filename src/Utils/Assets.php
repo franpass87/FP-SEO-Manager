@@ -55,39 +55,39 @@ class Assets {
 	private function register_handles(): void {
 		$version = $this->asset_version();
 
-	wp_register_style(
-		'fp-seo-performance-admin',
-		plugins_url( 'assets/admin/css/admin.css', FP_SEO_PERFORMANCE_FILE ),
-		array(),
-		$version
-	);
+		wp_register_style(
+			'fp-seo-performance-admin',
+			plugins_url( 'assets/admin/css/admin.css', FP_SEO_PERFORMANCE_FILE ),
+			array(),
+			$version
+		);
 
-	wp_register_script(
-		'fp-seo-performance-admin',
-		plugins_url( 'assets/admin/js/admin.js', FP_SEO_PERFORMANCE_FILE ),
-		array(),
-		$version,
-		true
-	);
+		wp_register_script(
+			'fp-seo-performance-admin',
+			plugins_url( 'assets/admin/js/admin.js', FP_SEO_PERFORMANCE_FILE ),
+			array(),
+			$version,
+			true
+		);
 
-	wp_register_script(
-		'fp-seo-performance-editor',
-		plugins_url( 'assets/admin/js/editor-metabox.js', FP_SEO_PERFORMANCE_FILE ),
-		array(),
-		$version,
-		true
-	);
+		wp_register_script(
+			'fp-seo-performance-editor',
+			plugins_url( 'assets/admin/js/editor-metabox.js', FP_SEO_PERFORMANCE_FILE ),
+			array(),
+			$version,
+			true
+		);
 
-	wp_register_script(
-		'fp-seo-performance-bulk',
-		plugins_url( 'assets/admin/js/bulk-auditor.js', FP_SEO_PERFORMANCE_FILE ),
-		array(),
-		$version,
-		true
-	);
-	
-	// Aggiungi attributi type="module" per supportare ES6 modules
-	add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
+		wp_register_script(
+			'fp-seo-performance-bulk',
+			plugins_url( 'assets/admin/js/bulk-auditor.js', FP_SEO_PERFORMANCE_FILE ),
+			array(),
+			$version,
+			true
+		);
+
+		// Aggiungi attributi type="module" per supportare ES6 modules
+		add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
 	}
 
 	/**
