@@ -9,5 +9,6 @@
 	'use strict';
 
 	// Script principale admin - placeholder per funzionalità comuni
-	console.log('FP SEO Performance Admin loaded');
+	// Debug logging disabled in production
+	// console.log('FP SEO Performance Admin loaded');
 })();
