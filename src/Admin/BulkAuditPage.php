@@ -326,11 +326,14 @@ class BulkAuditPage {
 				wp_die( esc_html__( 'Sorry, you are not allowed to export these results.', 'fp-seo-performance' ) );
 		}
 
-			$filters = $this->get_filters_from_request();
-			$results = $this->get_cached_results();
+		$filters = $this->get_filters_from_request();
+		$results = $this->get_cached_results();
 
-				$selected = isset( $_POST['post_ids'] ) ? (array) wp_unslash( $_POST['post_ids'] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified above.
-			$selected     = array_values( array_filter( array_map( 'absint', $selected ) ) );
+		// Nonce already verified at line 323 via check_admin_referer().
+		// Safe to access $_POST['post_ids'] without additional nonce check.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$selected = isset( $_POST['post_ids'] ) ? (array) wp_unslash( $_POST['post_ids'] ) : array();
+		$selected = array_values( array_filter( array_map( 'absint', $selected ) ) );
 
 		if ( empty( $selected ) ) {
 				$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );

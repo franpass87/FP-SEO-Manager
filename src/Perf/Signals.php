@@ -178,20 +178,20 @@ class Signals {
 
 			$performance_score = $this->extract_performance_score( $payload );
 
-			$result = array(
-				'source'            => 'psi',
-				'url'               => $normalized_url,
-				'endpoint'          => $endpoint,
-				'metrics'           => $metrics,
-				'opportunities'     => $ops,
-				'performance_score' => $performance_score,
-				'cached'            => false,
-			);
+		$result = array(
+			'source'            => 'psi',
+			'url'               => $normalized_url,
+			'endpoint'          => $endpoint,
+			'metrics'           => $metrics,
+			'opportunities'     => $ops,
+			'performance_score' => $performance_score,
+			'cached'            => false,
+		);
 
-			$ttl = defined( 'DAY_IN_SECONDS' ) ? (int) DAY_IN_SECONDS : 86400;
-			set_transient( $cache_key, $result, $ttl );
+		$ttl = $this->get_cache_duration();
+		set_transient( $cache_key, $result, $ttl );
 
-			return $result;
+		return $result;
 	}
 
 		/**
@@ -457,5 +457,22 @@ class Signals {
 		}
 
 			return null;
+	}
+
+	/**
+	 * Retrieves the configured cache duration for PSI results.
+	 *
+	 * @return int Cache TTL in seconds.
+	 */
+	private function get_cache_duration(): int {
+		$options = Options::get();
+		$ttl     = $options['performance']['psi_cache_ttl'] ?? 86400;
+
+		// Ensure TTL is within reasonable bounds (1 hour to 30 days).
+		if ( ! is_numeric( $ttl ) || $ttl < 3600 || $ttl > 2592000 ) {
+			return 86400; // Default to 1 day.
+		}
+
+		return (int) $ttl;
 	}
 }
