@@ -383,6 +383,552 @@ add_action( 'fp_seo_performance_settings_general_after', function( $options ) {
 });
 ```
 
+### Esempio 3: Check Avanzato per Video Embedding
+
+```php
+<?php
+namespace MyPlugin\SEO\Checks;
+
+use FP\SEO\Analysis\CheckInterface;
+use FP\SEO\Analysis\Context;
+use FP\SEO\Analysis\Result;
+
+/**
+ * Verifica ottimizzazione video embedded.
+ */
+class VideoEmbedCheck implements CheckInterface {
+    
+    public function id(): string {
+        return 'video_embed';
+    }
+    
+    public function label(): string {
+        return __( 'Video Embedding', 'my-plugin' );
+    }
+    
+    public function description(): string {
+        return __( 'Verifica presenza e ottimizzazione video embedded per performance.', 'my-plugin' );
+    }
+    
+    public function run( Context $context ): Result {
+        $content = $context->content();
+        
+        // Cerca iframe video (YouTube, Vimeo, etc.)
+        preg_match_all( '/<iframe[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $content, $matches );
+        
+        $video_count = 0;
+        $optimized_count = 0;
+        $issues = array();
+        
+        foreach ( $matches[0] as $index => $iframe ) {
+            $src = $matches[1][$index];
+            
+            if ( $this->is_video_embed( $src ) ) {
+                $video_count++;
+                
+                // Verifica lazy loading
+                if ( strpos( $iframe, 'loading="lazy"' ) !== false ) {
+                    $optimized_count++;
+                } else {
+                    $issues[] = sprintf(
+                        __( 'Video #%d manca dell\'attributo loading="lazy"', 'my-plugin' ),
+                        $video_count
+                    );
+                }
+                
+                // Verifica title per accessibilità
+                if ( strpos( $iframe, 'title=' ) === false ) {
+                    $issues[] = sprintf(
+                        __( 'Video #%d manca dell\'attributo title per accessibilità', 'my-plugin' ),
+                        $video_count
+                    );
+                }
+            }
+        }
+        
+        if ( $video_count === 0 ) {
+            return new Result(
+                Result::STATUS_PASS,
+                array( 
+                    'video_count' => 0,
+                    'issues' => array(),
+                ),
+                __( 'Nessun video rilevato.', 'my-plugin' ),
+                0.05
+            );
+        }
+        
+        $optimization_rate = ( $optimized_count / $video_count ) * 100;
+        
+        if ( $optimization_rate >= 80 && empty( $issues ) ) {
+            $status = Result::STATUS_PASS;
+            $hint = sprintf(
+                __( 'Video correttamente ottimizzati (%d/%d).', 'my-plugin' ),
+                $optimized_count,
+                $video_count
+            );
+        } elseif ( $optimization_rate >= 50 ) {
+            $status = Result::STATUS_WARN;
+            $hint = sprintf(
+                __( 'Alcuni video potrebbero essere ottimizzati meglio (%d/%d). Problemi: %s', 'my-plugin' ),
+                $optimized_count,
+                $video_count,
+                implode( ', ', $issues )
+            );
+        } else {
+            $status = Result::STATUS_FAIL;
+            $hint = sprintf(
+                __( 'Molti video non sono ottimizzati (%d/%d). Aggiungi loading="lazy" e title. Problemi: %s', 'my-plugin' ),
+                $optimized_count,
+                $video_count,
+                implode( ', ', $issues )
+            );
+        }
+        
+        return new Result(
+            $status,
+            array(
+                'video_count' => $video_count,
+                'optimized_count' => $optimized_count,
+                'optimization_rate' => round( $optimization_rate, 1 ),
+                'issues' => $issues,
+            ),
+            $hint,
+            0.05
+        );
+    }
+    
+    /**
+     * Verifica se un URL è di un servizio video.
+     */
+    private function is_video_embed( string $src ): bool {
+        $video_platforms = array(
+            'youtube.com',
+            'youtu.be',
+            'vimeo.com',
+            'dailymotion.com',
+            'wistia.com',
+        );
+        
+        foreach ( $video_platforms as $platform ) {
+            if ( strpos( $src, $platform ) !== false ) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+}
+
+// Registrazione del check
+add_filter( 'fp_seo_perf_checks_enabled', function( $checks, $context ) {
+    $checks[] = new VideoEmbedCheck();
+    return $checks;
+}, 10, 2 );
+```
+
+### Esempio 4: Tab Renderer Custom per Impostazioni AI
+
+```php
+<?php
+namespace MyPlugin\SEO\Settings;
+
+use FP\SEO\Admin\Settings\SettingsTabRenderer;
+use FP\SEO\Utils\Options;
+use function checked;
+use function esc_attr;
+use function esc_html_e;
+use function selected;
+
+/**
+ * Renderer per tab impostazioni AI.
+ */
+class AITabRenderer extends SettingsTabRenderer {
+    
+    /**
+     * Renderizza la tab AI settings.
+     *
+     * @param array<string, mixed> $options Opzioni correnti.
+     */
+    public function render( array $options ): void {
+        $ai_settings = $options['ai'] ?? array();
+        $openai_key = $ai_settings['openai_api_key'] ?? '';
+        $auto_optimize = (bool) ( $ai_settings['auto_optimize'] ?? false );
+        $model = $ai_settings['model'] ?? 'gpt-3.5-turbo';
+        ?>
+        <h2><?php esc_html_e( 'AI-Powered Features', 'my-plugin' ); ?></h2>
+        <p class="description">
+            <?php esc_html_e( 'Configure AI features for automatic content optimization.', 'my-plugin' ); ?>
+        </p>
+        
+        <table class="form-table" role="presentation">
+            <tbody>
+            <tr>
+                <th scope="row">
+                    <label for="openai_api_key">
+                        <?php esc_html_e( 'OpenAI API Key', 'my-plugin' ); ?>
+                    </label>
+                </th>
+                <td>
+                    <input 
+                        type="password" 
+                        name="<?php echo esc_attr( $this->get_option_key() ); ?>[ai][openai_api_key]" 
+                        id="openai_api_key" 
+                        value="<?php echo esc_attr( $openai_key ); ?>"
+                        class="regular-text"
+                    />
+                    <p class="description">
+                        <?php esc_html_e( 'Inserisci la tua API key OpenAI. Ottienila da https://platform.openai.com/api-keys', 'my-plugin' ); ?>
+                    </p>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row">
+                    <label for="ai_model">
+                        <?php esc_html_e( 'AI Model', 'my-plugin' ); ?>
+                    </label>
+                </th>
+                <td>
+                    <select name="<?php echo esc_attr( $this->get_option_key() ); ?>[ai][model]" id="ai_model">
+                        <option value="gpt-3.5-turbo" <?php selected( $model, 'gpt-3.5-turbo' ); ?>>
+                            GPT-3.5 Turbo (più economico)
+                        </option>
+                        <option value="gpt-4" <?php selected( $model, 'gpt-4' ); ?>>
+                            GPT-4 (più accurato)
+                        </option>
+                        <option value="gpt-4-turbo" <?php selected( $model, 'gpt-4-turbo' ); ?>>
+                            GPT-4 Turbo (bilanciato)
+                        </option>
+                    </select>
+                    <p class="description">
+                        <?php esc_html_e( 'Scegli il modello AI da utilizzare. Modelli più avanzati danno risultati migliori ma costano di più.', 'my-plugin' ); ?>
+                    </p>
+                </td>
+            </tr>
+            
+            <tr>
+                <th scope="row">
+                    <?php esc_html_e( 'Auto-ottimizzazione', 'my-plugin' ); ?>
+                </th>
+                <td>
+                    <label>
+                        <input 
+                            type="checkbox" 
+                            name="<?php echo esc_attr( $this->get_option_key() ); ?>[ai][auto_optimize]" 
+                            value="1"
+                            <?php checked( $auto_optimize ); ?>
+                        />
+                        <?php esc_html_e( 'Ottimizza automaticamente titoli e meta description con AI', 'my-plugin' ); ?>
+                    </label>
+                    <p class="description">
+                        <?php esc_html_e( 'Quando abilitato, l\'AI suggerirà automaticamente miglioramenti per SEO.', 'my-plugin' ); ?>
+                    </p>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        
+        <h3><?php esc_html_e( 'AI Features Disponibili', 'my-plugin' ); ?></h3>
+        <table class="form-table" role="presentation">
+            <tbody>
+            <tr>
+                <th scope="row"><?php esc_html_e( 'Features', 'my-plugin' ); ?></th>
+                <td>
+                    <ul>
+                        <li>✅ <?php esc_html_e( 'Generazione automatica meta description', 'my-plugin' ); ?></li>
+                        <li>✅ <?php esc_html_e( 'Ottimizzazione titoli SEO', 'my-plugin' ); ?></li>
+                        <li>✅ <?php esc_html_e( 'Generazione alt text per immagini', 'my-plugin' ); ?></li>
+                        <li>✅ <?php esc_html_e( 'Suggerimenti keywords', 'my-plugin' ); ?></li>
+                    </ul>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <?php
+    }
+}
+
+// Registrazione della tab
+add_filter( 'fp_seo_performance_settings_tabs', function( $tabs ) {
+    $tabs['ai'] = array(
+        'label' => __( 'AI Settings', 'my-plugin' ),
+        'renderer' => new \MyPlugin\SEO\Settings\AITabRenderer(),
+    );
+    return $tabs;
+} );
+
+// Sanitizzazione delle opzioni AI
+add_filter( 'fp_seo_perf_sanitize_options', function( $sanitized, $input ) {
+    if ( isset( $input['ai'] ) && is_array( $input['ai'] ) ) {
+        $sanitized['ai'] = array(
+            'openai_api_key' => sanitize_text_field( $input['ai']['openai_api_key'] ?? '' ),
+            'auto_optimize' => ! empty( $input['ai']['auto_optimize'] ),
+            'model' => in_array( $input['ai']['model'] ?? '', array( 'gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo' ), true )
+                ? $input['ai']['model']
+                : 'gpt-3.5-turbo',
+        );
+    }
+    return $sanitized;
+}, 10, 2 );
+```
+
+### Esempio 5: Integrazione con API Esterne (Keywords Research)
+
+```php
+<?php
+namespace MyPlugin\SEO\Keywords;
+
+use WP_Error;
+
+/**
+ * Servizio per ricerca keywords tramite API esterne.
+ */
+class KeywordResearcher {
+    
+    /**
+     * API key per servizio keywords.
+     */
+    private string $api_key;
+    
+    /**
+     * Cache TTL per risultati keywords (1 settimana).
+     */
+    private const CACHE_TTL = 604800;
+    
+    public function __construct( string $api_key ) {
+        $this->api_key = $api_key;
+    }
+    
+    /**
+     * Ricerca keywords correlate.
+     *
+     * @param string $seed_keyword Keyword iniziale.
+     * @param int $limit Numero massimo di risultati.
+     *
+     * @return array<int, array<string, mixed>>|WP_Error
+     */
+    public function find_related_keywords( string $seed_keyword, int $limit = 10 ): array|WP_Error {
+        // Controlla cache
+        $cache_key = 'my_plugin_keywords_' . md5( $seed_keyword );
+        $cached = get_transient( $cache_key );
+        
+        if ( false !== $cached && is_array( $cached ) ) {
+            return $cached;
+        }
+        
+        // Chiamata API (esempio con DataForSEO)
+        $endpoint = 'https://api.dataforseo.com/v3/keywords_data/google_ads/keywords_for_keywords/live';
+        
+        $response = wp_remote_post(
+            $endpoint,
+            array(
+                'timeout' => 30,
+                'headers' => array(
+                    'Authorization' => 'Basic ' . base64_encode( $this->api_key ),
+                    'Content-Type' => 'application/json',
+                ),
+                'body' => wp_json_encode( array(
+                    array(
+                        'keywords' => array( $seed_keyword ),
+                        'language_name' => 'Italian',
+                        'location_code' => 2380, // Italy
+                        'include_seed_keyword' => true,
+                        'limit' => $limit,
+                    ),
+                ) ),
+            )
+        );
+        
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+        
+        $body = wp_remote_retrieve_body( $response );
+        $data = json_decode( $body, true );
+        
+        if ( ! is_array( $data ) || empty( $data['tasks'][0]['result'] ) ) {
+            return new WP_Error(
+                'api_error',
+                __( 'Errore nella risposta API keywords.', 'my-plugin' )
+            );
+        }
+        
+        $keywords = $this->parse_keywords_response( $data['tasks'][0]['result'][0] );
+        
+        // Salva in cache
+        set_transient( $cache_key, $keywords, self::CACHE_TTL );
+        
+        return $keywords;
+    }
+    
+    /**
+     * Parse risposta API e normalizza dati.
+     *
+     * @param array<string, mixed> $result Risultato API.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function parse_keywords_response( array $result ): array {
+        $items = $result['items'] ?? array();
+        $keywords = array();
+        
+        foreach ( $items as $item ) {
+            $keywords[] = array(
+                'keyword' => $item['keyword'] ?? '',
+                'search_volume' => (int) ( $item['search_volume'] ?? 0 ),
+                'competition' => $this->normalize_competition( $item['competition'] ?? 0 ),
+                'cpc' => (float) ( $item['cpc'] ?? 0 ),
+                'difficulty' => $this->calculate_difficulty( $item ),
+            );
+        }
+        
+        // Ordina per search volume
+        usort( $keywords, function( $a, $b ) {
+            return $b['search_volume'] <=> $a['search_volume'];
+        } );
+        
+        return $keywords;
+    }
+    
+    /**
+     * Normalizza livello competizione (0-1 a low/medium/high).
+     */
+    private function normalize_competition( float $value ): string {
+        if ( $value < 0.33 ) {
+            return 'low';
+        }
+        if ( $value < 0.66 ) {
+            return 'medium';
+        }
+        return 'high';
+    }
+    
+    /**
+     * Calcola difficulty score basato su metriche.
+     *
+     * @param array<string, mixed> $item Item keywords.
+     */
+    private function calculate_difficulty( array $item ): int {
+        $search_volume = (int) ( $item['search_volume'] ?? 0 );
+        $competition = (float) ( $item['competition'] ?? 0 );
+        
+        // Formula semplificata: alta volume + alta competition = alta difficulty
+        $difficulty = ( $competition * 50 ) + ( min( $search_volume / 1000, 50 ) );
+        
+        return (int) min( 100, max( 0, $difficulty ) );
+    }
+}
+
+// Utilizzo
+add_action( 'admin_init', function() {
+    // Esempio: ricerca keywords quando richiesto
+    if ( isset( $_GET['my_plugin_keyword_research'] ) ) {
+        $api_key = get_option( 'my_plugin_keywords_api_key' );
+        if ( empty( $api_key ) ) {
+            return;
+        }
+        
+        $researcher = new \MyPlugin\SEO\Keywords\KeywordResearcher( $api_key );
+        $keywords = $researcher->find_related_keywords( 'seo wordpress', 20 );
+        
+        if ( ! is_wp_error( $keywords ) ) {
+            // Mostra risultati o salva per utilizzo futuro
+            update_option( 'my_plugin_suggested_keywords', $keywords );
+        }
+    }
+} );
+```
+
+### Esempio 6: Widget Dashboard Custom
+
+```php
+<?php
+// Aggiunge widget SEO alla dashboard WordPress
+
+add_action( 'wp_dashboard_setup', function() {
+    wp_add_dashboard_widget(
+        'my_plugin_seo_overview',
+        __( 'SEO Overview', 'my-plugin' ),
+        'my_plugin_render_seo_dashboard_widget'
+    );
+} );
+
+function my_plugin_render_seo_dashboard_widget() {
+    global $wpdb;
+    
+    // Query per statistiche SEO
+    $total_posts = wp_count_posts( 'post' )->publish;
+    
+    // Post con score basso (esempio usando post meta)
+    $low_score_posts = $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$wpdb->postmeta} pm
+        INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+        WHERE pm.meta_key = '_fp_seo_score'
+        AND CAST(pm.meta_value AS UNSIGNED) < 60
+        AND p.post_status = 'publish'
+        AND p.post_type = 'post'"
+    );
+    
+    $percentage_low = $total_posts > 0 
+        ? round( ( $low_score_posts / $total_posts ) * 100, 1 )
+        : 0;
+    
+    ?>
+    <div class="my-plugin-dashboard-widget">
+        <style>
+            .my-plugin-dashboard-widget .stat-box {
+                display: inline-block;
+                width: 30%;
+                text-align: center;
+                padding: 15px;
+                margin: 5px;
+                background: #f0f0f1;
+                border-radius: 4px;
+            }
+            .stat-box .number {
+                font-size: 32px;
+                font-weight: bold;
+                color: #2271b1;
+            }
+            .stat-box .label {
+                font-size: 12px;
+                color: #646970;
+                text-transform: uppercase;
+            }
+            .stat-box.warning .number {
+                color: #d63638;
+            }
+        </style>
+        
+        <div class="stat-box">
+            <div class="number"><?php echo esc_html( $total_posts ); ?></div>
+            <div class="label"><?php esc_html_e( 'Total Posts', 'my-plugin' ); ?></div>
+        </div>
+        
+        <div class="stat-box warning">
+            <div class="number"><?php echo esc_html( $low_score_posts ); ?></div>
+            <div class="label"><?php esc_html_e( 'Low SEO Score', 'my-plugin' ); ?></div>
+        </div>
+        
+        <div class="stat-box">
+            <div class="number"><?php echo esc_html( $percentage_low ); ?>%</div>
+            <div class="label"><?php esc_html_e( 'Need Optimization', 'my-plugin' ); ?></div>
+        </div>
+        
+        <p style="margin-top: 20px;">
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=fp-seo-performance-bulk' ) ); ?>" class="button button-primary">
+                <?php esc_html_e( 'Run Bulk Audit', 'my-plugin' ); ?>
+            </a>
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=fp-seo-performance' ) ); ?>" class="button">
+                <?php esc_html_e( 'SEO Settings', 'my-plugin' ); ?>
+            </a>
+        </p>
+    </div>
+    <?php
+}
+```
+
 ## Risorse Aggiuntive
 
 - [WordPress Plugin Handbook](https://developer.wordpress.org/plugins/)

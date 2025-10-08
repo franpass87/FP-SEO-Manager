@@ -103,16 +103,17 @@ class Options {
 			'scoring'     => array(
 				'weights' => self::default_scoring_weights(),
 			),
-			'performance' => array(
-				'enable_psi'  => false,
-				'psi_api_key' => '',
-				'heuristics'  => array(
-					'image_alt_coverage' => true,
-					'inline_css'         => true,
-					'image_count'        => true,
-					'heading_depth'      => true,
-				),
+		'performance' => array(
+			'enable_psi'    => false,
+			'psi_api_key'   => '',
+			'psi_cache_ttl' => 86400, // 1 day in seconds.
+			'heuristics'    => array(
+				'image_alt_coverage' => true,
+				'inline_css'         => true,
+				'image_count'        => true,
+				'heading_depth'      => true,
 			),
+		),
 			'advanced'    => array(
 				'capability'        => 'manage_options',
 				'telemetry_enabled' => false,
@@ -261,11 +262,17 @@ class Options {
 				$sanitized['analysis']['enable_og']      = self::to_bool( $analysis['enable_og'] ?? $defaults['analysis']['enable_og'] );
 				$sanitized['analysis']['enable_twitter'] = self::to_bool( $analysis['enable_twitter'] ?? $defaults['analysis']['enable_twitter'] );
 
-		$performance                             = is_array( $input['performance'] ?? null ) ? $input['performance'] : array();
-		$sanitized['performance']['enable_psi']  = self::to_bool( $performance['enable_psi'] ?? $defaults['performance']['enable_psi'] );
-		$sanitized['performance']['psi_api_key'] = self::sanitize_text( $performance['psi_api_key'] ?? $defaults['performance']['psi_api_key'] );
+	$performance                             = is_array( $input['performance'] ?? null ) ? $input['performance'] : array();
+	$sanitized['performance']['enable_psi']  = self::to_bool( $performance['enable_psi'] ?? $defaults['performance']['enable_psi'] );
+	$sanitized['performance']['psi_api_key'] = self::sanitize_text( $performance['psi_api_key'] ?? $defaults['performance']['psi_api_key'] );
+	$sanitized['performance']['psi_cache_ttl'] = self::bounded_int(
+		$performance['psi_cache_ttl'] ?? $defaults['performance']['psi_cache_ttl'],
+		3600,    // Minimum 1 hour.
+		2592000, // Maximum 30 days.
+		$defaults['performance']['psi_cache_ttl']
+	);
 
-		$heuristics = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
+	$heuristics = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
 		foreach ( $defaults['performance']['heuristics'] as $key => $default_value ) {
 			$sanitized['performance']['heuristics'][ $key ] = self::to_bool( $heuristics[ $key ] ?? $default_value );
 		}
