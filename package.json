@@ -15,9 +15,38 @@
   "scripts": {
     "sync:author": "node tools/sync-author-metadata.js --apply=${APPLY:-false}",
     "sync:docs": "node tools/sync-author-metadata.js --docs --apply=${APPLY:-false}",
-    "changelog:from-git": "conventional-changelog -p angular -i CHANGELOG.md -s || true"
+    "changelog:from-git": "conventional-changelog -p angular -i CHANGELOG.md -s || true",
+    "test:js": "jest",
+    "test:js:watch": "jest --watch",
+    "test:js:coverage": "jest --coverage"
   },
   "devDependencies": {
-    "conventional-changelog-cli": "^3.0.0"
+    "conventional-changelog-cli": "^3.0.0",
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": [
+      "**/assets/**/*.test.js",
+      "**/tests/js/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "assets/admin/js/**/*.js",
+      "!assets/admin/js/**/*.test.js",
+      "!assets/admin/js/**/index.js"
+    ],
+    "coverageDirectory": "coverage/js",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "transform": {
+      "^.+\\.js$": "babel-jest"
+    }
   }
 }
