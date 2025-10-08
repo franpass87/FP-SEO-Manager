@@ -15,6 +15,7 @@ use FP\SEO\Analysis\Analyzer;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\I18n;
+use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\Options;
 use WP_Admin_Bar;
 use function add_action;
@@ -78,14 +79,14 @@ class AdminBarBadge {
 				return;
 		}
 
-			$context = new Context(
-				(int) $post->ID,
-				(string) $post->post_content,
-				(string) $post->post_title,
-				$this->resolve_meta_description( $post->ID, (string) $post->post_excerpt ),
-				function_exists( 'get_permalink' ) ? get_permalink( $post ) : null,
-				$this->resolve_robots_directive( $post->ID )
-			);
+		$context = new Context(
+			(int) $post->ID,
+			(string) $post->post_content,
+			(string) $post->post_title,
+			MetadataResolver::resolve_meta_description( $post ),
+			function_exists( 'get_permalink' ) ? get_permalink( $post ) : null,
+			MetadataResolver::resolve_robots( $post )
+		);
 
 			$analyzer     = new Analyzer();
 			$analysis     = $analyzer->analyze( $context );
@@ -174,42 +175,6 @@ class AdminBarBadge {
 			return $post_id > 0 ? $post_id : null;
 	}
 
-		/**
-		 * Resolve a meta description string for scoring context.
-		 *
-		 * @param int    $post_id Post identifier.
-		 * @param string $excerpt Post excerpt fallback.
-		 */
-	private function resolve_meta_description( int $post_id, string $excerpt ): string {
-		$meta = '';
-
-		if ( function_exists( 'get_post_meta' ) ) {
-				$meta = (string) get_post_meta( $post_id, '_fp_seo_meta_description', true );
-		}
-
-		if ( '' === $meta && '' !== $excerpt ) {
-				$meta = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : $excerpt;
-		}
-
-		return $meta;
-	}
-
-		/**
-		 * Resolve robots directives if stored.
-		 *
-		 * @param int $post_id Post identifier.
-		 */
-	private function resolve_robots_directive( int $post_id ): ?string {
-		if ( function_exists( 'get_post_meta' ) ) {
-				$value = get_post_meta( $post_id, '_fp_seo_meta_robots', true );
-
-			if ( is_string( $value ) && '' !== trim( $value ) ) {
-				return $value;
-			}
-		}
-
-		return null;
-	}
 
 		/**
 		 * Provide a human readable status description.

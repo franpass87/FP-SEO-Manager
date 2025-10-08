@@ -15,6 +15,7 @@ use FP\SEO\Analysis\Analyzer;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Scoring\ScoreEngine;
+use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\Options;
 use FP\SEO\Utils\PostTypes;
 use WP_Post;
@@ -298,9 +299,9 @@ class Metabox {
 			(int) $post->ID,
 			(string) $post->post_content,
 			(string) $post->post_title,
-			$this->resolve_meta_description( $post ),
-			$this->resolve_canonical_url( $post ),
-			$this->resolve_robots( $post )
+			MetadataResolver::resolve_meta_description( $post ),
+			MetadataResolver::resolve_canonical_url( $post ),
+			MetadataResolver::resolve_robots( $post )
 		);
 
 		return $this->compile_analysis_payload( $context );
@@ -355,48 +356,4 @@ class Metabox {
 		);
 	}
 
-	/**
-	 * Resolve a meta description for the given post.
-	 *
-	 * @param WP_Post $post Post instance.
-	 */
-	private function resolve_meta_description( WP_Post $post ): string {
-		$meta = get_post_meta( (int) $post->ID, '_fp_seo_meta_description', true );
-
-		if ( is_string( $meta ) && '' !== $meta ) {
-			return $meta;
-		}
-
-		return wp_strip_all_tags( (string) $post->post_excerpt );
-	}
-
-	/**
-	 * Resolve a canonical URL for the post when stored.
-	 *
-	 * @param WP_Post $post Post instance.
-	 */
-	private function resolve_canonical_url( WP_Post $post ): ?string {
-		$canonical = get_post_meta( (int) $post->ID, '_fp_seo_meta_canonical', true );
-
-		if ( is_string( $canonical ) && '' !== $canonical ) {
-			return $canonical;
-		}
-
-		return null;
-	}
-
-	/**
-	 * Resolve robots directives if stored.
-	 *
-	 * @param WP_Post $post Post instance.
-	 */
-	private function resolve_robots( WP_Post $post ): ?string {
-		$robots = get_post_meta( (int) $post->ID, '_fp_seo_meta_robots', true );
-
-		if ( is_string( $robots ) && '' !== $robots ) {
-			return $robots;
-		}
-
-		return null;
-	}
 }
