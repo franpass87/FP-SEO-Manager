@@ -22,10 +22,6 @@ use FP\SEO\Analysis\Checks\RobotsIndexabilityCheck;
 use FP\SEO\Analysis\Checks\SchemaPresetsCheck;
 use FP\SEO\Analysis\Checks\TitleLengthCheck;
 use FP\SEO\Analysis\Checks\TwitterCardsCheck;
-use FP\SEO\Utils\Options;
-use function apply_filters;
-use function function_exists;
-use function is_array;
 
 /**
  * Coordinates execution of individual SEO checks.
@@ -58,88 +54,24 @@ class Analyzer {
 		$checks = $this->checks;
 
 		if ( empty( $checks ) ) {
-				$checks = $this->default_checks();
+			$checks = $this->default_checks();
 		}
 
-		$available_ids = array();
+		// Use CheckRegistry to filter enabled checks.
+		$enabled_checks = CheckRegistry::filter_enabled_checks( $checks, $context );
 
-		foreach ( $checks as $check ) {
-				$available_ids[ $check->id() ] = true;
-		}
-
-		$options    = Options::get();
-		$configured = array();
-
-		if ( isset( $options['analysis']['checks'] ) && is_array( $options['analysis']['checks'] ) ) {
-			foreach ( $options['analysis']['checks'] as $id => $enabled ) {
-					$id = (string) $id;
-
-				if ( isset( $available_ids[ $id ] ) ) {
-						$configured[ $id ] = (bool) $enabled;
-				}
-			}
-		}
-		$enabled_ids = array();
-
-		if ( ! empty( $configured ) ) {
-			foreach ( $configured as $id => $enabled ) {
-					$id = (string) $id;
-
-				if ( empty( $enabled ) || ! isset( $available_ids[ $id ] ) ) {
-						continue;
-				}
-
-					$enabled_ids[ $id ] = true;
-			}
-		}
-
-		if ( empty( $enabled_ids ) ) {
-				$enabled_ids = $available_ids;
-		}
-
-		$filtered = array_keys( $enabled_ids );
-
-		if ( function_exists( 'apply_filters' ) ) {
-				$maybe_filtered = apply_filters( 'fp_seo_perf_checks_enabled', $filtered, $context );
-
-			if ( is_array( $maybe_filtered ) ) {
-					$filtered = $maybe_filtered;
-			}
-		}
-
-		$enabled_ids = array();
-
-		foreach ( $filtered as $id ) {
-				$id = (string) $id;
-
-			if ( isset( $available_ids[ $id ] ) && isset( $configured[ $id ] ) ) {
-				if ( ! empty( $configured[ $id ] ) ) {
-						$enabled_ids[ $id ] = true;
-				}
-
-					continue;
-			}
-
-			if ( isset( $available_ids[ $id ] ) && empty( $configured ) ) {
-					$enabled_ids[ $id ] = true;
-			}
-		}
-
-		if ( empty( $enabled_ids ) && ! empty( $configured ) ) {
-				return array(
-					'status'  => Result::STATUS_PASS,
-					'summary' => array(
-						Result::STATUS_PASS => 0,
-						Result::STATUS_WARN => 0,
-						Result::STATUS_FAIL => 0,
-						'total'             => 0,
-					),
-					'checks'  => array(),
-				);
-		}
-
-		if ( empty( $enabled_ids ) ) {
-				$enabled_ids = $available_ids;
+		// Handle empty result case.
+		if ( empty( $enabled_checks ) ) {
+			return array(
+				'status'  => Result::STATUS_PASS,
+				'summary' => array(
+					Result::STATUS_PASS => 0,
+					Result::STATUS_WARN => 0,
+					Result::STATUS_FAIL => 0,
+					'total'             => 0,
+				),
+				'checks'  => array(),
+			);
 		}
 
 		$results = array();
@@ -149,11 +81,7 @@ class Analyzer {
 			Result::STATUS_FAIL => 0,
 		);
 
-		foreach ( $checks as $check ) {
-			if ( ! isset( $enabled_ids[ $check->id() ] ) ) {
-				continue;
-			}
-
+		foreach ( $enabled_checks as $check ) {
 			$result = $check->run( $context );
 
 			$results[ $check->id() ] = array_merge(

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- **[Refactoring]** Extracted metadata resolution logic into dedicated `MetadataResolver` utility class, eliminating ~112 lines of duplicated code across `BulkAuditPage`, `Metabox`, and `AdminBarBadge`.
+- **[Refactoring]** Simplified `Analyzer` by extracting check filtering logic into new `CheckRegistry` class, reducing complexity by ~70 lines.
+- **[Refactoring]** Modularized `SettingsPage` by creating dedicated renderer classes for each settings tab (`GeneralTabRenderer`, `AnalysisTabRenderer`, `PerformanceTabRenderer`, `AdvancedTabRenderer`), reducing main class from 465 to ~170 lines.
+
+### Added
+- New `src/Utils/MetadataResolver` utility class for centralized SEO metadata resolution.
+- New `src/Analysis/CheckRegistry` class for managing analyzer check filtering.
+- New settings tab renderer architecture under `src/Admin/Settings/` namespace.
 
 ## [0.1.2] - 2025-10-01
 ### Added
