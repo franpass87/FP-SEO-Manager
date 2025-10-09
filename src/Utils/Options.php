@@ -127,15 +127,21 @@ class Options {
 	 * @return array<string, mixed> Sanitized option data.
 	 */
 	public static function get(): array {
-		$stored = get_option( self::OPTION_KEY, array() );
+		return Cache::remember(
+			'options_data',
+			static function (): array {
+				$stored = get_option( self::OPTION_KEY, array() );
 
-		if ( ! is_array( $stored ) ) {
-			$stored = array();
-		}
+				if ( ! is_array( $stored ) ) {
+					$stored = array();
+				}
 
-		$sanitized = self::sanitize( $stored );
+				$sanitized = self::sanitize( $stored );
 
-		return self::merge_defaults( $sanitized );
+				return self::merge_defaults( $sanitized );
+			},
+			HOUR_IN_SECONDS
+		);
 	}
 
 	/**
@@ -312,6 +318,9 @@ class Options {
 	 */
 	public static function update( array $value ): void {
 		update_option( self::OPTION_KEY, self::sanitize( $value ) );
+		
+		// Clear cache when options are updated.
+		Cache::delete( 'options_data' );
 	}
 
 	/**
@@ -329,27 +338,33 @@ class Options {
 		 * @return array<string, float>
 		 */
 	public static function get_scoring_weights(): array {
-			$options = self::get();
+		return Cache::remember(
+			'scoring_weights',
+			static function (): array {
+				$options = self::get();
 
-			$defaults = self::default_scoring_weights();
-			$weights  = $options['scoring']['weights'] ?? $defaults;
+				$defaults = self::default_scoring_weights();
+				$weights  = $options['scoring']['weights'] ?? $defaults;
 
-		if ( ! is_array( $weights ) ) {
-				return $defaults;
-		}
+				if ( ! is_array( $weights ) ) {
+					return $defaults;
+				}
 
-			$normalized = array();
+				$normalized = array();
 
-		foreach ( self::get_check_keys() as $check_key ) {
-				$normalized[ $check_key ] = self::bounded_float(
-					$weights[ $check_key ] ?? $defaults[ $check_key ],
-					0.0,
-					5.0,
-					$defaults[ $check_key ]
-				);
-		}
+				foreach ( self::get_check_keys() as $check_key ) {
+					$normalized[ $check_key ] = self::bounded_float(
+						$weights[ $check_key ] ?? $defaults[ $check_key ],
+						0.0,
+						5.0,
+						$defaults[ $check_key ]
+					);
+				}
 
-			return $normalized;
+				return $normalized;
+			},
+			HOUR_IN_SECONDS
+		);
 	}
 
 	/**

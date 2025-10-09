@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "separateMajorMinor": true,
+  "separateMinorPatch": false,
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "timezone": "Europe/Rome",
+  "schedule": [
+    "before 8am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true
+    },
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": ["phpunit/phpunit"],
+      "groupName": "PHPUnit"
+    },
+    {
+      "matchPackageNames": ["wp-coding-standards/wpcs", "dealerdirect/phpcodesniffer-composer-installer"],
+      "groupName": "WordPress Coding Standards"
+    },
+    {
+      "matchPackageNames": ["phpstan/phpstan", "phpstan/extension-installer", "php-stubs/wordpress-stubs"],
+      "groupName": "PHPStan"
+    },
+    {
+      "matchPackageNames": ["jest", "@babel/core", "@babel/preset-env", "babel-jest", "jest-environment-jsdom"],
+      "groupName": "Jest"
+    }
+  ]
+}
