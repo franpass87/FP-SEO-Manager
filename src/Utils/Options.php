@@ -54,6 +54,10 @@ class Options {
 				'twitter_cards',
 				'schema_presets',
 				'internal_links',
+				// AI Overview optimization checks
+				'faq_schema',
+				'howto_schema',
+				'ai_optimized_content',
 			);
 	}
 

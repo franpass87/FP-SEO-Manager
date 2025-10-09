@@ -19,10 +19,12 @@ use Throwable;
 use function array_intersect;
 use function array_map;
 use function array_unique;
+use function implode;
 use function in_array;
 use function is_array;
 use function json_decode;
 use function strtolower;
+use function strpos;
 use function ucfirst;
 use const JSON_THROW_ON_ERROR;
 
@@ -48,7 +50,7 @@ class SchemaPresetsCheck implements CheckInterface {
 	 * {@inheritDoc}
 	 */
 	public function description(): string {
-		return I18n::translate( 'Checks for Organization, WebSite, or BlogPosting schema presets.' );
+		return I18n::translate( 'Verifica la presenza di schema.org per Organization, WebSite, Article e BlogPosting. Include supporto per speakable markup (importante per AI vocali).' );
 	}
 
 	/**
@@ -78,9 +80,12 @@ class SchemaPresetsCheck implements CheckInterface {
 		}
 
 		$types    = array_unique( array_map( 'strtolower', $types ) );
-		$expected = array( 'organization', 'website', 'blogposting' );
+		$expected = array( 'organization', 'website', 'blogposting', 'article' );
 		$found    = array_intersect( $expected, $types );
 		$missing  = array();
+		
+		// Check for speakable markup in Article/BlogPosting (important for AI voice)
+		$has_speakable = $this->check_speakable_markup( $blocks );
 
 		foreach ( $expected as $candidate ) {
 			if ( ! in_array( $candidate, $types, true ) ) {
@@ -93,32 +98,47 @@ class SchemaPresetsCheck implements CheckInterface {
 				Result::STATUS_FAIL,
 				array(
 					'found'   => $types,
-					'missing' => array( 'Organization', 'WebSite', 'BlogPosting' ),
+					'missing' => array( 'Organization', 'WebSite', 'Article', 'BlogPosting' ),
+					'has_speakable' => false,
 				),
-				I18n::translate( 'Add schema.org JSON-LD for Organization, WebSite, or BlogPosting.' ),
+				I18n::translate( 'Aggiungi schema.org JSON-LD per Organization, WebSite, Article o BlogPosting. Fondamentale per la visibilità nelle ricerche AI.' ),
 				0.12
 			);
 		}
 
 		if ( empty( $missing ) ) {
+			$message = I18n::translate( 'Schema.org presets rilevati correttamente.' );
+			
+			if ( $has_speakable ) {
+				$message .= ' ' . I18n::translate( 'Include speakable markup - ottimale per AI vocali e Google Assistant.' );
+			}
+			
 			return new Result(
 				Result::STATUS_PASS,
 				array(
 					'found'   => $types,
 					'missing' => array(),
+					'has_speakable' => $has_speakable,
 				),
-				I18n::translate( 'Required schema.org presets detected.' ),
+				$message,
 				0.12
 			);
 		}
 
+		$message = I18n::translate( 'Aggiungi gli schema mancanti per rich snippet più completi: ' . implode( ', ', $missing ) . '.' );
+		
+		if ( ! $has_speakable && ( in_array( 'article', $types, true ) || in_array( 'blogposting', $types, true ) ) ) {
+			$message .= ' ' . I18n::translate( 'Considera di aggiungere speakable markup per ottimizzare per ricerche vocali e AI.' );
+		}
+		
 		return new Result(
 			Result::STATUS_WARN,
 			array(
 				'found'   => $types,
 				'missing' => $missing,
+				'has_speakable' => $has_speakable,
 			),
-			I18n::translate( 'Add the remaining schema presets for richer snippets.' ),
+			$message,
 			0.12
 		);
 	}
@@ -145,5 +165,23 @@ class SchemaPresetsCheck implements CheckInterface {
 				$this->collect_types( $value, $types );
 			}
 		}
+	}
+
+	/**
+	 * Check for speakable markup in JSON-LD blocks.
+	 *
+	 * Speakable markup indica a Google quali parti del contenuto sono ottimali
+	 * per essere lette ad alta voce dall'assistente vocale.
+	 *
+	 * @param array<int, string> $blocks JSON-LD blocks.
+	 * @return bool
+	 */
+	private function check_speakable_markup( array $blocks ): bool {
+		foreach ( $blocks as $block ) {
+			if ( strpos( $block, '"speakable"' ) !== false || strpos( $block, "'speakable'" ) !== false ) {
+				return true;
+			}
+		}
+		return false;
 	}
 }
