@@ -11,9 +11,12 @@ declare(strict_types=1);
 
 namespace FP\SEO\Analysis;
 
+use FP\SEO\Analysis\Checks\AiOptimizedContentCheck;
 use FP\SEO\Analysis\Checks\CanonicalCheck;
+use FP\SEO\Analysis\Checks\FaqSchemaCheck;
 use FP\SEO\Analysis\Checks\H1PresenceCheck;
 use FP\SEO\Analysis\Checks\HeadingsStructureCheck;
+use FP\SEO\Analysis\Checks\HowToSchemaCheck;
 use FP\SEO\Analysis\Checks\ImageAltCheck;
 use FP\SEO\Analysis\Checks\InternalLinksCheck;
 use FP\SEO\Analysis\Checks\MetaDescriptionCheck;
@@ -217,6 +220,10 @@ class Analyzer {
 			new TwitterCardsCheck(),
 			new SchemaPresetsCheck(),
 			new InternalLinksCheck(),
+			// AI Overview optimization checks
+			new FaqSchemaCheck(),
+			new HowToSchemaCheck(),
+			new AiOptimizedContentCheck(),
 		);
 	}
 }

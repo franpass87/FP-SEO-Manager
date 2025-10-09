@@ -31,6 +31,15 @@ FP SEO Performance equips editors and site managers with actionable feedback whi
 - **NEW**: Custom exception hierarchy for robust error handling.
 - **NEW**: Complete CI/CD pipeline with automated testing and quality checks.
 
+### 🤖 AI Overview Optimization (NEW)
+
+- **FAQ Schema Check**: Verifica la presenza di FAQ Schema markup, essenziale per apparire nelle Google AI Overview e nelle ricerche conversazionali.
+- **HowTo Schema Check**: Analizza guide e tutorial per HowTo Schema markup, ottimizzando la visibilità per query procedurali.
+- **AI-Optimized Content Check**: Valuta la struttura dei contenuti (paragrafi brevi, liste, domande esplicite) per massimizzare l'estrazione da parte delle AI.
+- **Speakable Markup Support**: Supporto per markup speakable in Article/BlogPosting per ottimizzazione ricerche vocali.
+
+> **📚 [Guida completa: AI Overview Optimization](docs/AI_OVERVIEW_OPTIMIZATION.md)** - Scopri come ottimizzare i tuoi contenuti per le AI Overview di Google.
+
 ## Installation
 
 1. Download the latest release archive from the repository or build script outputs.
@@ -44,6 +53,7 @@ FP SEO Performance equips editors and site managers with actionable feedback whi
 - Enable the admin bar badge in **Settings → General** to monitor scores at a glance.
 - Launch the **Bulk Auditor** submenu to batch analyze filtered content and download CSV summaries.
 - Adjust scoring weights, enable performance heuristics, or set custom capabilities within the settings tabs.
+- **NEW**: Attiva i check AI Overview in **Settings → Analysis** per ottimizzare i contenuti per le ricerche AI di Google.
 
 ## Hooks & Filters
 

@@ -4,15 +4,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added - AI Overview Optimization 🤖
+- **[Feature]** New `FaqSchemaCheck` - Verifica FAQ Schema markup per ottimizzazione Google AI Overview (priorità massima per visibilità ricerche AI).
+- **[Feature]** New `HowToSchemaCheck` - Analizza HowTo Schema per contenuti procedurali e guide step-by-step.
+- **[Feature]** New `AiOptimizedContentCheck` - Valuta struttura contenuti (liste, domande, paragrafi brevi) per massimizzare estrazione AI.
+- **[Enhancement]** `SchemaPresetsCheck` ora supporta speakable markup per ottimizzazione ricerche vocali e Google Assistant.
+- **[Documentation]** Nuova guida completa `docs/AI_OVERVIEW_OPTIMIZATION.md` con best practices, esempi e strategie di implementazione.
+- Aggiornato `Analyzer` per includere i 3 nuovi check AI-focused.
+- Aggiornato `Options` e `AnalysisTabRenderer` per gestire configurazione dei nuovi check.
+
 ### Changed
 - **[Refactoring]** Extracted metadata resolution logic into dedicated `MetadataResolver` utility class, eliminating ~112 lines of duplicated code across `BulkAuditPage`, `Metabox`, and `AdminBarBadge`.
 - **[Refactoring]** Simplified `Analyzer` by extracting check filtering logic into new `CheckRegistry` class, reducing complexity by ~70 lines.
 - **[Refactoring]** Modularized `SettingsPage` by creating dedicated renderer classes for each settings tab (`GeneralTabRenderer`, `AnalysisTabRenderer`, `PerformanceTabRenderer`, `AdvancedTabRenderer`), reducing main class from 465 to ~170 lines.
+- Migliorati messaggi in italiano per `SchemaPresetsCheck` con focus su AI e ricerche vocali.
 
-### Added
-- New `src/Utils/MetadataResolver` utility class for centralized SEO metadata resolution.
-- New `src/Analysis/CheckRegistry` class for managing analyzer check filtering.
-- New settings tab renderer architecture under `src/Admin/Settings/` namespace.
+### Technical Details
+- New check classes under `src/Analysis/Checks/`:
+  - `FaqSchemaCheck.php` - Weight: 0.10
+  - `HowToSchemaCheck.php` - Weight: 0.08
+  - `AiOptimizedContentCheck.php` - Weight: 0.09
+- New check keys: `faq_schema`, `howto_schema`, `ai_optimized_content`
+- Tutti i check includono logica di rilevamento intelligente e raccomandazioni actionable
 
 ## [0.1.2] - 2025-10-01
 ### Added

@@ -130,18 +130,22 @@ class AnalysisTabRenderer extends SettingsTabRenderer {
 	 */
 	private function get_check_label( string $key ): string {
 		return match ( $key ) {
-			'title_length'       => __( 'SEO Title length', 'fp-seo-performance' ),
-			'meta_description'   => __( 'Meta description length', 'fp-seo-performance' ),
-			'h1_presence'        => __( 'H1 presence', 'fp-seo-performance' ),
-			'headings_structure' => __( 'Heading structure', 'fp-seo-performance' ),
-			'image_alt'          => __( 'Image alternative text', 'fp-seo-performance' ),
-			'canonical'          => __( 'Canonical tag', 'fp-seo-performance' ),
-			'robots'             => __( 'Robots indexability', 'fp-seo-performance' ),
-			'og_cards'           => __( 'Open Graph cards', 'fp-seo-performance' ),
-			'twitter_cards'      => __( 'Twitter cards', 'fp-seo-performance' ),
-			'schema_presets'     => __( 'Schema.org presets', 'fp-seo-performance' ),
-			'internal_links'     => __( 'Internal links', 'fp-seo-performance' ),
-			default              => ucfirst( str_replace( '_', ' ', $key ) ),
+			'title_length'          => __( 'SEO Title length', 'fp-seo-performance' ),
+			'meta_description'      => __( 'Meta description length', 'fp-seo-performance' ),
+			'h1_presence'           => __( 'H1 presence', 'fp-seo-performance' ),
+			'headings_structure'    => __( 'Heading structure', 'fp-seo-performance' ),
+			'image_alt'             => __( 'Image alternative text', 'fp-seo-performance' ),
+			'canonical'             => __( 'Canonical tag', 'fp-seo-performance' ),
+			'robots'                => __( 'Robots indexability', 'fp-seo-performance' ),
+			'og_cards'              => __( 'Open Graph cards', 'fp-seo-performance' ),
+			'twitter_cards'         => __( 'Twitter cards', 'fp-seo-performance' ),
+			'schema_presets'        => __( 'Schema.org presets', 'fp-seo-performance' ),
+			'internal_links'        => __( 'Internal links', 'fp-seo-performance' ),
+			// AI Overview optimization checks
+			'faq_schema'            => __( '🤖 FAQ Schema (AI Overview)', 'fp-seo-performance' ),
+			'howto_schema'          => __( '🤖 HowTo Schema (AI Overview)', 'fp-seo-performance' ),
+			'ai_optimized_content'  => __( '🤖 Contenuti ottimizzati per AI', 'fp-seo-performance' ),
+			default                 => ucfirst( str_replace( '_', ' ', $key ) ),
 		};
 	}
 }
