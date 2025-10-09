@@ -96,9 +96,9 @@ class SettingsPage {
 						admin_url( 'admin.php' )
 					);
 					?>
-					<a href="<?php echo esc_url( $url ); ?>" class="nav-tab <?php echo $current_tab === $tab ? 'nav-tab-active' : ''; ?>">
-						<?php echo esc_html( $label ); ?>
-					</a>
+				<a href="<?php echo esc_url( $url ); ?>" class="nav-tab <?php echo esc_attr( $current_tab === $tab ? 'nav-tab-active' : '' ); ?>">
+					<?php echo esc_html( $label ); ?>
+				</a>
 				<?php endforeach; ?>
 			</h2>
 
