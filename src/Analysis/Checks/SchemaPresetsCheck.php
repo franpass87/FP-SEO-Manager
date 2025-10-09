@@ -19,10 +19,12 @@ use Throwable;
 use function array_intersect;
 use function array_map;
 use function array_unique;
+use function implode;
 use function in_array;
 use function is_array;
 use function json_decode;
 use function strtolower;
+use function strpos;
 use function ucfirst;
 use const JSON_THROW_ON_ERROR;
 

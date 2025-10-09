@@ -17,9 +17,12 @@ use FP\SEO\Analysis\Result;
 use FP\SEO\Utils\I18n;
 use Throwable;
 use function array_map;
+use function array_unique;
 use function count;
+use function in_array;
 use function is_array;
 use function json_decode;
+use function sprintf;
 use function strtolower;
 use const JSON_THROW_ON_ERROR;
 

@@ -17,11 +17,11 @@ use FP\SEO\Analysis\Result;
 use FP\SEO\Utils\Html;
 use FP\SEO\Utils\I18n;
 use function count;
+use function implode;
 use function mb_strlen;
 use function preg_match_all;
-use function preg_split;
+use function sprintf;
 use function str_word_count;
-use function strlen;
 use function substr_count;
 use function trim;
 
