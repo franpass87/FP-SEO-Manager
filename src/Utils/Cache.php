@@ -35,9 +35,10 @@ class Cache {
 	 * @return mixed Cached value or default.
 	 */
 	public static function get( string $key, mixed $default = null ): mixed {
-		$value = wp_cache_get( $key, self::CACHE_GROUP );
+		$found = false;
+		$value = wp_cache_get( $key, self::CACHE_GROUP, false, $found );
 
-		if ( false === $value ) {
+		if ( ! $found ) {
 			return $default;
 		}
 
@@ -90,9 +91,10 @@ class Cache {
 	 */
 	public static function remember( string $key, callable $callback, int $expiration = self::DEFAULT_EXPIRATION ): mixed {
 		$versioned_key = self::get_versioned_key( $key );
-		$value         = self::get( $versioned_key );
+		$found         = false;
+		$value         = wp_cache_get( $versioned_key, self::CACHE_GROUP, false, $found );
 
-		if ( null !== $value ) {
+		if ( $found ) {
 			return $value;
 		}
 
