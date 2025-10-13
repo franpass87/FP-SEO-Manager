@@ -173,24 +173,24 @@ class UrlNormalizer {
 				$authority = $auth . $host . $port;
 		}
 
-			$prefix = '';
+		$prefix = '';
 		if ( '' !== $raw_scheme ) {
-				$prefix = $raw_scheme;
+			$prefix = $raw_scheme;
 
 			if ( '' !== $authority || ( '' !== $path && 0 === strpos( $path, '/' ) ) ) {
-					$prefix .= '://';
+				$prefix .= '://';
 			} else {
-					$prefix .= ':';
+				$prefix .= ':';
 			}
 		} elseif ( '' !== $authority ) {
-				$prefix = '//';
+			$prefix = '//';
 		}
 
 		if ( '' === $prefix && '' === $authority ) {
-				return $path . $query . $fragment;
+			return $path . $query . $fragment;
 		}
 
-			return $prefix . $authority . $path . $query . $fragment;
+		return $prefix . $authority . $path . $query . $fragment;
 	}
 
 		/**

@@ -209,65 +209,65 @@ class Signals {
 			$max_heading_depth  = max( 0, (int) ( $context['headings']['depth'] ?? 0 ) );
 
 			$defaults = Options::get_defaults()['performance']['heuristics'];
-			$toggles  = array_merge( $defaults, array_map( 'boolval', $toggles ) );
+		$toggles  = array_merge( $defaults, array_map( 'boolval', $toggles ) );
 
-			$metrics = array();
-			$opps    = array();
+		$metrics = array();
+		$opps    = array();
 
 		if ( $toggles['image_alt_coverage'] && $images_total > 0 ) {
-				$coverage                      = max( 0, min( 1, 1 - ( $images_missing_alt / $images_total ) ) );
-				$metrics['image_alt_coverage'] = array(
-					'label' => esc_html__( 'Image alternative text coverage', 'fp-seo-performance' ),
-					'value' => round( $coverage * 100, 1 ),
-					'unit'  => '%',
-				);
+			$coverage                      = max( 0, min( 1, 1 - ( $images_missing_alt / $images_total ) ) );
+			$metrics['image_alt_coverage'] = array(
+				'label' => esc_html__( 'Image alternative text coverage', 'fp-seo-performance' ),
+				'value' => round( $coverage * 100, 1 ),
+				'unit'  => '%',
+			);
 
-				if ( $coverage < 0.8 ) {
-					$opps[] = array(
-						'id'          => 'image-alt-coverage',
-						'label'       => esc_html__( 'Add missing alternative text to images', 'fp-seo-performance' ),
-						'description' => esc_html__( 'Improving alternative text helps with Core Web Vitals for LCP images and accessibility.', 'fp-seo-performance' ),
-						'priority'    => 'medium',
-					);
-				}
+			if ( $coverage < 0.8 ) {
+				$opps[] = array(
+					'id'          => 'image-alt-coverage',
+					'label'       => esc_html__( 'Add missing alternative text to images', 'fp-seo-performance' ),
+					'description' => esc_html__( 'Improving alternative text helps with Core Web Vitals for LCP images and accessibility.', 'fp-seo-performance' ),
+					'priority'    => 'medium',
+				);
+			}
 		}
 
 		if ( $toggles['inline_css'] && $inline_css_bytes > self::INLINE_CSS_THRESHOLD ) {
-				$opps[] = array(
-					'id'          => 'inline-css',
-					'label'       => esc_html__( 'Reduce inline CSS size', 'fp-seo-performance' ),
-					'description' => sprintf(
-					/* translators: %s: Inline CSS size in kilobytes. */
-						esc_html__( 'Inline styles add %s KB to the page. Consider extracting critical CSS and deferring the rest.', 'fp-seo-performance' ),
-						round( $inline_css_bytes / 1024 )
-					),
-					'priority'    => 'medium',
-				);
+			$opps[] = array(
+				'id'          => 'inline-css',
+				'label'       => esc_html__( 'Reduce inline CSS size', 'fp-seo-performance' ),
+				'description' => sprintf(
+				/* translators: %s: Inline CSS size in kilobytes. */
+					esc_html__( 'Inline styles add %s KB to the page. Consider extracting critical CSS and deferring the rest.', 'fp-seo-performance' ),
+					round( $inline_css_bytes / 1024 )
+				),
+				'priority'    => 'medium',
+			);
 		}
 
 		if ( $toggles['image_count'] && $images_total > self::IMAGE_COUNT_THRESHOLD ) {
-					$opps[] = array(
-						'id'          => 'image-count',
-						'label'       => esc_html__( 'Review number of images on the page', 'fp-seo-performance' ),
-						'description' => esc_html__( 'Large numbers of images can slow down rendering. Consider lazy-loading or trimming media.', 'fp-seo-performance' ),
-						'priority'    => 'low',
-					);
+			$opps[] = array(
+				'id'          => 'image-count',
+				'label'       => esc_html__( 'Review number of images on the page', 'fp-seo-performance' ),
+				'description' => esc_html__( 'Large numbers of images can slow down rendering. Consider lazy-loading or trimming media.', 'fp-seo-performance' ),
+				'priority'    => 'low',
+			);
 		}
 
 		if ( $toggles['heading_depth'] && $max_heading_depth > 4 ) {
-				$opps[] = array(
-					'id'          => 'heading-depth',
-					'label'       => esc_html__( 'Simplify heading structure', 'fp-seo-performance' ),
-					'description' => esc_html__( 'Complex heading hierarchies often indicate heavy DOM depth, which can impact INP.', 'fp-seo-performance' ),
-					'priority'    => 'low',
-				);
+			$opps[] = array(
+				'id'          => 'heading-depth',
+				'label'       => esc_html__( 'Simplify heading structure', 'fp-seo-performance' ),
+				'description' => esc_html__( 'Complex heading hierarchies often indicate heavy DOM depth, which can impact INP.', 'fp-seo-performance' ),
+				'priority'    => 'low',
+			);
 		}
 
-				return array(
-					'source'        => 'local',
-					'metrics'       => $metrics,
-					'opportunities' => $opps,
-				);
+		return array(
+			'source'        => 'local',
+			'metrics'       => $metrics,
+			'opportunities' => $opps,
+		);
 	}
 
 	/**
@@ -319,12 +319,12 @@ class Signals {
 	 * @return array<int, array<string, mixed>>
 	 */
 	private function parse_opportunities( array $payload ): array {
-			$audits = $payload['lighthouseResult']['audits'] ?? array();
+		$audits = $payload['lighthouseResult']['audits'] ?? array();
 		if ( ! is_array( $audits ) ) {
-				return array();
+			return array();
 		}
 
-			$opps = array();
+		$opps = array();
 
 		foreach ( $audits as $audit_id => $audit ) {
 			if ( ! is_array( $audit ) ) {
@@ -348,7 +348,7 @@ class Signals {
 			}
 		}
 
-			return $opps;
+		return $opps;
 	}
 
 		/**
@@ -357,13 +357,13 @@ class Signals {
 		 * @param array<string, mixed> $payload PSI response payload.
 		 */
 	private function extract_performance_score( array $payload ): ?int {
-			$category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
+		$category = $payload['lighthouseResult']['categories']['performance']['score'] ?? null;
 
 		if ( is_numeric( $category ) ) {
-				return (int) round( (float) $category * 100 );
+			return (int) round( (float) $category * 100 );
 		}
 
-			return null;
+		return null;
 	}
 
 		/**
@@ -392,7 +392,7 @@ class Signals {
 		 * @param string $url Page URL, potentially percent-encoded already.
 		 */
 	private function normalize_page_url( string $url ): string {
-			return UrlNormalizer::normalize( $url );
+		return UrlNormalizer::normalize( $url );
 	}
 
 		/**
@@ -401,23 +401,23 @@ class Signals {
 		 * @param string $normalized_url Normalized page URL.
 		 */
 	private function build_cache_key( string $normalized_url ): string {
-			$source = $normalized_url;
-			$parts  = wp_parse_url( $normalized_url );
+		$source = $normalized_url;
+		$parts  = wp_parse_url( $normalized_url );
 
 		if ( is_array( $parts ) ) {
-				$scheme   = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) . '://' : '';
-				$host     = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
-				$port     = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
-				$path     = $parts['path'] ?? '';
-				$query    = isset( $parts['query'] ) && '' !== $parts['query'] ? '?' . $parts['query'] : '';
-				$fragment = isset( $parts['fragment'] ) && '' !== $parts['fragment'] ? '#' . $parts['fragment'] : '';
+			$scheme   = isset( $parts['scheme'] ) ? strtolower( (string) $parts['scheme'] ) . '://' : '';
+			$host     = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
+			$port     = isset( $parts['port'] ) ? ':' . $parts['port'] : '';
+			$path     = $parts['path'] ?? '';
+			$query    = isset( $parts['query'] ) && '' !== $parts['query'] ? '?' . $parts['query'] : '';
+			$fragment = isset( $parts['fragment'] ) && '' !== $parts['fragment'] ? '#' . $parts['fragment'] : '';
 
 			if ( '' !== $scheme || '' !== $host ) {
 				$source = $scheme . $host . $port . $path . $query . $fragment;
 			}
 		}
 
-			return self::TRANSIENT_PREFIX . md5( $source );
+		return self::TRANSIENT_PREFIX . md5( $source );
 	}
 
 		/**
@@ -426,37 +426,37 @@ class Signals {
 		 * @param array<string, mixed> $payload PSI response payload.
 		 */
 	private function extract_psi_error_message( array $payload ): ?string {
-			$error = $payload['error'] ?? null;
+		$error = $payload['error'] ?? null;
 
 		if ( ! is_array( $error ) ) {
-				return null;
+			return null;
 		}
 
-			$message = $error['message'] ?? null;
+		$message = $error['message'] ?? null;
 
 		if ( is_string( $message ) && '' !== trim( $message ) ) {
-				return trim( $message );
+			return trim( $message );
 		}
 
-			$details = $error['errors'] ?? null;
+		$details = $error['errors'] ?? null;
 
 		if ( ! is_array( $details ) ) {
-				return null;
+			return null;
 		}
 
 		foreach ( $details as $detail ) {
 			if ( ! is_array( $detail ) ) {
-					continue;
+				continue;
 			}
 
-				$detail_message = $detail['message'] ?? null;
+			$detail_message = $detail['message'] ?? null;
 
 			if ( is_string( $detail_message ) && '' !== trim( $detail_message ) ) {
-					return trim( $detail_message );
+				return trim( $detail_message );
 			}
 		}
 
-			return null;
+		return null;
 	}
 
 	/**
