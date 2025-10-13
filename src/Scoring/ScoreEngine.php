@@ -96,20 +96,20 @@ class ScoreEngine {
 					'contribution' => $contribution,
 				);
 
-				if ( in_array( $status, array( Result::STATUS_WARN, Result::STATUS_FAIL ), true ) ) {
-						$notes[] = $this->build_recommendation( $check );
-				}
+			if ( in_array( $status, array( Result::STATUS_WARN, Result::STATUS_FAIL ), true ) ) {
+				$notes[] = $this->build_recommendation( $check );
+			}
 		}
 
-			$score = 0;
+		$score = 0;
 
 		if ( $max_total > 0 ) {
-				$score = (int) round( max( 0, min( 1, $score_sum / $max_total ) ) * 100 );
+			$score = (int) round( max( 0, min( 1, $score_sum / $max_total ) ) * 100 );
 		}
 
-			$status = $this->color_from_score( $score );
+		$status = $this->color_from_score( $score );
 
-			return array(
+		return array(
 				'score'             => $score,
 				'status'            => $status,
 				'recommendations'   => $notes,

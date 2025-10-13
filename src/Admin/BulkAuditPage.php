@@ -85,19 +85,19 @@ class BulkAuditPage {
 		 * Hooks WordPress actions for the page.
 		 */
 	public function register(): void {
-			add_action( 'admin_menu', array( $this, 'add_page' ) );
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax_analyze' ) );
-			add_action( 'admin_post_' . self::EXPORT_ACTION, array( $this, 'handle_export' ) );
+		add_action( 'admin_menu', array( $this, 'add_page' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax_analyze' ) );
+		add_action( 'admin_post_' . self::EXPORT_ACTION, array( $this, 'handle_export' ) );
 	}
 
 		/**
 		 * Adds the submenu entry.
 		 */
 	public function add_page(): void {
-			$capability = Options::get_capability();
+		$capability = Options::get_capability();
 
-			add_submenu_page(
+		add_submenu_page(
 				self::PAGE_PARENT,
 				__( 'Bulk Auditor', 'fp-seo-performance' ),
 				__( 'Bulk Auditor', 'fp-seo-performance' ),
@@ -114,14 +114,14 @@ class BulkAuditPage {
 		 */
 	public function enqueue_assets( string $hook ): void {
 		if ( 'fp-seo-performance_page_' . self::PAGE_SLUG !== $hook ) {
-				return;
+			return;
 		}
 
-			wp_enqueue_style( 'fp-seo-performance-admin' );
-			wp_enqueue_script( 'fp-seo-performance-admin' );
-			wp_enqueue_script( 'fp-seo-performance-bulk' );
+		wp_enqueue_style( 'fp-seo-performance-admin' );
+		wp_enqueue_script( 'fp-seo-performance-admin' );
+		wp_enqueue_script( 'fp-seo-performance-bulk' );
 
-			wp_localize_script(
+		wp_localize_script(
 				'fp-seo-performance-bulk',
 				'fpSeoPerformanceBulk',
 				array(
@@ -146,10 +146,10 @@ class BulkAuditPage {
 		 */
 	public function render(): void {
 		if ( ! current_user_can( Options::get_capability() ) ) {
-				wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
 		}
 
-			$filters  = $this->get_filters();
+		$filters  = $this->get_filters();
 			$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );
 			$results  = $this->get_cached_results();
 			$types    = $this->get_allowed_post_types();
@@ -283,47 +283,47 @@ class BulkAuditPage {
 		 * Handles AJAX batch analysis requests.
 		 */
 	public function handle_ajax_analyze(): void {
-			check_ajax_referer( self::NONCE_ACTION, 'nonce' );
+		check_ajax_referer( self::NONCE_ACTION, 'nonce' );
 
 		if ( ! current_user_can( Options::get_capability() ) ) {
-				wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
 		}
 
 		if ( ! $this->is_analyzer_enabled() ) {
-				wp_send_json_error( array( 'message' => __( 'Analyzer is disabled in settings.', 'fp-seo-performance' ) ), 400 );
+			wp_send_json_error( array( 'message' => __( 'Analyzer is disabled in settings.', 'fp-seo-performance' ) ), 400 );
 		}
 
-			$ids = isset( $_POST['post_ids'] ) ? (array) wp_unslash( $_POST['post_ids'] ) : array();
-			$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
+		$ids = isset( $_POST['post_ids'] ) ? (array) wp_unslash( $_POST['post_ids'] ) : array();
+		$ids = array_values( array_filter( array_map( 'absint', $ids ) ) );
 
 		if ( empty( $ids ) ) {
-				wp_send_json_success( array( 'results' => array() ) );
+			wp_send_json_success( array( 'results' => array() ) );
 		}
 
-			$results = array();
+		$results = array();
 
 		foreach ( $ids as $post_id ) {
-				$result = $this->analyze_post_id( $post_id );
+			$result = $this->analyze_post_id( $post_id );
 
 			if ( null === $result ) {
-					continue;
+				continue;
 			}
 
-				$results[] = $result;
-				$this->persist_result( $result );
+			$results[] = $result;
+			$this->persist_result( $result );
 		}
 
-			wp_send_json_success( array( 'results' => $results ) );
+		wp_send_json_success( array( 'results' => $results ) );
 	}
 
 		/**
 		 * Outputs a CSV export of the current table selection.
 		 */
 	public function handle_export(): void {
-			check_admin_referer( self::NONCE_ACTION, '_fp_seo_bulk_nonce' );
+		check_admin_referer( self::NONCE_ACTION, '_fp_seo_bulk_nonce' );
 
 		if ( ! current_user_can( Options::get_capability() ) ) {
-				wp_die( esc_html__( 'Sorry, you are not allowed to export these results.', 'fp-seo-performance' ) );
+			wp_die( esc_html__( 'Sorry, you are not allowed to export these results.', 'fp-seo-performance' ) );
 		}
 
 		$filters = $this->get_filters_from_request();
@@ -336,23 +336,23 @@ class BulkAuditPage {
 		$selected = array_values( array_filter( array_map( 'absint', $selected ) ) );
 
 		if ( empty( $selected ) ) {
-				$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );
-				$selected = array_map(
-					static function ( WP_Post $post ): int {
-								return (int) $post->ID;
-					},
-					$posts
-				);
+			$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );
+			$selected = array_map(
+				static function ( WP_Post $post ): int {
+					return (int) $post->ID;
+				},
+				$posts
+			);
 		}
 
-			$filename = 'fp-seo-bulk-' . gmdate( 'Y-m-d-H-i' ) . '.csv';
+		$filename = 'fp-seo-bulk-' . gmdate( 'Y-m-d-H-i' ) . '.csv';
 
-			header( 'Content-Type: text/csv; charset=utf-8' );
-			header( 'Content-Disposition: attachment; filename=' . $filename );
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
 
-				$output = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+		$output = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
 
-				fputcsv(
+		fputcsv(
 					$output,
 					array(
 						__( 'Post ID', 'fp-seo-performance' ),
@@ -366,33 +366,33 @@ class BulkAuditPage {
 				);
 
 		foreach ( $selected as $post_id ) {
-				$post = get_post( $post_id );
+			$post = get_post( $post_id );
 
 			if ( ! $post instanceof WP_Post ) {
 				continue;
 			}
 
-				$row     = $results[ $post_id ] ?? array();
-				$score   = isset( $row['score'] ) ? (int) $row['score'] : '';
-				$warning = isset( $row['warnings'] ) ? (int) $row['warnings'] : '';
-				$updated = isset( $row['updated'] ) ? (int) $row['updated'] : 0;
+			$row     = $results[ $post_id ] ?? array();
+			$score   = isset( $row['score'] ) ? (int) $row['score'] : '';
+			$warning = isset( $row['warnings'] ) ? (int) $row['warnings'] : '';
+			$updated = isset( $row['updated'] ) ? (int) $row['updated'] : 0;
 
-				fputcsv(
-					$output,
-					array(
-						$post_id,
-						html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' ),
-						$post->post_type,
-						$post->post_status,
-						'' === $score ? '' : $score,
-						'' === $warning ? '' : $warning,
-						$updated > 0 ? $this->format_timestamp( $updated ) : '',
-					)
-				);
+			fputcsv(
+				$output,
+				array(
+					$post_id,
+					html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' ),
+					$post->post_type,
+					$post->post_status,
+					'' === $score ? '' : $score,
+					'' === $warning ? '' : $warning,
+					$updated > 0 ? $this->format_timestamp( $updated ) : '',
+				)
+			);
 		}
 
-								fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-			exit;
+		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		exit;
 	}
 
 		/**
@@ -401,7 +401,7 @@ class BulkAuditPage {
 		 * @return string[]
 		 */
 	private function get_allowed_post_types(): array {
-					return PostTypes::analyzable();
+		return PostTypes::analyzable();
 	}
 
 		/**
@@ -410,7 +410,7 @@ class BulkAuditPage {
 		 * @return string[]
 		 */
 	private function get_allowed_statuses(): array {
-			return array( 'publish', 'draft', 'pending', 'future', 'private' );
+		return array( 'publish', 'draft', 'pending', 'future', 'private' );
 	}
 
 		/**
@@ -419,7 +419,7 @@ class BulkAuditPage {
 		 * @return array{post_type:string,status:string}
 		 */
 	private function get_filters(): array {
-			return $this->get_filters_from_request();
+		return $this->get_filters_from_request();
 	}
 
 		/**
@@ -428,21 +428,21 @@ class BulkAuditPage {
 		 * @return array{post_type:string,status:string}
 		 */
 	private function get_filters_from_request(): array {
-				$type   = isset( $_REQUEST['post_type'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['post_type'] ) ) : 'all'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
-				$status = isset( $_REQUEST['status'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['status'] ) ) : 'any'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
+		$type   = isset( $_REQUEST['post_type'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['post_type'] ) ) : 'all'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
+		$status = isset( $_REQUEST['status'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['status'] ) ) : 'any'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
 
 		if ( 'all' !== $type && ! in_array( $type, $this->get_allowed_post_types(), true ) ) {
-				$type = 'all';
+			$type = 'all';
 		}
 
 		if ( 'any' !== $status && ! in_array( $status, $this->get_allowed_statuses(), true ) ) {
-				$status = 'any';
+			$status = 'any';
 		}
 
-			return array(
-				'post_type' => $type,
-				'status'    => $status,
-			);
+		return array(
+			'post_type' => $type,
+			'status'    => $status,
+		);
 	}
 
 		/**
@@ -454,22 +454,22 @@ class BulkAuditPage {
 		 * @return array<int, WP_Post>
 		 */
 	private function query_posts( string $post_type, string $status ): array {
-			$types = $this->get_allowed_post_types();
+		$types = $this->get_allowed_post_types();
 
-				$args = array(
-					'post_type'                  => 'all' === $post_type ? $types : $post_type,
-					'post_status'                => 'any' === $status ? $this->get_allowed_statuses() : $status,
-					'posts_per_page'             => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
-						'orderby'                => 'date',
-						'order'                  => 'DESC',
-						'no_found_rows'          => true,
-						'update_post_meta_cache' => false,
-						'update_post_term_cache' => false,
-				);
+		$args = array(
+			'post_type'                  => 'all' === $post_type ? $types : $post_type,
+			'post_status'                => 'any' === $status ? $this->get_allowed_statuses() : $status,
+			'posts_per_page'             => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
+			'orderby'                    => 'date',
+			'order'                      => 'DESC',
+			'no_found_rows'              => true,
+			'update_post_meta_cache'     => false,
+			'update_post_term_cache'     => false,
+		);
 
-				$query = new WP_Query( $args );
+		$query = new WP_Query( $args );
 
-				return $query->posts;
+		return $query->posts;
 	}
 
 		/**
@@ -478,18 +478,18 @@ class BulkAuditPage {
 		 * @return array<int, array<string, mixed>>
 		 */
 	private function get_cached_results(): array {
-			$cached = get_transient( self::CACHE_KEY );
+		$cached = get_transient( self::CACHE_KEY );
 
 		if ( ! is_array( $cached ) ) {
-				return array();
+			return array();
 		}
 
-			return array_filter(
-				$cached,
-				static function ( $item ): bool {
-							return is_array( $item ) && isset( $item['post_id'] );
-				}
-			);
+		return array_filter(
+			$cached,
+			static function ( $item ): bool {
+				return is_array( $item ) && isset( $item['post_id'] );
+			}
+		);
 	}
 
 		/**
@@ -498,27 +498,27 @@ class BulkAuditPage {
 		 * @param array<string, mixed> $result Result payload.
 		 */
 	private function persist_result( array $result ): void {
-			$cached = $this->get_cached_results();
+		$cached = $this->get_cached_results();
 
 		if ( isset( $result['post_id'] ) ) {
-				$cached[ (int) $result['post_id'] ] = $result;
+			$cached[ (int) $result['post_id'] ] = $result;
 		}
 
 		if ( count( $cached ) > self::CACHE_LIMIT ) {
-				uasort(
-					$cached,
-					static function ( array $a, array $b ): int {
-								$a_updated = isset( $a['updated'] ) ? (int) $a['updated'] : 0;
-								$b_updated = isset( $b['updated'] ) ? (int) $b['updated'] : 0;
+			uasort(
+				$cached,
+				static function ( array $a, array $b ): int {
+					$a_updated = isset( $a['updated'] ) ? (int) $a['updated'] : 0;
+					$b_updated = isset( $b['updated'] ) ? (int) $b['updated'] : 0;
 
-								return $b_updated <=> $a_updated;
-					}
-				);
+					return $b_updated <=> $a_updated;
+				}
+			);
 
-				$cached = array_slice( $cached, 0, self::CACHE_LIMIT, true );
+			$cached = array_slice( $cached, 0, self::CACHE_LIMIT, true );
 		}
 
-			set_transient( self::CACHE_KEY, $cached, $this->get_cache_duration() );
+		set_transient( self::CACHE_KEY, $cached, $this->get_cache_duration() );
 	}
 
 		/**
@@ -526,10 +526,10 @@ class BulkAuditPage {
 		 */
 	private function get_cache_duration(): int {
 		if ( defined( 'DAY_IN_SECONDS' ) ) {
-				return (int) DAY_IN_SECONDS;
+			return (int) DAY_IN_SECONDS;
 		}
 
-			return self::CACHE_TTL;
+		return self::CACHE_TTL;
 	}
 
 		/**
@@ -541,28 +541,28 @@ class BulkAuditPage {
 		 */
 	private function analyze_post_id( int $post_id ): ?array {
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-				return null;
+			return null;
 		}
 
 		if ( ! $this->is_analyzer_enabled() ) {
-				return null;
+			return null;
 		}
 
-			$post = get_post( $post_id );
+		$post = get_post( $post_id );
 
 		if ( ! $post instanceof WP_Post ) {
-				return null;
+			return null;
 		}
 
-			$context  = $this->build_context( $post );
-			$analysis = ( new Analyzer() )->analyze( $context );
-			$score    = ( new ScoreEngine() )->calculate( $analysis['checks'] ?? array() );
-			$summary  = $analysis['summary'] ?? array();
+		$context  = $this->build_context( $post );
+		$analysis = ( new Analyzer() )->analyze( $context );
+		$score    = ( new ScoreEngine() )->calculate( $analysis['checks'] ?? array() );
+		$summary  = $analysis['summary'] ?? array();
 
-			$warnings    = $this->count_warnings( $summary );
-				$updated = (int) current_time( 'timestamp' ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- Requires site-local timestamp for cache freshness tracking.
+		$warnings = $this->count_warnings( $summary );
+		$updated  = (int) current_time( 'timestamp' ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- Requires site-local timestamp for cache freshness tracking.
 
-			return array(
+		return array(
 				'post_id'   => $post_id,
 				'score'     => isset( $score['score'] ) ? (int) $score['score'] : 0,
 				'status'    => isset( $score['status'] ) ? (string) $score['status'] : '',
@@ -594,10 +594,10 @@ class BulkAuditPage {
 		 * @param array<string, int> $summary Summary payload from analyzer.
 		 */
 	private function count_warnings( array $summary ): int {
-			$warn = isset( $summary[ Result::STATUS_WARN ] ) ? (int) $summary[ Result::STATUS_WARN ] : 0;
-			$fail = isset( $summary[ Result::STATUS_FAIL ] ) ? (int) $summary[ Result::STATUS_FAIL ] : 0;
+		$warn = isset( $summary[ Result::STATUS_WARN ] ) ? (int) $summary[ Result::STATUS_WARN ] : 0;
+		$fail = isset( $summary[ Result::STATUS_FAIL ] ) ? (int) $summary[ Result::STATUS_FAIL ] : 0;
 
-			return $warn + $fail;
+		return $warn + $fail;
 	}
 
 		/**
@@ -617,8 +617,8 @@ class BulkAuditPage {
 		 * Determine whether the analyzer is enabled in settings.
 		 */
 	private function is_analyzer_enabled(): bool {
-			$options = Options::get();
+		$options = Options::get();
 
-			return ! empty( $options['general']['enable_analyzer'] );
+		return ! empty( $options['general']['enable_analyzer'] );
 	}
 }
