@@ -64,44 +64,44 @@ class InternalLinksCheck implements CheckInterface {
 		 * @return Result
 		 */
 	public function run( Context $context ): Result {
-			$text  = $context->plain_text();
-			$words = preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
+		$text  = $context->plain_text();
+		$words = preg_split( '/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY );
 
 		if ( false === $words ) {
-				$words = array();
+			$words = array();
 		}
 
-				$word_count = count( $words );
-				$anchors    = $context->anchors();
-				$link_count = 0;
+		$word_count = count( $words );
+		$anchors    = $context->anchors();
+		$link_count = 0;
 
-				$site_host = '';
-				$site_url  = home_url( '/' );
+		$site_host = '';
+		$site_url  = home_url( '/' );
 
 		if ( '' !== $site_url ) {
-						$parts = function_exists( 'wp_parse_url' ) ? wp_parse_url( $site_url ) : parse_url( $site_url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+			$parts = function_exists( 'wp_parse_url' ) ? wp_parse_url( $site_url ) : parse_url( $site_url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 
 			if ( is_array( $parts ) && isset( $parts['host'] ) ) {
-										$site_host = strtolower( (string) $parts['host'] );
+				$site_host = strtolower( (string) $parts['host'] );
 			}
 		}
 
 		foreach ( $anchors as $anchor ) {
-				$href = trim( (string) $anchor->getAttribute( 'href' ) );
+			$href = trim( (string) $anchor->getAttribute( 'href' ) );
 
 			if ( '' === $href ) {
-						continue;
+				continue;
 			}
 
 			if ( str_starts_with( $href, '#' ) ) {
-							continue;
+				continue;
 			}
 
 			if ( preg_match( '#^(mailto:|tel:|javascript:)#i', $href ) ) {
 				continue;
 			}
 
-								$parsed = function_exists( 'wp_parse_url' ) ? wp_parse_url( $href ) : parse_url( $href ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+			$parsed = function_exists( 'wp_parse_url' ) ? wp_parse_url( $href ) : parse_url( $href ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 
 			if ( false === $parsed ) {
 				continue;
@@ -109,11 +109,11 @@ class InternalLinksCheck implements CheckInterface {
 
 			if ( isset( $parsed['host'] ) && '' !== $parsed['host'] ) {
 				if ( '' === $site_host ) {
-						continue;
+					continue;
 				}
 
 				if ( strtolower( (string) $parsed['host'] ) !== $site_host ) {
-						continue;
+					continue;
 				}
 			}
 
@@ -121,59 +121,59 @@ class InternalLinksCheck implements CheckInterface {
 				$scheme = strtolower( (string) $parsed['scheme'] );
 
 				if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
-						continue;
+					continue;
 				}
 			}
 
-							++$link_count;
+			++$link_count;
 		}
 
-			$required = 0;
+		$required = 0;
 
 		if ( $word_count >= 150 ) {
-					$required = max( 1, (int) ceil( $word_count / 300 ) );
+			$required = max( 1, (int) ceil( $word_count / 300 ) );
 		}
 
 		if ( 0 === $required ) {
-				return new Result(
-					Result::STATUS_PASS,
-					array(
-						'word_count' => $word_count,
-						'links'      => $link_count,
-						'required'   => $required,
-					),
-					I18n::translate( 'Content length is short; internal links optional.' ),
-					0.10
-				);
+			return new Result(
+				Result::STATUS_PASS,
+				array(
+					'word_count' => $word_count,
+					'links'      => $link_count,
+					'required'   => $required,
+				),
+				I18n::translate( 'Content length is short; internal links optional.' ),
+				0.10
+			);
 		}
 
 		if ( $link_count >= $required ) {
-				return new Result(
-					Result::STATUS_PASS,
-					array(
-						'word_count' => $word_count,
-						'links'      => $link_count,
-						'required'   => $required,
-					),
-					I18n::translate( 'Internal link coverage meets recommendations.' ),
-					0.10
-				);
+			return new Result(
+				Result::STATUS_PASS,
+				array(
+					'word_count' => $word_count,
+					'links'      => $link_count,
+					'required'   => $required,
+				),
+				I18n::translate( 'Internal link coverage meets recommendations.' ),
+				0.10
+			);
 		}
 
-				$status = 0 === $link_count ? Result::STATUS_FAIL : Result::STATUS_WARN;
-				$hint   = 0 === $link_count
-					? I18n::translate( 'Add contextual internal links to related content.' )
-					: I18n::translate( 'Add a few more internal links to boost discoverability.' );
+		$status = 0 === $link_count ? Result::STATUS_FAIL : Result::STATUS_WARN;
+		$hint   = 0 === $link_count
+			? I18n::translate( 'Add contextual internal links to related content.' )
+			: I18n::translate( 'Add a few more internal links to boost discoverability.' );
 
-				return new Result(
-					$status,
-					array(
-						'word_count' => $word_count,
-						'links'      => $link_count,
-						'required'   => $required,
-					),
-					$hint,
-					0.10
-				);
+		return new Result(
+			$status,
+			array(
+				'word_count' => $word_count,
+				'links'      => $link_count,
+				'required'   => $required,
+			),
+			$hint,
+			0.10
+		);
 	}
 }
