@@ -34,14 +34,14 @@ class SeoHealth {
 		 * @param Signals|null $signals Optional signals provider.
 		 */
 	public function __construct( ?Signals $signals = null ) {
-			$this->signals = $signals ?? new Signals();
+		$this->signals = $signals ?? new Signals();
 	}
 
 		/**
 		 * Hooks Site Health test registration.
 		 */
 	public function register(): void {
-			add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
+		add_filter( 'site_status_tests', array( $this, 'add_tests' ) );
 	}
 
 	/**
@@ -70,16 +70,16 @@ class SeoHealth {
 	 * @return array<string, mixed> Site Health test result.
 	 */
 	public function run_seo_test(): array {
-		$badge            = $this->seo_badge();
-		$home_url         = home_url( '/' );
-				$response = wp_remote_get(
-					$home_url,
-					array(
-						'timeout'     => 10,
-						'headers'     => array(),
-						'redirection' => 3,
-					)
-				);
+		$badge    = $this->seo_badge();
+		$home_url = home_url( '/' );
+		$response = wp_remote_get(
+			$home_url,
+			array(
+				'timeout'     => 10,
+				'headers'     => array(),
+				'redirection' => 3,
+			)
+		);
 
 		if ( is_wp_error( $response ) ) {
 			return array(
@@ -97,29 +97,29 @@ class SeoHealth {
 			);
 		}
 
-				$status_code = (int) wp_remote_retrieve_response_code( $response );
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $status_code ) {
-				return array(
-					'label'       => __( 'Homepage returned an unexpected HTTP status', 'fp-seo-performance' ),
-					'status'      => 'critical',
-					'badge'       => $badge,
-					'description' => sprintf(
-							/* translators: %d: HTTP status code. */
-						__( 'The homepage responded with HTTP %d so SEO metadata could not be verified. Resolve the issue and try again.', 'fp-seo-performance' ),
-						$status_code
+			return array(
+				'label'       => __( 'Homepage returned an unexpected HTTP status', 'fp-seo-performance' ),
+				'status'      => 'critical',
+				'badge'       => $badge,
+				'description' => sprintf(
+					/* translators: %d: HTTP status code. */
+					__( 'The homepage responded with HTTP %d so SEO metadata could not be verified. Resolve the issue and try again.', 'fp-seo-performance' ),
+					$status_code
+				),
+				'actions'     => array(
+					sprintf(
+						'<a href="%s" target="_blank" rel="noopener">%s</a>',
+						esc_url( $home_url ),
+						esc_html__( 'Open homepage', 'fp-seo-performance' )
 					),
-					'actions'     => array(
-						sprintf(
-							'<a href="%s" target="_blank" rel="noopener">%s</a>',
-							esc_url( $home_url ),
-							esc_html__( 'Open homepage', 'fp-seo-performance' )
-						),
-					),
-				);
+				),
+			);
 		}
 
-				$body = (string) wp_remote_retrieve_body( $response );
+		$body = (string) wp_remote_retrieve_body( $response );
 
 		if ( '' === trim( $body ) ) {
 			return array(
