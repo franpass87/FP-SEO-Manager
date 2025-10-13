@@ -40,8 +40,8 @@ class AdminBarBadge {
 		 * Hook registrations.
 		 */
 	public function register(): void {
-						add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
-						add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+		add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
 	}
 
 		/**
@@ -49,11 +49,11 @@ class AdminBarBadge {
 		 */
 	public function enqueue_assets(): void {
 		if ( ! $this->should_display_badge() ) {
-				return;
+			return;
 		}
 
 		if ( function_exists( 'wp_enqueue_style' ) ) {
-				wp_enqueue_style( 'fp-seo-performance-admin' );
+			wp_enqueue_style( 'fp-seo-performance-admin' );
 		}
 	}
 
@@ -64,19 +64,19 @@ class AdminBarBadge {
 		 */
 	public function add_badge( WP_Admin_Bar $wp_admin_bar ): void {
 		if ( ! $this->should_display_badge() ) {
-				return;
+			return;
 		}
 
-			$post_id = $this->get_current_post_id();
+		$post_id = $this->get_current_post_id();
 
 		if ( null === $post_id ) {
-				return;
+			return;
 		}
 
-			$post = get_post( $post_id );
+		$post = get_post( $post_id );
 
 		if ( ! $post ) {
-				return;
+			return;
 		}
 
 		$context = new Context(
@@ -88,41 +88,41 @@ class AdminBarBadge {
 			MetadataResolver::resolve_robots( $post )
 		);
 
-			$analyzer     = new Analyzer();
-			$analysis     = $analyzer->analyze( $context );
-			$score_engine = new ScoreEngine();
-			$score_data   = $score_engine->calculate( $analysis['checks'] ?? array() );
-			$score_value  = $score_data['score'] ?? 0;
-			$score_status = is_string( $score_data['status'] ?? null ) ? $score_data['status'] : 'pending';
+		$analyzer     = new Analyzer();
+		$analysis     = $analyzer->analyze( $context );
+		$score_engine = new ScoreEngine();
+		$score_data   = $score_engine->calculate( $analysis['checks'] ?? array() );
+		$score_value  = $score_data['score'] ?? 0;
+		$score_status = is_string( $score_data['status'] ?? null ) ? $score_data['status'] : 'pending';
 
-			$label = sprintf(
-				'%s <span class="fp-seo-performance-badge-score">%s</span>',
-				esc_html( I18n::translate( 'SEO Score' ) ),
-				esc_html( (string) $score_value )
-			);
+		$label = sprintf(
+			'%s <span class="fp-seo-performance-badge-score">%s</span>',
+			esc_html( I18n::translate( 'SEO Score' ) ),
+			esc_html( (string) $score_value )
+		);
 
-			$wp_admin_bar->add_node(
-				array(
-					'id'    => 'fp-seo-performance-score',
-					'title' => $label,
-					'href'  => add_query_arg(
-						array(
-							'page' => 'fp-seo-performance',
-						),
-						admin_url( 'admin.php' )
+		$wp_admin_bar->add_node(
+			array(
+				'id'    => 'fp-seo-performance-score',
+				'title' => $label,
+				'href'  => add_query_arg(
+					array(
+						'page' => 'fp-seo-performance',
 					),
-					'meta'  => array(
-						'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
-						'title' => esc_attr(
-							sprintf(
-								'%s: %s',
-								I18n::translate( 'Analyzer status' ),
-								$this->status_description( $score_status )
-							)
-						),
+					admin_url( 'admin.php' )
+				),
+				'meta'  => array(
+					'class' => 'fp-seo-performance-badge fp-seo-performance-badge--' . sanitize_html_class( $score_status ),
+					'title' => esc_attr(
+						sprintf(
+							'%s: %s',
+							I18n::translate( 'Analyzer status' ),
+							$this->status_description( $score_status )
+						)
 					),
-				)
-			);
+				),
+			)
+		);
 	}
 
 		/**
@@ -130,49 +130,49 @@ class AdminBarBadge {
 		 */
 	private function should_display_badge(): bool {
 		if ( ! is_admin() || ! is_admin_bar_showing() ) {
-				return false;
+			return false;
 		}
 
-			$options = Options::get();
+		$options = Options::get();
 
 		if ( empty( $options['general']['admin_bar_badge'] ) || empty( $options['general']['enable_analyzer'] ) ) {
-				return false;
+			return false;
 		}
 
 		if ( ! current_user_can( Options::get_capability() ) ) {
-				return false;
+			return false;
 		}
 
-			$post_id = $this->get_current_post_id();
+		$post_id = $this->get_current_post_id();
 
 		if ( null === $post_id ) {
-				return false;
+			return false;
 		}
 
-			$post_type = function_exists( 'get_post_type' ) ? get_post_type( $post_id ) : null;
+		$post_type = function_exists( 'get_post_type' ) ? get_post_type( $post_id ) : null;
 
-			return ! empty( $post_type );
+		return ! empty( $post_type );
 	}
 
 		/**
 		 * Determine the current editing post identifier when available.
 		 */
 	private function get_current_post_id(): ?int {
-			global $pagenow;
+		global $pagenow;
 
 		if ( 'post.php' !== ( $pagenow ?? '' ) ) {
-				return null;
+			return null;
 		}
 
-			$post = $_GET['post'] ?? null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only context.
+		$post = $_GET['post'] ?? null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only context.
 
 		if ( null === $post ) {
-				return null;
+			return null;
 		}
 
-			$post_id = (int) $post;
+		$post_id = (int) $post;
 
-			return $post_id > 0 ? $post_id : null;
+		return $post_id > 0 ? $post_id : null;
 	}
 
 
