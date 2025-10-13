@@ -240,25 +240,25 @@ class Options {
 			);
 		}
 
-				$sanitized['analysis']['canonical_policy'] = self::sanitize_choice(
-					$analysis['canonical_policy'] ?? $defaults['analysis']['canonical_policy'],
-					array( 'auto', 'none' ),
-					$defaults['analysis']['canonical_policy']
-				);
+		$sanitized['analysis']['canonical_policy'] = self::sanitize_choice(
+			$analysis['canonical_policy'] ?? $defaults['analysis']['canonical_policy'],
+			array( 'auto', 'none' ),
+			$defaults['analysis']['canonical_policy']
+		);
 
-				$scoring_input                   = is_array( $input['scoring'] ?? null ) ? $input['scoring'] : array();
-				$weight_input                    = is_array( $scoring_input['weights'] ?? null ) ? $scoring_input['weights'] : array();
-				$sanitized['scoring']['weights'] = array();
+		$scoring_input                   = is_array( $input['scoring'] ?? null ) ? $input['scoring'] : array();
+		$weight_input                    = is_array( $scoring_input['weights'] ?? null ) ? $scoring_input['weights'] : array();
+		$sanitized['scoring']['weights'] = array();
 
 		foreach ( self::get_check_keys() as $check_key ) {
-				$raw_weight = $weight_input[ $check_key ] ?? $defaults['scoring']['weights'][ $check_key ];
+			$raw_weight = $weight_input[ $check_key ] ?? $defaults['scoring']['weights'][ $check_key ];
 
-				$sanitized['scoring']['weights'][ $check_key ] = self::bounded_float(
-					$raw_weight,
-					0.0,
-					5.0,
-					$defaults['scoring']['weights'][ $check_key ]
-				);
+			$sanitized['scoring']['weights'][ $check_key ] = self::bounded_float(
+				$raw_weight,
+				0.0,
+				5.0,
+				$defaults['scoring']['weights'][ $check_key ]
+			);
 
 			if ( ! is_numeric( $raw_weight ) ) {
 				self::add_validation_notice(
@@ -269,8 +269,8 @@ class Options {
 			}
 		}
 
-			$sanitized['analysis']['enable_og']      = self::to_bool( $analysis['enable_og'] ?? $defaults['analysis']['enable_og'] );
-			$sanitized['analysis']['enable_twitter'] = self::to_bool( $analysis['enable_twitter'] ?? $defaults['analysis']['enable_twitter'] );
+		$sanitized['analysis']['enable_og']      = self::to_bool( $analysis['enable_og'] ?? $defaults['analysis']['enable_og'] );
+		$sanitized['analysis']['enable_twitter'] = self::to_bool( $analysis['enable_twitter'] ?? $defaults['analysis']['enable_twitter'] );
 
 		$performance                               = is_array( $input['performance'] ?? null ) ? $input['performance'] : array();
 		$sanitized['performance']['enable_psi']    = self::to_bool( $performance['enable_psi'] ?? $defaults['performance']['enable_psi'] );
