@@ -76,19 +76,19 @@ class Plugin {
 		$this->container->singleton( Menu::class );
 		$this->container->singleton( SettingsPage::class );
 		$this->container->singleton( BulkAuditPage::class );
-				$this->container->singleton( Notices::class );
-				$this->container->singleton( Assets::class );
-				$this->container->singleton( AdminBarBadge::class );
-				$this->container->singleton( Metabox::class );
+		$this->container->singleton( Notices::class );
+		$this->container->singleton( Assets::class );
+		$this->container->singleton( AdminBarBadge::class );
+		$this->container->singleton( Metabox::class );
 		$this->container->singleton( SeoHealth::class );
 
 		$this->container->get( Menu::class )->register();
 		$this->container->get( SettingsPage::class )->register();
 		$this->container->get( BulkAuditPage::class )->register();
-				$this->container->get( Notices::class )->register();
-				$this->container->get( Assets::class )->register();
-				$this->container->get( AdminBarBadge::class )->register();
-				$this->container->get( Metabox::class )->register();
+		$this->container->get( Notices::class )->register();
+		$this->container->get( Assets::class )->register();
+		$this->container->get( AdminBarBadge::class )->register();
+		$this->container->get( Metabox::class )->register();
 		$this->container->get( SeoHealth::class )->register();
 	}
 
