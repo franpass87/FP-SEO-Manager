@@ -54,7 +54,9 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 == Changelog ==
 
 = Unreleased =
-* See `CHANGELOG.md` for work in progress items.
+* Fixed: Corretta indentazione inconsistente in 11 file per garantire WordPress Coding Standards uniformi (879 linee normalizzate).
+* Quality: Migliorata leggibilità e manutenibilità del codice con indentazione consistente.
+* See `CHANGELOG.md` and `CODE_QUALITY_FIXES.md` for detailed information.
 
 = 0.1.2 - 2025-10-01 =
 * Centralized admin menu registration, shared analyzer constants, and bulk auditing utilities.

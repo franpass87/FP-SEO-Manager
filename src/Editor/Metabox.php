@@ -57,10 +57,10 @@ class Metabox {
 	 * Hooks WordPress actions for registering and saving the metabox.
 	 */
 	public function register(): void {
-				add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 10, 0 );
-				add_action( 'save_post', array( $this, 'save_meta' ) );
-				add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
-				add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
+		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 10, 0 );
+		add_action( 'save_post', array( $this, 'save_meta' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 	}
 
 	/**

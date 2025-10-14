@@ -80,31 +80,31 @@ class Menu {
 		 */
 	public function render_dashboard(): void {
 		if ( ! current_user_can( Options::get_capability() ) ) {
-				wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
 		}
 
-			$options       = Options::get();
-			$general       = is_array( $options['general'] ?? null ) ? $options['general'] : array();
-			$analysis      = is_array( $options['analysis'] ?? null ) ? $options['analysis'] : array();
-			$performance   = is_array( $options['performance'] ?? null ) ? $options['performance'] : array();
-			$checks        = is_array( $analysis['checks'] ?? null ) ? $analysis['checks'] : array();
-			$checks_total  = count( $checks );
-			$checks_active = count( array_filter( array_map( 'boolval', $checks ) ) );
+		$options       = Options::get();
+		$general       = is_array( $options['general'] ?? null ) ? $options['general'] : array();
+		$analysis      = is_array( $options['analysis'] ?? null ) ? $options['analysis'] : array();
+		$performance   = is_array( $options['performance'] ?? null ) ? $options['performance'] : array();
+		$checks        = is_array( $analysis['checks'] ?? null ) ? $analysis['checks'] : array();
+		$checks_total  = count( $checks );
+		$checks_active = count( array_filter( array_map( 'boolval', $checks ) ) );
 
-			$analyzer_enabled = (bool) ( $general['enable_analyzer'] ?? false );
-			$badge_enabled    = (bool) ( $general['admin_bar_badge'] ?? false );
+		$analyzer_enabled = (bool) ( $general['enable_analyzer'] ?? false );
+		$badge_enabled    = (bool) ( $general['admin_bar_badge'] ?? false );
 
-			$content_overview = $this->collect_content_overview();
-			$bulk_stats       = $this->collect_bulk_audit_stats();
+		$content_overview = $this->collect_content_overview();
+		$bulk_stats       = $this->collect_bulk_audit_stats();
 
-			$psi_enabled      = (bool) ( $performance['enable_psi'] ?? false );
-			$psi_key          = trim( (string) ( $performance['psi_api_key'] ?? '' ) );
-			$heuristics       = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
-			$defaults         = Options::get_defaults();
-			$heuristic_map    = is_array( $defaults['performance']['heuristics'] ?? null ) ? $defaults['performance']['heuristics'] : array();
-			$heuristic_total  = count( $heuristic_map );
-			$heuristic_active = count( array_filter( array_map( 'boolval', $heuristics ) ) );
-			$signal_source    = ( $psi_enabled && '' !== $psi_key ) ? 'psi' : 'heuristics';
+		$psi_enabled      = (bool) ( $performance['enable_psi'] ?? false );
+		$psi_key          = trim( (string) ( $performance['psi_api_key'] ?? '' ) );
+		$heuristics       = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
+		$defaults         = Options::get_defaults();
+		$heuristic_map    = is_array( $defaults['performance']['heuristics'] ?? null ) ? $defaults['performance']['heuristics'] : array();
+		$heuristic_total  = count( $heuristic_map );
+		$heuristic_active = count( array_filter( array_map( 'boolval', $heuristics ) ) );
+		$signal_source    = ( $psi_enabled && '' !== $psi_key ) ? 'psi' : 'heuristics';
 
 		?>
 				<div class="wrap fp-seo-performance-dashboard">
@@ -334,19 +334,19 @@ class Menu {
 				)
 			);
 
-			$excluded         = 0;
-				$excluded_ids = array_map( 'intval', (array) $excluded_posts );
-				$excluded     = count( array_unique( $excluded_ids ) );
+		$excluded     = 0;
+		$excluded_ids = array_map( 'intval', (array) $excluded_posts );
+		$excluded     = count( array_unique( $excluded_ids ) );
 
-			$eligible = $published_total - $excluded;
+		$eligible = $published_total - $excluded;
 		if ( $eligible < 0 ) {
-				$eligible = 0;
+			$eligible = 0;
 		}
 
-			return array(
-				'eligible' => $eligible,
-				'excluded' => $excluded,
-			);
+		return array(
+			'eligible' => $eligible,
+			'excluded' => $excluded,
+		);
 	}
 
 		/**
@@ -362,13 +362,13 @@ class Menu {
 		 * }
 		 */
 	private function collect_bulk_audit_stats(): array {
-			$cached  = get_transient( BulkAuditPage::CACHE_KEY );
-			$entries = array();
+		$cached  = get_transient( BulkAuditPage::CACHE_KEY );
+		$entries = array();
 
 		if ( is_array( $cached ) ) {
 			foreach ( $cached as $item ) {
 				if ( ! is_array( $item ) || ! isset( $item['post_id'] ) ) {
-						continue;
+					continue;
 				}
 
 				$entries[] = array(
@@ -382,75 +382,75 @@ class Menu {
 		}
 
 		if ( empty( $entries ) ) {
-				return array(
-					'total'         => 0,
-					'average'       => null,
-					'flagged'       => 0,
-					'latest'        => null,
-					'status_totals' => array(
-						'green'  => 0,
-						'yellow' => 0,
-						'red'    => 0,
-						'other'  => 0,
-					),
-					'entries'       => array(),
-				);
+			return array(
+				'total'         => 0,
+				'average'       => null,
+				'flagged'       => 0,
+				'latest'        => null,
+				'status_totals' => array(
+					'green'  => 0,
+					'yellow' => 0,
+					'red'    => 0,
+					'other'  => 0,
+				),
+				'entries'       => array(),
+			);
 		}
 
-			usort(
-				$entries,
-				static function ( array $a, array $b ): int {
-										return $b['updated'] <=> $a['updated'];
-				}
-			);
+		usort(
+			$entries,
+			static function ( array $a, array $b ): int {
+				return $b['updated'] <=> $a['updated'];
+			}
+		);
 
-			$total         = count( $entries );
-			$score_sum     = 0;
-			$score_counter = 0;
-			$flagged       = 0;
-			$latest        = 0;
-			$status_totals = array(
-				'green'  => 0,
-				'yellow' => 0,
-				'red'    => 0,
-				'other'  => 0,
-			);
+		$total         = count( $entries );
+		$score_sum     = 0;
+		$score_counter = 0;
+		$flagged       = 0;
+		$latest        = 0;
+		$status_totals = array(
+			'green'  => 0,
+			'yellow' => 0,
+			'red'    => 0,
+			'other'  => 0,
+		);
 
-			foreach ( $entries as $entry ) {
-				if ( null !== $entry['score'] ) {
-						$score_sum += (int) $entry['score'];
-						++$score_counter;
-				}
-
-					$status = $entry['status'];
-				if ( isset( $status_totals[ $status ] ) ) {
-						++$status_totals[ $status ];
-				} else {
-						++$status_totals['other'];
-				}
-
-				if ( 'green' !== $status ) {
-						++$flagged;
-				}
-
-				if ( $entry['updated'] > $latest ) {
-						$latest = (int) $entry['updated'];
-				}
+		foreach ( $entries as $entry ) {
+			if ( null !== $entry['score'] ) {
+				$score_sum += (int) $entry['score'];
+				++$score_counter;
 			}
 
-			$average = null;
-			if ( $score_counter > 0 ) {
-					$average = (int) round( $score_sum / $score_counter );
+			$status = $entry['status'];
+			if ( isset( $status_totals[ $status ] ) ) {
+				++$status_totals[ $status ];
+			} else {
+				++$status_totals['other'];
 			}
 
-			return array(
-				'total'         => $total,
-				'average'       => $average,
-				'flagged'       => $flagged,
-				'latest'        => $latest > 0 ? $latest : null,
-				'status_totals' => $status_totals,
-				'entries'       => $entries,
-			);
+			if ( 'green' !== $status ) {
+				++$flagged;
+			}
+
+			if ( $entry['updated'] > $latest ) {
+				$latest = (int) $entry['updated'];
+			}
+		}
+
+		$average = null;
+		if ( $score_counter > 0 ) {
+			$average = (int) round( $score_sum / $score_counter );
+		}
+
+		return array(
+			'total'         => $total,
+			'average'       => $average,
+			'flagged'       => $flagged,
+			'latest'        => $latest > 0 ? $latest : null,
+			'status_totals' => $status_totals,
+			'entries'       => $entries,
+		);
 	}
 
 		/**
@@ -462,7 +462,7 @@ class Menu {
 		 */
 	private function format_last_updated( ?int $timestamp ): string {
 		if ( empty( $timestamp ) || $timestamp <= 0 ) {
-				return esc_html__( 'Not yet analyzed', 'fp-seo-performance' );
+			return esc_html__( 'Not yet analyzed', 'fp-seo-performance' );
 		}
 
 				$now  = time();
