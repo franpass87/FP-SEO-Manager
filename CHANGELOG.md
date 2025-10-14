@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed - Code Quality Improvements 🔧
+- **[Code Quality]** Corretta indentazione inconsistente in 10 file PHP per garantire standard di codifica WordPress uniformi.
+- **[Refactoring]** Normalizzata indentazione da mix di 3-8 tab a standard consistente di 2 tab in tutti i file del core.
+- File corretti:
+  - `src/Utils/Options.php` - 34 linee normalizzate
+  - `src/Admin/BulkAuditPage.php` - 244 linee normalizzate
+  - `src/Scoring/ScoreEngine.php` - 14 linee normalizzate
+  - `src/Analysis/Checks/InternalLinksCheck.php` - 44 linee normalizzate
+  - `src/Perf/Signals.php` - 142 linee normalizzate
+  - `src/Utils/UrlNormalizer.php` - 14 linee normalizzate
+  - `src/Admin/Menu.php` - 190 linee normalizzate
+  - `src/Editor/Metabox.php` - 8 linee normalizzate
+  - `src/SiteHealth/SeoHealth.php` - 60 linee normalizzate
+  - `src/Admin/AdminBarBadge.php` - 112 linee normalizzate
+  - `src/Infrastructure/Plugin.php` - 16 linee normalizzate
+- **[Quality]** Totale: 879 linee corrette per migliorare leggibilità e manutenibilità del codice.
+- **[Quality]** Nessuna modifica funzionale - solo miglioramenti di formattazione.
+
 ### Added - AI Overview Optimization 🤖
 - **[Feature]** New `FaqSchemaCheck` - Verifica FAQ Schema markup per ottimizzazione Google AI Overview (priorità massima per visibilità ricerche AI).
 - **[Feature]** New `HowToSchemaCheck` - Analizza HowTo Schema per contenuti procedurali e guide step-by-step.
