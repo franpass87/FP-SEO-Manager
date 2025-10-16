@@ -31,6 +31,15 @@ FP SEO Performance equips editors and site managers with actionable feedback whi
 - **NEW**: Custom exception hierarchy for robust error handling.
 - **NEW**: Complete CI/CD pipeline with automated testing and quality checks.
 
+### 🎯 Search Intent Analysis (NEW)
+
+- **Search Intent Detector**: Analizza automaticamente l'intento di ricerca del contenuto (Informational, Transactional, Commercial, Navigational).
+- **Intent Confidence Score**: Fornisce un punteggio di confidenza (0-100%) sul tipo di intent rilevato.
+- **Smart Recommendations**: Raccomandazioni personalizzate basate sull'intent per ottimizzare il contenuto.
+- **Multilingual Support**: Riconosce keyword in italiano e inglese per massima flessibilità.
+
+> **📚 [Guida completa: Search Intent Optimization](docs/SEARCH_INTENT_OPTIMIZATION.md)** - Impara a ottimizzare i contenuti allineandoli perfettamente con l'intento di ricerca degli utenti.
+
 ### 🤖 AI Overview Optimization (NEW)
 
 - **FAQ Schema Check**: Verifica la presenza di FAQ Schema markup, essenziale per apparire nelle Google AI Overview e nelle ricerche conversazionali.
@@ -54,6 +63,7 @@ FP SEO Performance equips editors and site managers with actionable feedback whi
 - Launch the **Bulk Auditor** submenu to batch analyze filtered content and download CSV summaries.
 - Adjust scoring weights, enable performance heuristics, or set custom capabilities within the settings tabs.
 - **NEW**: Attiva i check AI Overview in **Settings → Analysis** per ottimizzare i contenuti per le ricerche AI di Google.
+- **NEW**: Utilizza il Search Intent Analyzer per allineare i tuoi contenuti con le aspettative degli utenti e migliorare il posizionamento.
 
 ## Hooks & Filters
 
@@ -78,6 +88,20 @@ FP SEO Performance equips editors and site managers with actionable feedback whi
 | `fp_seo_analysis_result` | `array $result, Context $context` | `array` | Modify the complete analysis result |
 
 For detailed usage examples and additional documentation, see [IMPROVEMENTS.md](IMPROVEMENTS.md).
+
+## 📚 Documentation
+
+### SEO Optimization Guides
+
+- **[SEO Improvement Guide](docs/SEO_IMPROVEMENT_GUIDE.md)** - Guida completa con consigli pratici per migliorare la SEO (Quick wins, Technical SEO, Content Quality, Schema Markup)
+- **[Search Intent Optimization](docs/SEARCH_INTENT_OPTIMIZATION.md)** - Come ottimizzare i contenuti allineandoli con l'intento di ricerca degli utenti
+- **[AI Overview Optimization](docs/AI_OVERVIEW_OPTIMIZATION.md)** - Strategie per apparire nelle AI Overview di Google
+
+### Technical Documentation
+
+- **[Architecture](docs/architecture.md)** - Architettura del plugin e design patterns
+- **[Extending](docs/EXTENDING.md)** - Come estendere il plugin con custom checks
+- **[Best Practices](docs/BEST_PRACTICES.md)** - Best practices per sviluppatori
 
 ## Support
 
