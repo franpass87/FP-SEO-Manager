@@ -23,6 +23,7 @@ use FP\SEO\Analysis\Checks\MetaDescriptionCheck;
 use FP\SEO\Analysis\Checks\OgCardsCheck;
 use FP\SEO\Analysis\Checks\RobotsIndexabilityCheck;
 use FP\SEO\Analysis\Checks\SchemaPresetsCheck;
+use FP\SEO\Analysis\Checks\SearchIntentCheck;
 use FP\SEO\Analysis\Checks\TitleLengthCheck;
 use FP\SEO\Analysis\Checks\TwitterCardsCheck;
 
@@ -224,6 +225,8 @@ class Analyzer {
 			new FaqSchemaCheck(),
 			new HowToSchemaCheck(),
 			new AiOptimizedContentCheck(),
+			// Search Intent optimization
+			new SearchIntentCheck(),
 		);
 	}
 }

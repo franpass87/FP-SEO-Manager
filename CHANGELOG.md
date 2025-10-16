@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added - Search Intent Analysis 🎯
+- **[Feature]** New `SearchIntentCheck` - Analizza automaticamente l'intento di ricerca del contenuto e fornisce raccomandazioni personalizzate.
+- **[Feature]** New `SearchIntentDetector` utility - Rileva intent type (Informational, Transactional, Commercial, Navigational) con confidence score.
+- **[Enhancement]** Supporto multilingua (Italiano/Inglese) per rilevamento keyword di intent.
+- **[Enhancement]** Raccomandazioni smart context-aware basate sul tipo di intent rilevato.
+- **[Enhancement]** Detection di segnali aggiuntivi: prezzi, domande multiple, CTA.
+- **[Documentation]** Nuova guida completa `docs/SEARCH_INTENT_OPTIMIZATION.md` con best practices per ogni tipo di intent.
+- **[Documentation]** Nuova guida `docs/SEO_IMPROVEMENT_GUIDE.md` con consigli pratici SEO (Quick Wins, Technical SEO, Content Quality, Performance).
+- **[Tests]** Test suite completa per `SearchIntentDetector` e `SearchIntentCheck`.
+
 ### Fixed - Code Quality Improvements 🔧
 - **[Code Quality]** Corretta indentazione inconsistente in 10 file PHP per garantire standard di codifica WordPress uniformi.
 - **[Refactoring]** Normalizzata indentazione da mix di 3-8 tab a standard consistente di 2 tab in tutti i file del core.
