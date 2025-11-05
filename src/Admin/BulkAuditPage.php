@@ -81,14 +81,15 @@ class BulkAuditPage {
 	private const CACHE_TTL     = 86400;
 	private const CACHE_LIMIT   = 500;
 
-		/**
-		 * Hooks WordPress actions for the page.
-		 */
+	/**
+	 * Hooks WordPress actions for the page.
+	 */
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'add_page' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax_analyze' ) );
 		add_action( 'admin_post_' . self::EXPORT_ACTION, array( $this, 'handle_export' ) );
+		add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
 	}
 
 		/**
@@ -139,6 +140,73 @@ class BulkAuditPage {
 					),
 				)
 			);
+	}
+
+	/**
+	 * Inject modern styles in admin head
+	 */
+	public function inject_modern_styles(): void {
+		$screen = get_current_screen();
+		
+		if ( ! $screen || 'fp-seo-performance_page_' . self::PAGE_SLUG !== $screen->id ) {
+			return;
+		}
+		
+		?>
+		<style id="fp-seo-bulk-modern-ui">
+		:root {
+			--fp-seo-primary: #2563eb;
+			--fp-seo-gray-50: #f9fafb;
+			--fp-seo-gray-200: #e5e7eb;
+		}
+		
+		.wrap.fp-seo-performance-bulk {
+			background: var(--fp-seo-gray-50) !important;
+			margin-left: -20px !important;
+			margin-right: -20px !important;
+			padding: 32px 40px 40px !important;
+		}
+		
+		.fp-seo-performance-bulk > h1 {
+			background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+			-webkit-background-clip: text !important;
+			-webkit-text-fill-color: transparent !important;
+			background-clip: text !important;
+			font-size: 32px !important;
+			font-weight: 700 !important;
+			margin-bottom: 16px !important;
+		}
+		
+		.fp-seo-performance-bulk table.widefat {
+			border: 1px solid #e5e7eb !important;
+			border-radius: 8px !important;
+			box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1) !important;
+			overflow: hidden !important;
+		}
+		
+		.fp-seo-performance-bulk table.widefat thead {
+			background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+		}
+		
+		.fp-seo-performance-bulk table.widefat thead th {
+			color: #fff !important;
+			font-weight: 600 !important;
+			text-transform: uppercase !important;
+			font-size: 11px !important;
+			letter-spacing: 0.5px !important;
+			border: none !important;
+			padding: 14px 10px !important;
+		}
+		
+		.fp-seo-performance-bulk table.widefat tbody tr {
+			border-bottom: 1px solid #e5e7eb !important;
+		}
+		
+		.fp-seo-performance-bulk table.widefat tbody tr:hover {
+			background-color: #f9fafb !important;
+		}
+		</style>
+		<?php
 	}
 
 		/**
@@ -578,13 +646,22 @@ class BulkAuditPage {
 		 * @param WP_Post $post Post object.
 		 */
 	private function build_context( WP_Post $post ): Context {
+		$focus_keyword = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
+		$secondary_keywords = get_post_meta( $post->ID, '_fp_seo_secondary_keywords', true );
+		
+		if ( ! is_array( $secondary_keywords ) ) {
+			$secondary_keywords = array();
+		}
+		
 		return new Context(
 			(int) $post->ID,
 			(string) $post->post_content,
 			(string) $post->post_title,
 			MetadataResolver::resolve_meta_description( $post ),
 			MetadataResolver::resolve_canonical_url( $post ),
-			MetadataResolver::resolve_robots( $post )
+			MetadataResolver::resolve_robots( $post ),
+			is_string( $focus_keyword ) ? $focus_keyword : '',
+			$secondary_keywords
 		);
 	}
 

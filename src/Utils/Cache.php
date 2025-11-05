@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Utils;
 
+use FP\SEO\Utils\PerformanceConfig;
+
 /**
  * Handles plugin caching with WordPress object cache and transients.
  */
@@ -90,6 +92,11 @@ class Cache {
 	 * @return mixed Cached or freshly generated value.
 	 */
 	public static function remember( string $key, callable $callback, int $expiration = self::DEFAULT_EXPIRATION ): mixed {
+		// Check if caching is enabled
+		if ( ! PerformanceConfig::is_feature_enabled( 'cache' ) ) {
+			return $callback();
+		}
+
 		$versioned_key = self::get_versioned_key( $key );
 		$found         = false;
 		$value         = wp_cache_get( $versioned_key, self::CACHE_GROUP, false, $found );
@@ -100,6 +107,43 @@ class Cache {
 
 		$value = $callback();
 		self::set( $versioned_key, $value, $expiration );
+
+		return $value;
+	}
+
+	/**
+	 * Gets or sets a cached value with fallback to transient for long-term storage.
+	 *
+	 * @param string   $key        Cache key.
+	 * @param callable $callback   Callback to generate value on cache miss.
+	 * @param int      $expiration Expiration time in seconds.
+	 *
+	 * @return mixed Cached or freshly generated value.
+	 */
+	public static function remember_with_fallback( string $key, callable $callback, int $expiration = self::DEFAULT_EXPIRATION ): mixed {
+		// Try object cache first
+		$versioned_key = self::get_versioned_key( $key );
+		$found         = false;
+		$value         = wp_cache_get( $versioned_key, self::CACHE_GROUP, false, $found );
+
+		if ( $found ) {
+			return $value;
+		}
+
+		// Try transient as fallback
+		$transient_value = self::get_transient( $key );
+		if ( false !== $transient_value ) {
+			// Store in object cache for faster access
+			self::set( $versioned_key, $transient_value, $expiration );
+			return $transient_value;
+		}
+
+		// Generate new value
+		$value = $callback();
+		
+		// Store in both caches
+		self::set( $versioned_key, $value, $expiration );
+		self::set_transient( $key, $value, $expiration );
 
 		return $value;
 	}

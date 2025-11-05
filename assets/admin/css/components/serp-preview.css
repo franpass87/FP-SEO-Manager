@@ -1,0 +1,137 @@
+/**
+ * SERP Preview Component Styles
+ * Simula snippet Google in real-time
+ */
+
+.fp-seo-serp-preview {
+	margin: 20px 0;
+	padding: 20px;
+	background: #fff;
+	border: 1px solid var(--fp-seo-gray-200);
+	border-radius: 8px;
+}
+
+.fp-seo-serp-preview__device-toggle {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 16px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--fp-seo-gray-200);
+}
+
+.fp-seo-serp-device {
+	padding: 6px 12px;
+	background: transparent;
+	border: 1px solid var(--fp-seo-gray-300);
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.fp-seo-serp-device:hover {
+	background: var(--fp-seo-gray-50);
+	border-color: var(--fp-seo-primary);
+}
+
+.fp-seo-serp-device.active {
+	background: var(--fp-seo-primary);
+	border-color: var(--fp-seo-primary);
+	color: #fff;
+}
+
+.fp-seo-serp-preview__container {
+	background: #fff;
+	padding: 16px;
+	border-radius: 6px;
+}
+
+.fp-seo-serp-preview__snippet {
+	max-width: 600px;
+	font-family: arial, sans-serif;
+}
+
+.fp-seo-serp-preview__snippet[data-device="mobile"] {
+	max-width: 400px;
+}
+
+.fp-seo-serp-preview__url {
+	font-size: 14px;
+	line-height: 1.3;
+	color: #202124;
+	margin-bottom: 2px;
+	word-break: break-all;
+}
+
+.fp-seo-serp-preview__snippet[data-device="mobile"] .fp-seo-serp-preview__url {
+	font-size: 12px;
+}
+
+.fp-seo-serp-preview__title {
+	font-size: 20px;
+	line-height: 1.3;
+	color: #1a0dab;
+	font-weight: 400;
+	margin-bottom: 3px;
+	cursor: pointer;
+	word-wrap: break-word;
+}
+
+.fp-seo-serp-preview__title:hover {
+	text-decoration: underline;
+}
+
+.fp-seo-serp-preview__snippet[data-device="mobile"] .fp-seo-serp-preview__title {
+	font-size: 16px;
+}
+
+.fp-seo-serp-preview__title--truncated {
+	position: relative;
+}
+
+.fp-seo-serp-preview__title--truncated::after {
+	content: '⚠️ Troppo lungo';
+	position: absolute;
+	right: -90px;
+	top: 0;
+	font-size: 11px;
+	color: #f59e0b;
+	font-weight: 600;
+}
+
+.fp-seo-serp-preview__description {
+	font-size: 14px;
+	line-height: 1.58;
+	color: #4d5156;
+	word-wrap: break-word;
+}
+
+.fp-seo-serp-preview__snippet[data-device="mobile"] .fp-seo-serp-preview__description {
+	font-size: 13px;
+}
+
+.fp-seo-serp-preview__description--truncated {
+	position: relative;
+}
+
+.fp-seo-serp-preview__description--truncated::after {
+	content: '⚠️';
+	margin-left: 4px;
+	font-size: 11px;
+}
+
+.fp-seo-serp-preview__date {
+	font-size: 12px;
+	color: #70757a;
+	margin-top: 4px;
+}
+
+/* Preview box style */
+.fp-seo-serp-preview__snippet {
+	padding: 16px;
+	background: #fafafa;
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px #e8e8e8;
+}
+

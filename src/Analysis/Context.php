@@ -67,6 +67,20 @@ class Context {
 	private $robots;
 
 	/**
+	 * Focus keyword (primary keyword target).
+	 *
+	 * @var string
+	 */
+	private string $focus_keyword;
+
+	/**
+	 * Secondary keywords.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $secondary_keywords;
+
+	/**
 	 * Miscellaneous theme or environment hints.
 	 *
 	 * @var array<string, mixed>
@@ -90,13 +104,15 @@ class Context {
 	/**
 	 * Constructor.
 	 *
-	 * @param int|null            $post_id          Optional post identifier.
-	 * @param string              $html             Raw HTML markup for the content body.
-	 * @param string              $title            Content title.
-	 * @param string              $meta_description Meta description string.
-	 * @param string|null         $canonical        Canonical URL.
-	 * @param string|null         $robots           Robots directive string.
-	 * @param array<string,mixed> $theme_hints      Additional hints for analyzers.
+	 * @param int|null            $post_id            Optional post identifier.
+	 * @param string              $html               Raw HTML markup for the content body.
+	 * @param string              $title              Content title.
+	 * @param string              $meta_description   Meta description string.
+	 * @param string|null         $canonical          Canonical URL.
+	 * @param string|null         $robots             Robots directive string.
+	 * @param string              $focus_keyword      Primary focus keyword.
+	 * @param array<int, string>  $secondary_keywords Secondary keywords array.
+	 * @param array<string,mixed> $theme_hints        Additional hints for analyzers.
 	 */
 	public function __construct(
 		?int $post_id,
@@ -105,15 +121,19 @@ class Context {
 		string $meta_description = '',
 		?string $canonical = null,
 		?string $robots = null,
+		string $focus_keyword = '',
+		array $secondary_keywords = array(),
 		array $theme_hints = array()
 	) {
-		$this->post_id          = $post_id;
-		$this->html             = $html;
-		$this->title            = $title;
-		$this->meta_description = $meta_description;
-		$this->canonical        = $canonical;
-		$this->robots           = $robots;
-		$this->theme_hints      = $theme_hints;
+		$this->post_id            = $post_id;
+		$this->html               = $html;
+		$this->title              = $title;
+		$this->meta_description   = $meta_description;
+		$this->canonical          = $canonical;
+		$this->robots             = $robots;
+		$this->focus_keyword      = $focus_keyword;
+		$this->secondary_keywords = $secondary_keywords;
+		$this->theme_hints        = $theme_hints;
 	}
 
 	/**
@@ -168,6 +188,48 @@ class Context {
 	 */
 	public function robots(): ?string {
 		return $this->robots;
+	}
+
+	/**
+	 * Retrieve the focus keyword.
+	 *
+	 * @return string
+	 */
+	public function focus_keyword(): string {
+		return $this->focus_keyword;
+	}
+
+	/**
+	 * Retrieve the secondary keywords.
+	 *
+	 * @return array<int, string>
+	 */
+	public function secondary_keywords(): array {
+		return $this->secondary_keywords;
+	}
+
+	/**
+	 * Check if a focus keyword is set.
+	 *
+	 * @return bool
+	 */
+	public function has_focus_keyword(): bool {
+		return '' !== trim( $this->focus_keyword );
+	}
+
+	/**
+	 * Get all keywords (focus + secondary).
+	 *
+	 * @return array<int, string>
+	 */
+	public function all_keywords(): array {
+		$keywords = array();
+		
+		if ( $this->has_focus_keyword() ) {
+			$keywords[] = $this->focus_keyword;
+		}
+		
+		return array_merge( $keywords, $this->secondary_keywords );
 	}
 
 	/**

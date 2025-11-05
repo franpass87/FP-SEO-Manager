@@ -1,127 +1,407 @@
 # FP SEO Performance
 
-> FP SEO Performance provides an on-page SEO analyzer with configurable checks, bulk audits, and admin-facing guidance for WordPress editors.
+[![Version](https://img.shields.io/badge/version-0.9.0--pre-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
+[![WordPress](https://img.shields.io/badge/wordpress-6.2+-green.svg)](https://wordpress.org/)
+[![PHP](https://img.shields.io/badge/php-8.0+-purple.svg)](https://php.net/)
+[![License](https://img.shields.io/badge/license-GPL--2.0+-red.svg)](LICENSE)
+[![AI Powered](https://img.shields.io/badge/AI-GPT--5%20Nano-orange.svg)](https://openai.com/)
 
-| | |
-| --- | --- |
-| **Name** | FP SEO Performance |
-| **Version** | 0.1.2 |
-| **Author** | [Francesco Passeri](https://francescopasseri.com) |
-| **Author Email** | [info@francescopasseri.com](mailto:info@francescopasseri.com) |
-| **Author URI** | https://francescopasseri.com |
-| **Requires WordPress** | 6.2+ |
-| **Tested up to** | 6.4 |
-| **Requires PHP** | 8.0 |
-| **License** | GPL-2.0-or-later |
+**FP SEO Performance** is a comprehensive WordPress plugin that provides **AI-powered SEO content generation with GPT-5 Nano**, on-page SEO analysis, Generative Engine Optimization (GEO), Google Search Console integration, and advanced SEO tools for content creators and SEO professionals.
 
-## About
+---
 
-FP SEO Performance equips editors and site managers with actionable feedback while writing content. It calculates SEO scores in the editor, shows a contextual badge in the admin bar, and keeps configuration centralized in a dedicated settings area.
+## 🚀 Features
 
-## Features
+### 🤖 **AI-Powered Content Generation** ⚡ NEW!
+- **GPT-5 Nano Integration** - Lightning-fast, cost-effective AI generation
+- **One-Click SEO Generation** - Generate SEO title, meta description, slug, and focus keyword instantly
+- **Smart Context Analysis** - AI analyzes categories, tags, post type, and excerpt for better results
+- **Focus Keyword Targeting** - Optional keyword input for precise optimization
+- **Character Limit Enforcement** - Strict validation (60 chars title, 155 chars meta)
+- **Real-time Counters** - Color-coded character counters (🟢🟠🔴)
+- **Multi-Model Support** - GPT-5 Nano/Mini/Pro, GPT-4o (legacy), GPT-3.5 Turbo
+- **Cost Effective** - ~$0.001 per generation with GPT-5 Nano
+- **Apply with One Click** - Auto-populate title and slug
+- **Copy to Clipboard** - Easy manual application
 
-- On-page SEO analyzer with checks for titles, descriptions, headings, canonical URLs, robots directives, Open Graph and Twitter cards, structured data presets, and internal links.
-- Admin bar badge that displays the current post score for quick diagnostics while editing.
-- Bulk audit screen that batches analysis across posts, exports CSV reports, and caches recent runs for fast review.
-- Configurable scoring weights, language hints, and analyzer toggles stored in WordPress options.
-- Site Health integration that surfaces outstanding SEO tasks to administrators.
-- **NEW**: Intelligent caching system for improved performance (up to 70% fewer database queries).
-- **NEW**: Structured logging with PSR-3 compatibility for debugging and monitoring.
-- **NEW**: 15+ hooks and filters for maximum extensibility.
-- **NEW**: Custom exception hierarchy for robust error handling.
-- **NEW**: Complete CI/CD pipeline with automated testing and quality checks.
+### ✅ **Core SEO Analysis**
+- **Real-time On-page Analysis** - 15+ configurable SEO checks
+- **Bulk Audit System** - Analyze multiple posts simultaneously
+- **SEO Score Tracking** - Historical performance tracking
+- **Admin Bar Badge** - Quick SEO status at a glance
+- **Site Health Integration** - WordPress Site Health checks
 
-### 🎯 Search Intent Analysis (NEW)
+### 🤖 **GEO (Generative Engine Optimization)**
+- **AI.txt Support** - Define AI crawling policies (`/.well-known/ai.txt`)
+- **GEO Sitemap** - Dedicated sitemap for AI engines (`/geo-sitemap.xml`)
+- **Structured Content** - JSON endpoints for LLM consumption
+  - `/geo/site.json` - Site-level metadata
+  - `/geo/content/{id}.json` - Per-post structured data
+  - `/geo/updates.json` - Recent updates feed
+- **Claims Editor** - Manage factual claims with evidence
+- **Semantic Shortcodes** - `[fp_claim]`, `[fp_citation]`, `[fp_faq]`
+- **Extended JSON-LD** - ClaimReview, CreativeWork schemas
 
-- **Search Intent Detector**: Analizza automaticamente l'intento di ricerca del contenuto (Informational, Transactional, Commercial, Navigational).
-- **Intent Confidence Score**: Fornisce un punteggio di confidenza (0-100%) sul tipo di intent rilevato.
-- **Smart Recommendations**: Raccomandazioni personalizzate basate sull'intent per ottimizzare il contenuto.
-- **Multilingual Support**: Riconosce keyword in italiano e inglese per massima flessibilità.
+### 📊 **Google Search Console Integration**
+- **Service Account Authentication** - Server-to-server GSC connection
+- **Site-wide Metrics** - Clicks, impressions, CTR, avg. position
+- **Per-post Metrics** - Individual content performance tracking
+- **Top Queries Dashboard** - Most performing search queries
+- **Dashboard Widget** - Quick GSC overview in WordPress admin
 
-> **📚 [Guida completa: Search Intent Optimization](docs/SEARCH_INTENT_OPTIMIZATION.md)** - Impara a ottimizzare i contenuti allineandoli perfettamente con l'intento di ricerca degli utenti.
+### ⚡ **Instant Indexing**
+- **Auto-submit to Google** - Automatic URL submission on publish/update
+- **Google Indexing API** - Direct integration with Google's Indexing API
+- **URL_UPDATED / URL_DELETED** - Proper notification types
+- **Error Logging** - Track submission success/failures
 
-### 🤖 AI Overview Optimization (NEW)
+### 📈 **Advanced Features**
+- **Score History** - Database-backed SEO score tracking over time
+- **Internal Linking Suggestions** - AI-powered link recommendations
+- **Real-time SERP Preview** - Live Google search preview in editor
+- **Content Optimization** - Keyword density, readability checks
+- **Meta Management** - Title, description, focus keyword
+- **Test Suite** - Built-in automated testing (51 tests)
+- **Developer Tools** - Comprehensive debugging and validation
 
-- **FAQ Schema Check**: Verifica la presenza di FAQ Schema markup, essenziale per apparire nelle Google AI Overview e nelle ricerche conversazionali.
-- **HowTo Schema Check**: Analizza guide e tutorial per HowTo Schema markup, ottimizzando la visibilità per query procedurali.
-- **AI-Optimized Content Check**: Valuta la struttura dei contenuti (paragrafi brevi, liste, domande esplicite) per massimizzare l'estrazione da parte delle AI.
-- **Speakable Markup Support**: Supporto per markup speakable in Article/BlogPosting per ottimizzazione ricerche vocali.
+### 🎨 **Modern UI**
+- Clean, gradient-based design system
+- Responsive admin interface
+- Real-time visual feedback
+- Inline CSS (cache-proof)
+- Accessible components
+- Dark mode compatible
+- Color-coded indicators for instant feedback
 
-> **📚 [Guida completa: AI Overview Optimization](docs/AI_OVERVIEW_OPTIMIZATION.md)** - Scopri come ottimizzare i tuoi contenuti per le AI Overview di Google.
+---
 
-## Installation
+## 📦 Installation
 
-1. Download the latest release archive from the repository or build script outputs.
-2. Upload the extracted `fp-seo-performance` directory to `wp-content/plugins/` or install the ZIP via **Plugins → Add New** in the WordPress dashboard.
-3. Activate **FP SEO Performance** from the Plugins screen.
-4. Visit **SEO Performance → Settings** to review analyzer defaults and permissions.
+### Requirements
+- **WordPress**: 6.2 or higher
+- **PHP**: 8.0 or higher
+- **Composer**: For dependency management
 
-## Usage
+### Method 1: Manual Installation
 
-- Edit any post or page to see the analyzer metabox with detailed check results.
-- Enable the admin bar badge in **Settings → General** to monitor scores at a glance.
-- Launch the **Bulk Auditor** submenu to batch analyze filtered content and download CSV summaries.
-- Adjust scoring weights, enable performance heuristics, or set custom capabilities within the settings tabs.
-- **NEW**: Attiva i check AI Overview in **Settings → Analysis** per ottimizzare i contenuti per le ricerche AI di Google.
-- **NEW**: Utilizza il Search Intent Analyzer per allineare i tuoi contenuti con le aspettative degli utenti e migliorare il posizionamento.
+1. **Download** the plugin:
+   ```bash
+   git clone https://github.com/francescopasseri/fp-seo-performance.git
+   cd fp-seo-performance
+   ```
 
-## Hooks & Filters
+2. **Install dependencies**:
+   ```bash
+   composer install --no-dev
+   ```
 
-### Actions
+3. **Upload** to WordPress:
+   - Copy the plugin folder to `wp-content/plugins/`
+   - Or upload as ZIP via WordPress admin
 
-| Hook | Parameters | Description |
-| --- | --- | --- |
-| `fp_seo_before_analysis` | `Context $context` | Fires before analysis begins |
-| `fp_seo_after_analysis` | `array $result, Context $context` | Fires after analysis completes |
-| `fp_seo_before_check` | `CheckInterface $check, Context $context` | Fires before each individual check runs |
-| `fp_seo_after_check` | `array $result, CheckInterface $check, Context $context` | Fires after each check completes |
-| `fp_seo_log` | `string $level, string $message, array $context, string $formatted` | Fires when a log entry is created |
+4. **Activate**:
+   - Go to **Plugins → Installed Plugins**
+   - Click **Activate** on "FP SEO Performance"
 
-### Filters
+5. **Flush Permalinks**:
+   - Go to **Settings → Permalinks**
+   - Click **Save Changes** (activates GEO endpoints)
 
-| Hook | Parameters | Return Type | Description |
-| --- | --- | --- | --- |
-| `fp_seo_perf_checks_enabled` | `array $checks, Context $context` | `array` | Modify the list of enabled analyzer checks before scoring runs |
-| `fp_seo_analyzer_checks` | `array $checks, Context $context` | `array` | Modify the complete list of analyzer checks |
-| `fp_seo_check_result` | `array $result, CheckInterface $check, Context $context` | `array` | Modify an individual check result |
-| `fp_seo_analysis_status` | `string $status, array $summary, Context $context` | `string` | Modify the overall analysis status |
-| `fp_seo_analysis_result` | `array $result, Context $context` | `array` | Modify the complete analysis result |
+### Method 2: Composer (Advanced)
 
-For detailed usage examples and additional documentation, see [IMPROVEMENTS.md](IMPROVEMENTS.md).
+Add to your `composer.json`:
+```json
+{
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/francescopasseri/fp-seo-performance"
+    }
+  ],
+  "require": {
+    "fp/fp-seo-performance": "^0.4"
+  }
+}
+```
+
+Then run:
+```bash
+composer install
+```
+
+---
+
+## ⚙️ Configuration
+
+### 🤖 AI Setup (Quick Start - 2 Minutes)
+
+1. **Get OpenAI API Key**:
+   - Visit [OpenAI Platform](https://platform.openai.com/api-keys)
+   - Create account or sign in
+   - Click "Create new secret key"
+   - Copy the key (starts with `sk-`)
+
+2. **Configure Plugin**:
+   - Go to **FP SEO Performance → Settings → AI**
+   - Paste your API key in "API Key OpenAI" field
+   - Verify model: **GPT-5 Nano ⚡** (recommended - already selected)
+   - Ensure all checkboxes are enabled ✓
+   - Click **Save Changes**
+   - You should see "✓ API Key configurata correttamente" (green)
+
+3. **Start Generating**:
+   - Open any post/page in editor
+   - Scroll to "SEO Performance" metabox
+   - Find "🤖 Generazione AI - Contenuti SEO" section
+   - (Optional) Enter focus keyword: e.g., "SEO WordPress"
+   - Click **"Genera con AI"**
+   - Wait 3-5 seconds
+   - Review generated content with character counts
+   - Click **"Applica questi suggerimenti"**
+   - Save your post
+
+📖 **Complete AI Guide**: See [AI Integration Guide](docs/AI_INTEGRATION.md)
+
+### Basic Setup
+
+1. **Configure SEO Checks**:
+   - Go to **Settings → FP SEO → Analysis**
+   - Enable/disable specific checks
+   - Adjust scoring weights
+
+2. **Set Analyzable Post Types**:
+   - Go to **Settings → FP SEO → General**
+   - Select which post types to analyze
+
+### Google Search Console Setup
+
+1. **Create Google Cloud Project**:
+   - Visit [Google Cloud Console](https://console.cloud.google.com)
+   - Create new project or select existing
+
+2. **Enable APIs**:
+   - Enable **Google Search Console API**
+   - Enable **Web Search Indexing API** (for instant indexing)
+
+3. **Create Service Account**:
+   - Go to **IAM & Admin → Service Accounts**
+   - Create service account
+   - Download JSON key
+
+4. **Add to Search Console**:
+   - Copy service account email from JSON
+   - Add as **Owner** in [Google Search Console](https://search.google.com/search-console)
+
+5. **Configure Plugin**:
+   - Go to **Settings → FP SEO → Google Search Console**
+   - Paste entire JSON key
+   - Enter site URL (e.g., `https://yoursite.com/`)
+   - Enable GSC Data
+   - Enable Auto-indexing (optional)
+   - Click **Test Connection**
+
+📖 **Detailed guide**: See [GSC Integration Guide](docs/GSC_INTEGRATION.md)
+
+### GEO Configuration
+
+1. **Enable GEO**:
+   - Go to **Settings → FP SEO → GEO**
+   - Configure AI crawling policies
+   - Set content freshness settings
+
+2. **Add Claims to Posts**:
+   - Edit any post/page
+   - Find "FP GEO Claims" metabox
+   - Add claims with evidence
+
+3. **Use Shortcodes**:
+   ```
+   [fp_claim evidence_url="https://source.com"]Your claim here[/fp_claim]
+   [fp_citation url="https://source.com" author="Name"]Quote[/fp_citation]
+   [fp_faq question="How to...?"]Answer here[/fp_faq]
+   ```
+
+---
 
 ## 📚 Documentation
 
-### SEO Optimization Guides
+### AI Documentation
+- **[AI Integration Guide](docs/AI_INTEGRATION.md)** - Complete guide to AI features
+- **[AI Context System](docs/AI_CONTEXT_SYSTEM.md)** - How AI understands your content
+- **[AI Implementation Summary](AI_IMPLEMENTATION_SUMMARY.md)** - Technical details
 
-- **[SEO Improvement Guide](docs/SEO_IMPROVEMENT_GUIDE.md)** - Guida completa con consigli pratici per migliorare la SEO (Quick wins, Technical SEO, Content Quality, Schema Markup)
-- **[Search Intent Optimization](docs/SEARCH_INTENT_OPTIMIZATION.md)** - Come ottimizzare i contenuti allineandoli con l'intento di ricerca degli utenti
-- **[AI Overview Optimization](docs/AI_OVERVIEW_OPTIMIZATION.md)** - Strategie per apparire nelle AI Overview di Google
+### Testing
+- **[Quick Test Guide](QUICK_TEST_GUIDE.md)** - 5-minute functionality test
+- **[Test Checklist](TEST_CHECKLIST.md)** - Complete manual testing (70+ tests)
+- **Test Suite** - Built-in: FP SEO Performance → Test Suite
 
-### Technical Documentation
+### General Documentation
+- **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
+- **[GSC Integration](docs/GSC_INTEGRATION.md)** - Google Search Console setup
+- **[Indexing API Setup](docs/INDEXING_API_SETUP.md)** - Instant indexing configuration
+- **[GEO Guide](docs/GEO_GUIDE.md)** - Generative Engine Optimization
+- **[API Reference](docs/API.md)** - Hooks, filters, and functions
+- **[Changelog](CHANGELOG.md)** - Version history
 
-- **[Architecture](docs/architecture.md)** - Architettura del plugin e design patterns
-- **[Extending](docs/EXTENDING.md)** - Come estendere il plugin con custom checks
-- **[Best Practices](docs/BEST_PRACTICES.md)** - Best practices per sviluppatori
+---
 
-## Support
+## 🧪 Testing
 
-For support requests or customizations, reach out via [francescopasseri.com](https://francescopasseri.com/contact/).
+Run the automated test suite:
 
-## Development
+**URL**: `http://yoursite.local/wp-content/plugins/FP-SEO-Manager/test-all-features.php`
 
-- Run `composer install` and `npm install` to set up dependencies.
-- Execute `composer lint`, `composer test`, and `npm run changelog:from-git` as needed.
-- Synchronize author metadata with `npm run sync:author APPLY=true`.
+**Tests Include**:
+- ✅ Composer autoload verification
+- ✅ Google API Client library
+- ✅ All class existence checks
+- ✅ Database table verification
+- ✅ GEO endpoint accessibility
+- ✅ Hook registration
+- ✅ Functional tests
 
-## Changelog
+**Expected**: 90%+ success rate
 
-See [CHANGELOG.md](CHANGELOG.md) for the full project history.
+---
 
-## Text Domain
+## 🔧 Development
 
-- Text domain: `fp-seo-performance`
-- Domain path: `/languages`
+### Local Setup
 
-## Assumptions
+1. Clone repository:
+   ```bash
+   git clone https://github.com/francescopasseri/fp-seo-performance.git
+   cd fp-seo-performance
+   ```
 
-- Issue tracking is handled privately via the contact form at francescopasseri.com.
+2. Install all dependencies (including dev):
+   ```bash
+   composer install
+   ```
+
+3. Run tests:
+   ```bash
+   composer test
+   ```
+
+4. Check code standards:
+   ```bash
+   composer phpcs
+   ```
+
+5. Static analysis:
+   ```bash
+   composer phpstan
+   ```
+
+### Project Structure
+
+```
+fp-seo-performance/
+├── assets/                 # Frontend assets
+│   └── admin/
+│       ├── css/           # Stylesheets
+│       └── js/            # JavaScript modules
+├── docs/                  # Documentation
+├── src/                   # PHP source files (PSR-4)
+│   ├── Admin/            # Admin UI components
+│   ├── Analysis/         # SEO analysis engine
+│   ├── Editor/           # Post editor integration
+│   ├── Front/            # Frontend features
+│   ├── GEO/              # GEO implementation
+│   ├── History/          # Score tracking
+│   ├── Infrastructure/   # Core plugin bootstrap
+│   ├── Integrations/     # External API integrations
+│   ├── Linking/          # Internal linking
+│   ├── Scoring/          # Scoring engine
+│   ├── Shortcodes/       # Shortcode handlers
+│   ├── SiteHealth/       # WordPress Site Health
+│   └── Utils/            # Utility classes
+├── tests/                # PHPUnit tests
+├── vendor/               # Composer dependencies (gitignored)
+├── composer.json         # Composer configuration
+├── fp-seo-performance.php # Main plugin file
+└── README.md            # This file
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### Coding Standards
+
+- Follow **WordPress Coding Standards**
+- Use **PSR-4** autoloading
+- Add **PHPDoc** comments
+- Write **unit tests** for new features
+- Run `composer phpcs` before committing
+
+---
+
+## 📄 License
+
+This plugin is licensed under the **GPL-2.0-or-later** license.
+
+See [LICENSE](LICENSE) for more information.
+
+---
+
+## 🙏 Credits
+
+**Author**: [Francesco Passeri](https://francescopasseri.com)  
+**Website**: [francescopasseri.com](https://francescopasseri.com)  
+**Email**: info@francescopasseri.com
+
+### Dependencies
+
+- [Google API PHP Client](https://github.com/googleapis/google-api-php-client) - Apache 2.0 License
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/francescopasseri/fp-seo-performance/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/francescopasseri/fp-seo-performance/discussions)
+- **Email**: info@francescopasseri.com
+- **Website**: [francescopasseri.com](https://francescopasseri.com)
+
+---
+
+## 🗺️ Roadmap
+
+### v0.5.0 (Planned)
+- [ ] Schema.org generator UI
+- [ ] Advanced keyword tracking
+- [ ] Competitor analysis
+- [ ] Content gap analysis
+- [ ] AI-powered content suggestions
+
+### v1.0.0 (Future)
+- [ ] Multi-language support
+- [ ] WooCommerce integration
+- [ ] Custom report builder
+- [ ] API for third-party integrations
+- [ ] Mobile app companion
+
+---
+
+## ⭐ Show Your Support
+
+If you find this plugin helpful, please:
+- ⭐ **Star** this repository
+- 🐛 **Report bugs** via GitHub Issues
+- 💡 **Suggest features** via GitHub Discussions
+- 📢 **Share** with the WordPress community
+- ☕ **Support development** via [Buy Me a Coffee](https://buymeacoffee.com/francescopasseri)
+
+---
+
+**Made with ❤️ by [Francesco Passeri](https://francescopasseri.com)**

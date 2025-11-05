@@ -1,0 +1,277 @@
+/**
+ * AI Generator Enhancements - Ultra-Light
+ * Micro-miglioramenti UI con CSS puro - < 3KB
+ * 
+ * @package FP\SEO
+ */
+
+/* ===========================
+   CHARACTER COUNTER ENHANCED
+   =========================== */
+
+.fp-seo-char-counter {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 15px;
+	font-weight: 600;
+	transition: all 0.2s ease;
+	font-variant-numeric: tabular-nums; /* Numeri allineati */
+}
+
+.fp-seo-char-counter__current {
+	font-size: 18px;
+	font-weight: 700;
+	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Stati con classi invece di inline styles */
+.fp-seo-char-counter--ok .fp-seo-char-counter__current {
+	color: #059669;
+}
+
+.fp-seo-char-counter--warning .fp-seo-char-counter__current {
+	color: #f59e0b;
+	animation: fp-seo-pulse 2s ease-in-out infinite;
+}
+
+.fp-seo-char-counter--error .fp-seo-char-counter__current {
+	color: #dc2626;
+	font-size: 20px;
+	animation: fp-seo-attention 0.6s ease-in-out;
+}
+
+/* Animazioni micro (CSS puro, 0 JS) */
+@keyframes fp-seo-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.7; }
+}
+
+@keyframes fp-seo-attention {
+	0%, 100% { transform: scale(1); }
+	25% { transform: scale(1.1); }
+	50% { transform: scale(0.95); }
+	75% { transform: scale(1.05); }
+}
+
+/* ===========================
+   AI RESULTS ENHANCED
+   =========================== */
+
+#fp-seo-ai-results {
+	animation: fp-seo-slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fp-seo-slide-up {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Success state con CSS */
+.fp-seo-ai-success {
+	animation: fp-seo-success-bounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes fp-seo-success-bounce {
+	0% {
+		opacity: 0;
+		transform: scale(0.9);
+	}
+	50% {
+		transform: scale(1.02);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+/* ===========================
+   LOADING STATE ENHANCED
+   =========================== */
+
+#fp-seo-ai-loading {
+	animation: fp-seo-fade-in 0.3s ease;
+}
+
+@keyframes fp-seo-fade-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+/* Spinner migliorato (solo CSS) */
+.fp-seo-loading::after {
+	content: '';
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	margin-left: 8px;
+	border: 2px solid rgba(37, 99, 235, 0.2);
+	border-top-color: #2563eb;
+	border-radius: 50%;
+	animation: fp-seo-spin 0.6s linear infinite;
+}
+
+@keyframes fp-seo-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* ===========================
+   BUTTONS ENHANCED
+   =========================== */
+
+#fp-seo-ai-generate-btn:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+#fp-seo-ai-generate-btn:active {
+	transform: translateY(0);
+	box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+/* Celebrazione micro - solo CSS */
+.fp-seo-celebrate {
+	animation: fp-seo-celebrate 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes fp-seo-celebrate {
+	0% { transform: scale(1); }
+	25% { transform: scale(0.95) rotate(-5deg); }
+	50% { transform: scale(1.1) rotate(5deg); }
+	75% { transform: scale(0.95) rotate(-2deg); }
+	100% { transform: scale(1) rotate(0deg); }
+}
+
+/* ===========================
+   SERP PREVIEW ENHANCED
+   =========================== */
+
+.fp-seo-serp-preview__title {
+	transition: color 0.2s ease;
+}
+
+.fp-seo-serp-preview__title:hover {
+	color: #5f13c5; /* Google visited purple */
+}
+
+/* Truncation warning più visibile */
+.fp-seo-serp-preview__title--truncated::after,
+.fp-seo-serp-preview__description--truncated::after {
+	animation: fp-seo-blink 1.5s ease-in-out infinite;
+}
+
+@keyframes fp-seo-blink {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.5; }
+}
+
+/* ===========================
+   TOAST NOTIFICATIONS (se usate)
+   =========================== */
+
+.fp-seo-toast {
+	animation: fp-seo-toast-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.fp-seo-toast--out {
+	animation: fp-seo-toast-out 0.3s ease forwards;
+}
+
+@keyframes fp-seo-toast-in {
+	from {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes fp-seo-toast-out {
+	to {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+}
+
+/* ===========================
+   MICRO-INTERACTIONS
+   =========================== */
+
+/* Input focus enhanced */
+#fp-seo-ai-focus-keyword-input:focus {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+	transition: all 0.2s ease;
+}
+
+/* Textarea auto-grow feedback */
+#fp-seo-ai-title:focus,
+#fp-seo-ai-description:focus {
+	transform: scale(1.005);
+	transition: transform 0.2s ease;
+}
+
+/* ===========================
+   PERFORMANCE OPTIMIZATIONS
+   =========================== */
+
+/* Usa will-change solo quando necessario */
+#fp-seo-ai-results.is-animating {
+	will-change: transform, opacity;
+}
+
+/* Remove will-change dopo animazione (gestito via JS) */
+#fp-seo-ai-results:not(.is-animating) {
+	will-change: auto;
+}
+
+/* Preferisci transform a top/left per performance */
+.fp-seo-smooth-move {
+	transition: transform 0.2s ease;
+}
+
+/* ===========================
+   RESPONSIVE TWEAKS
+   =========================== */
+
+@media (max-width: 782px) {
+	.fp-seo-char-counter {
+		font-size: 14px;
+	}
+	
+	.fp-seo-char-counter__current {
+		font-size: 16px;
+	}
+	
+	.fp-seo-char-counter--error .fp-seo-char-counter__current {
+		font-size: 18px;
+	}
+}
+
+/* ===========================
+   REDUCE MOTION (Accessibility)
+   =========================== */
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+	
+	.fp-seo-char-counter--warning .fp-seo-char-counter__current,
+	.fp-seo-char-counter--error .fp-seo-char-counter__current {
+		animation: none;
+	}
+}

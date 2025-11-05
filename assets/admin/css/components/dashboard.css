@@ -1,0 +1,343 @@
+/**
+ * Dashboard Component Styles
+ * Stili per la pagina dashboard principale del plugin
+ */
+
+/* Dashboard Container */
+.fp-seo-performance-dashboard {
+	max-width: 1400px;
+	background: var(--fp-seo-gray-50) !important;
+	border-radius: 0 !important;
+}
+
+.fp-seo-performance-dashboard > h1 {
+	font-size: var(--fp-seo-font-size-3xl) !important;  /* Unificato 30px */
+	font-weight: 700 !important;
+	background: linear-gradient(135deg, var(--fp-seo-primary) 0%, var(--fp-seo-primary-dark) 100%) !important;
+	-webkit-background-clip: text !important;
+	-webkit-text-fill-color: transparent !important;
+	background-clip: text !important;
+	margin-bottom: var(--fp-seo-space-3) !important;  /* 12px */
+	padding: 0 !important;
+}
+
+.fp-seo-performance-dashboard > .description {
+	font-size: var(--fp-seo-font-size-base) !important;  /* 16px */
+	color: var(--fp-seo-gray-600) !important;
+	margin-bottom: var(--fp-seo-space-7) !important;  /* 28px */
+	font-weight: 400 !important;
+}
+
+/* Dashboard Grid */
+.fp-seo-performance-dashboard__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+	gap: var(--fp-seo-space-5);  /* 20px */
+	margin-bottom: var(--fp-seo-space-8);  /* 32px */
+}
+
+/* Dashboard Cards */
+.fp-seo-performance-dashboard__card {
+	background: var(--fp-seo-white);
+	border: 1px solid var(--fp-seo-gray-200);
+	border-radius: var(--fp-seo-radius);
+	padding: var(--fp-seo-space-6);  /* 24px */
+	box-shadow: var(--fp-seo-shadow);
+	transition: var(--fp-seo-transition-slow);  /* Unificato */
+}
+
+.fp-seo-performance-dashboard__card:hover {
+	box-shadow: var(--fp-seo-shadow-lg);
+	transform: translateY(-2px);
+}
+
+.fp-seo-performance-dashboard__card > h2 {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--fp-seo-gray-900);
+	margin: 0 0 16px;
+	padding-bottom: 12px;
+	border-bottom: 2px solid var(--fp-seo-gray-200);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.fp-seo-performance-dashboard__card > h2::before {
+	content: '';
+	display: inline-block;
+	width: 4px;
+	height: 20px;
+	background: var(--fp-seo-primary);
+	border-radius: 2px;
+}
+
+.fp-seo-performance-dashboard__card > p {
+	font-size: 14px;
+	color: var(--fp-seo-gray-700);
+	line-height: 1.6;
+	margin: 0 0 16px;
+}
+
+/* Metrics List */
+.fp-seo-performance-dashboard__metrics {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 12px;
+}
+
+.fp-seo-performance-dashboard__metrics li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	background: var(--fp-seo-gray-50);
+	border-radius: 6px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--fp-seo-gray-700);
+	border-left: 3px solid var(--fp-seo-primary);
+	transition: all 0.2s ease;
+}
+
+.fp-seo-performance-dashboard__metrics li:hover {
+	background: var(--fp-seo-gray-100);
+	border-left-color: var(--fp-seo-primary-dark);
+	transform: translateX(2px);
+}
+
+.fp-seo-performance-dashboard__metrics li::before {
+	content: '•';
+	font-size: 20px;
+	color: var(--fp-seo-primary);
+	line-height: 1;
+}
+
+/* Recent Results Section */
+.fp-seo-performance-dashboard > h2 {
+	font-size: 20px;
+	font-weight: 600;
+	color: var(--fp-seo-gray-900);
+	margin: 32px 0 16px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.fp-seo-performance-dashboard > h2::before {
+	content: '📊';
+	font-size: 24px;
+}
+
+/* Enhanced Table */
+.fp-seo-performance-dashboard table.widefat {
+	border: 1px solid var(--fp-seo-gray-200);
+	border-radius: var(--fp-seo-radius);
+	overflow: hidden;
+	box-shadow: var(--fp-seo-shadow);
+}
+
+.fp-seo-performance-dashboard table.widefat thead {
+	background: linear-gradient(135deg, var(--fp-seo-primary) 0%, var(--fp-seo-primary-dark) 100%);
+}
+
+.fp-seo-performance-dashboard table.widefat thead th {
+	color: var(--fp-seo-white);
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 11px;
+	letter-spacing: 0.5px;
+	padding: 14px 10px;
+	border-bottom: none;
+}
+
+.fp-seo-performance-dashboard table.widefat tbody tr {
+	transition: all 0.2s ease;
+	border-bottom: 1px solid var(--fp-seo-gray-200);
+}
+
+.fp-seo-performance-dashboard table.widefat tbody tr:hover {
+	background-color: var(--fp-seo-gray-50);
+	transform: scale(1.01);
+}
+
+.fp-seo-performance-dashboard table.widefat tbody td {
+	padding: 12px 10px;
+	font-size: 13px;
+	color: var(--fp-seo-gray-700);
+}
+
+.fp-seo-performance-dashboard table.widefat tbody td a {
+	color: var(--fp-seo-primary);
+	text-decoration: none;
+	font-weight: 500;
+	transition: color 0.2s ease;
+}
+
+.fp-seo-performance-dashboard table.widefat tbody td a:hover {
+	color: var(--fp-seo-primary-dark);
+	text-decoration: underline;
+}
+
+/* Status Badges */
+.fp-seo-status-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: capitalize;
+}
+
+.fp-seo-status-badge::before {
+	content: '';
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+
+.fp-seo-status-badge--healthy {
+	background: var(--fp-seo-success-light);
+	color: var(--fp-seo-success);
+}
+
+.fp-seo-status-badge--healthy::before {
+	background: var(--fp-seo-success);
+	box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
+}
+
+.fp-seo-status-badge--needs-review {
+	background: var(--fp-seo-warning-light);
+	color: #92400e;
+}
+
+.fp-seo-status-badge--needs-review::before {
+	background: var(--fp-seo-warning);
+	box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.fp-seo-status-badge--critical {
+	background: var(--fp-seo-danger-light);
+	color: var(--fp-seo-danger);
+}
+
+.fp-seo-status-badge--critical::before {
+	background: var(--fp-seo-danger);
+	box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+.fp-seo-status-badge--pending {
+	background: var(--fp-seo-gray-200);
+	color: var(--fp-seo-gray-700);
+}
+
+.fp-seo-status-badge--pending::before {
+	background: var(--fp-seo-gray-500);
+}
+
+/* Score Display in Table */
+.fp-seo-score-display {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 50px;
+	padding: 6px 12px;
+	border-radius: 999px;
+	font-weight: 700;
+	font-size: 14px;
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	color: var(--fp-seo-white);
+	box-shadow: var(--fp-seo-shadow-sm);
+}
+
+.fp-seo-score-display--high {
+	background: linear-gradient(135deg, var(--fp-seo-success) 0%, #047857 100%);
+}
+
+.fp-seo-score-display--medium {
+	background: linear-gradient(135deg, var(--fp-seo-warning) 0%, #d97706 100%);
+}
+
+.fp-seo-score-display--low {
+	background: linear-gradient(135deg, var(--fp-seo-danger) 0%, #b91c1c 100%);
+}
+
+/* Empty State */
+.fp-seo-performance-dashboard__empty {
+	text-align: center;
+	padding: 60px 20px;
+	background: var(--fp-seo-gray-50);
+	border-radius: var(--fp-seo-radius);
+	border: 2px dashed var(--fp-seo-gray-300);
+}
+
+.fp-seo-performance-dashboard__empty-icon {
+	font-size: 64px;
+	margin-bottom: 16px;
+	opacity: 0.4;
+}
+
+.fp-seo-performance-dashboard__empty-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--fp-seo-gray-700);
+	margin: 0 0 8px;
+}
+
+.fp-seo-performance-dashboard__empty-description {
+	font-size: 14px;
+	color: var(--fp-seo-gray-600);
+	margin: 0;
+}
+
+/* Quick Stats */
+.fp-seo-quick-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 16px;
+	margin: 20px 0;
+}
+
+.fp-seo-quick-stat {
+	background: linear-gradient(135deg, #fff 0%, var(--fp-seo-gray-50) 100%);
+	padding: 20px;
+	border-radius: var(--fp-seo-radius);
+	border: 1px solid var(--fp-seo-gray-200);
+	box-shadow: var(--fp-seo-shadow-sm);
+	text-align: center;
+	transition: all 0.3s ease;
+}
+
+.fp-seo-quick-stat:hover {
+	transform: translateY(-4px);
+	box-shadow: var(--fp-seo-shadow-md);
+}
+
+.fp-seo-quick-stat__icon {
+	font-size: 32px;
+	margin-bottom: 12px;
+}
+
+.fp-seo-quick-stat__value {
+	display: block;
+	font-size: 32px;
+	font-weight: 700;
+	color: var(--fp-seo-gray-900);
+	line-height: 1;
+	margin-bottom: 8px;
+}
+
+.fp-seo-quick-stat__label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fp-seo-gray-600);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+

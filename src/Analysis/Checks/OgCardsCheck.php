@@ -16,6 +16,8 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Utils\I18n;
 use function count;
+use function implode;
+use function sprintf;
 use function trim;
 
 /**
@@ -76,13 +78,34 @@ class OgCardsCheck implements CheckInterface {
 				array(
 					'tags' => $present,
 				),
-				I18n::translate( 'Required Open Graph tags detected.' ),
+				sprintf(
+					/* translators: %d: count of tags */
+					I18n::translate( '✅ Perfetto! Tutti i %d Open Graph tag richiesti sono presenti.' ),
+					count( $required )
+				),
 				0.08
 			);
 		}
 
-		$status       = count( $missing ) > 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
-				$hint = I18n::translate( 'Add missing Open Graph tags (title, description, URL, or image) to improve social sharing previews.' );
+		$missing_count = count( $missing );
+		$status        = $missing_count > 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
+		$missing_list  = implode( ', ', $missing );
+		
+		if ( $missing_count > 2 ) {
+			$hint = sprintf(
+				/* translators: 1: count of missing tags, 2: list of missing tags */
+				I18n::translate( '❌ Mancano %1$d Open Graph tag: %2$s. Aggiungili tutti!' ),
+				$missing_count,
+				$missing_list
+			);
+		} else {
+			$hint = sprintf(
+				/* translators: 1: count of missing tags, 2: list of missing tags */
+				I18n::translate( '⚠️ Manca %1$d tag: %2$s. Aggiungilo per completare al 100%%!' ),
+				$missing_count,
+				$missing_list
+			);
+		}
 
 		return new Result(
 			$status,

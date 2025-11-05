@@ -66,7 +66,7 @@ class CanonicalCheck implements CheckInterface {
 				array(
 					'canonical' => '',
 				),
-				I18n::translate( 'Set a canonical URL to avoid duplicate content issues.' ),
+				I18n::translate( '❌ Canonical URL assente. Aggiungi un canonical URL per evitare duplicati.' ),
 				0.10
 			);
 		}
@@ -77,7 +77,7 @@ class CanonicalCheck implements CheckInterface {
 				array(
 					'canonical' => $canonical,
 				),
-				I18n::translate( 'Canonical URL must be an absolute, valid URL.' ),
+				I18n::translate( '❌ Canonical URL non valido. Correggi l\'URL (deve essere assoluto e valido).' ),
 				0.10
 			);
 		}
@@ -87,7 +87,7 @@ class CanonicalCheck implements CheckInterface {
 			array(
 				'canonical' => $canonical,
 			),
-			I18n::translate( 'Canonical tag looks valid.' ),
+			I18n::translate( '✅ Canonical URL valido e corretto.' ),
 			0.10
 		);
 	}

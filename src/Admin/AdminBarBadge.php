@@ -79,14 +79,23 @@ class AdminBarBadge {
 			return;
 		}
 
-		$context = new Context(
-			(int) $post->ID,
-			(string) $post->post_content,
-			(string) $post->post_title,
-			MetadataResolver::resolve_meta_description( $post ),
-			function_exists( 'get_permalink' ) ? get_permalink( $post ) : null,
-			MetadataResolver::resolve_robots( $post )
-		);
+	$focus_keyword = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
+	$secondary_keywords = get_post_meta( $post->ID, '_fp_seo_secondary_keywords', true );
+	
+	if ( ! is_array( $secondary_keywords ) ) {
+		$secondary_keywords = array();
+	}
+	
+	$context = new Context(
+		(int) $post->ID,
+		(string) $post->post_content,
+		(string) $post->post_title,
+		MetadataResolver::resolve_meta_description( $post ),
+		function_exists( 'get_permalink' ) ? get_permalink( $post ) : null,
+		MetadataResolver::resolve_robots( $post ),
+		is_string( $focus_keyword ) ? $focus_keyword : '',
+		$secondary_keywords
+	);
 
 		$analyzer     = new Analyzer();
 		$analysis     = $analyzer->analyze( $context );

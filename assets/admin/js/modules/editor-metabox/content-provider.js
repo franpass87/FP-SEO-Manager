@@ -20,13 +20,18 @@ function getGutenbergContent() {
 		return null;
 	}
 
+	const focusKeywordField = document.getElementById('fp-seo-focus-keyword');
+	const secondaryKeywordsField = document.getElementById('fp-seo-secondary-keywords');
+
 	return {
 		title: select.getEditedPostAttribute('title') || '',
 		content: select.getEditedPostAttribute('content') || '',
 		excerpt: select.getEditedPostAttribute('excerpt') || '',
 		metaDescription: (select.getEditedPostAttribute('meta') || {}).fp_seo_meta_description || '',
 		canonical: (select.getEditedPostAttribute('meta') || {}).fp_seo_meta_canonical || '',
-		robots: (select.getEditedPostAttribute('meta') || {}).fp_seo_meta_robots || ''
+		robots: (select.getEditedPostAttribute('meta') || {}).fp_seo_meta_robots || '',
+		focusKeyword: focusKeywordField ? focusKeywordField.value || '' : '',
+		secondaryKeywords: secondaryKeywordsField ? secondaryKeywordsField.value || '' : ''
 	};
 }
 
@@ -41,12 +46,16 @@ function getClassicContent() {
 		excerpt: '',
 		metaDescription: '',
 		canonical: '',
-		robots: ''
+		robots: '',
+		focusKeyword: '',
+		secondaryKeywords: ''
 	};
 
 	const titleField = document.getElementById('title');
 	const contentField = document.getElementById('content');
 	const excerptField = document.getElementById('excerpt');
+	const focusKeywordField = document.getElementById('fp-seo-focus-keyword');
+	const secondaryKeywordsField = document.getElementById('fp-seo-secondary-keywords');
 
 	if (titleField) {
 		payload.title = titleField.value || '';
@@ -58,6 +67,14 @@ function getClassicContent() {
 
 	if (excerptField) {
 		payload.excerpt = excerptField.value || '';
+	}
+
+	if (focusKeywordField) {
+		payload.focusKeyword = focusKeywordField.value || '';
+	}
+
+	if (secondaryKeywordsField) {
+		payload.secondaryKeywords = secondaryKeywordsField.value || '';
 	}
 
 	return payload;

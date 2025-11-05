@@ -57,10 +57,74 @@ export class MetaboxUI {
 			return;
 		}
 
-		checks.forEach(check => {
+		// Create summary badges
+		this.renderSummary(checks);
+
+		// Create indicator items with stagger effect
+		checks.forEach((check, index) => {
 			const item = this.createIndicatorElement(check);
+			// Aggiungi delay progressivo (50ms per elemento)
+			item.style.animationDelay = `${index * 0.05}s`;
 			this.elements.indicatorList.appendChild(item);
 		});
+	}
+
+	/**
+	 * Renderizza il summary badge
+	 * @param {Array} checks
+	 */
+	renderSummary(checks) {
+		// Remove existing summary
+		const existingSummary = this.elements.indicatorList.parentElement?.querySelector('.fp-seo-performance-summary');
+		if (existingSummary) {
+			existingSummary.remove();
+		}
+
+		// Count by status
+		const counts = {
+			fail: 0,
+			warn: 0,
+			pass: 0
+		};
+
+		checks.forEach(check => {
+			const status = check.status || 'pending';
+			if (counts.hasOwnProperty(status)) {
+				counts[status]++;
+			}
+		});
+
+		// Create summary container
+		const summary = createElement('div', {
+			className: 'fp-seo-performance-summary'
+		});
+
+		// Add badges
+		if (counts.fail > 0) {
+			const badge = createElement('span', {
+				className: 'fp-seo-performance-summary__badge fp-seo-performance-summary__badge--fail'
+			}, `❌ ${counts.fail} Fail`);
+			summary.appendChild(badge);
+		}
+
+		if (counts.warn > 0) {
+			const badge = createElement('span', {
+				className: 'fp-seo-performance-summary__badge fp-seo-performance-summary__badge--warn'
+			}, `⚠️ ${counts.warn} Warning`);
+			summary.appendChild(badge);
+		}
+
+		if (counts.pass > 0) {
+			const badge = createElement('span', {
+				className: 'fp-seo-performance-summary__badge fp-seo-performance-summary__badge--pass'
+			}, `✅ ${counts.pass} Pass`);
+			summary.appendChild(badge);
+		}
+
+		// Insert before indicator list
+		if (summary.children.length > 0) {
+			this.elements.indicatorList.parentElement?.insertBefore(summary, this.elements.indicatorList);
+		}
 	}
 
 	/**
@@ -74,21 +138,30 @@ export class MetaboxUI {
 		const hint = check.hint || '';
 		const statusLabel = this.legend[status] || status;
 
-		const statusBadge = createElement('span', {
-			className: 'fp-seo-performance-indicator__status'
-		}, statusLabel);
+		const icon = createElement('span', {
+			className: 'fp-seo-performance-indicator__icon'
+		});
 
 		const text = createElement('span', {
 			className: 'fp-seo-performance-indicator__label'
 		}, label);
 
+		const children = [icon, text];
+
+		// Aggiungi tooltip se c'è un hint
+		if (hint) {
+			const tooltip = createElement('span', {
+				className: 'fp-seo-performance-indicator__tooltip'
+			}, hint);
+			children.push(tooltip);
+		}
+
 		const item = createElement('li', {
 			className: `fp-seo-performance-indicator fp-seo-performance-indicator--${status}`,
 			role: 'listitem',
 			tabindex: '0',
-			'aria-label': `${statusLabel}: ${label}`,
-			title: hint || undefined
-		}, [statusBadge, text]);
+			'aria-label': `${statusLabel}: ${label}`
+		}, children);
 
 		return item;
 	}
@@ -98,15 +171,42 @@ export class MetaboxUI {
 	 * @param {Array} items
 	 */
 	renderRecommendations(items) {
-		clearList(this.elements.recommendationList);
+		const recommendationList = this.elements.recommendationList;
+		const emptyMessage = document.querySelector('[data-fp-seo-recommendations-empty]');
+		const countBadge = document.querySelector('[data-fp-seo-recommendations-count]');
 
-		if (!this.elements.recommendationList || !items || !items.length) {
+		if (!recommendationList) {
 			return;
 		}
 
-		items.forEach(itemText => {
+		clearList(recommendationList);
+
+		// Update count badge
+		if (countBadge) {
+			countBadge.textContent = (items && items.length) || 0;
+		}
+
+		// Show empty state or list
+		if (!items || items.length === 0) {
+			recommendationList.style.display = 'none';
+			if (emptyMessage) {
+				emptyMessage.style.display = 'block';
+			}
+			return;
+		}
+
+		// Hide empty message and show list
+		if (emptyMessage) {
+			emptyMessage.style.display = 'none';
+		}
+		recommendationList.style.display = 'block';
+
+		// Add items with stagger effect
+		items.forEach((itemText, index) => {
 			const item = createElement('li', {}, itemText);
-			this.elements.recommendationList.appendChild(item);
+			// Aggiungi delay progressivo (80ms per elemento)
+			item.style.animationDelay = `${index * 0.08}s`;
+			recommendationList.appendChild(item);
 		});
 	}
 
@@ -150,6 +250,16 @@ export class MetaboxUI {
 	 */
 	showLoading() {
 		this.setMessage(this.labels.loading || '');
+		
+		// Aggiungi skeleton loader agli indicatori
+		if (this.elements.indicatorList) {
+			const items = this.elements.indicatorList.querySelectorAll('.fp-seo-performance-indicator');
+			items.forEach(item => {
+				// Rimuovi lo stato attuale e aggiungi pending (pulsante)
+				item.classList.remove('fp-seo-performance-indicator--pass', 'fp-seo-performance-indicator--warn', 'fp-seo-performance-indicator--fail');
+				item.classList.add('fp-seo-performance-indicator--pending');
+			});
+		}
 	}
 
 	/**

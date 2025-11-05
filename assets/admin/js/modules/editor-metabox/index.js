@@ -29,7 +29,9 @@ export function initEditorMetabox(config) {
 		indicatorList: container.querySelector('[data-fp-seo-indicators]'),
 		recommendationList: container.querySelector('[data-fp-seo-recommendations]'),
 		message: container.querySelector('[data-fp-seo-message]'),
-		excludeToggle: container.querySelector('[data-fp-seo-exclude]')
+		excludeToggle: container.querySelector('[data-fp-seo-exclude]'),
+		focusKeywordField: container.querySelector('[data-fp-seo-focus-keyword]'),
+		secondaryKeywordsField: container.querySelector('[data-fp-seo-secondary-keywords]')
 	};
 
 	const labels = config.labels || {};
@@ -57,8 +59,17 @@ export function initEditorMetabox(config) {
 		elements.excludeToggle.addEventListener('change', handleExcludeToggle);
 	}
 
+	// Collega i campi keyword per real-time updates
+	if (elements.focusKeywordField) {
+		elements.focusKeywordField.addEventListener('input', scheduleAnalysis);
+	}
+
+	if (elements.secondaryKeywordsField) {
+		elements.secondaryKeywordsField.addEventListener('input', scheduleAnalysis);
+	}
+
 	/**
-	 * Programma un'analisi con debounce
+	 * Programma un'analisi con debounce (ridotto a 500ms per maggiore reattività)
 	 */
 	function scheduleAnalysis() {
 		if (!state.isEnabled() || state.isExcluded()) {
@@ -66,10 +77,13 @@ export function initEditorMetabox(config) {
 		}
 
 		state.clearTimer();
+		
+		// Mostra subito indicatore "analyzing..." per feedback immediato
+		ui.showLoading();
 
 		const timer = window.setTimeout(() => {
 			performAnalysis(false);
-		}, 700);
+		}, 500); // Ridotto da 700ms a 500ms per maggiore reattività
 
 		state.setTimer(timer);
 	}

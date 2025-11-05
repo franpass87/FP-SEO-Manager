@@ -16,6 +16,8 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Utils\I18n;
 use function count;
+use function implode;
+use function sprintf;
 use function trim;
 
 /**
@@ -76,13 +78,33 @@ class TwitterCardsCheck implements CheckInterface {
 				array(
 					'tags' => $present,
 				),
-				I18n::translate( 'Twitter card metadata looks complete.' ),
+				sprintf(
+					/* translators: %d: count of tags */
+					I18n::translate( '✅ Completo! Tutti i %d Twitter Card tag sono presenti.' ),
+					count( $required )
+				),
 				0.06
 			);
 		}
 
-		$status       = count( $missing ) >= 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
-				$hint = I18n::translate( 'Add missing Twitter card tags (card type, title, description, or image) to control social previews.' );
+		$missing_count = count( $missing );
+		$status        = $missing_count >= 2 ? Result::STATUS_FAIL : Result::STATUS_WARN;
+		$missing_list  = implode( ', ', $missing );
+		
+		if ( $missing_count >= 2 ) {
+			$hint = sprintf(
+				/* translators: 1: count of missing tags, 2: list of missing tags */
+				I18n::translate( '❌ Mancano %1$d Twitter Card tag: %2$s. Aggiungili!' ),
+				$missing_count,
+				$missing_list
+			);
+		} else {
+			$hint = sprintf(
+				/* translators: 1: list of missing tags */
+				I18n::translate( '⚠️ Manca solo: %1$s. Aggiungilo per completare!' ),
+				$missing_list
+			);
+		}
 
 		return new Result(
 			$status,

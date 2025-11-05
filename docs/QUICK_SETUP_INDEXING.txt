@@ -1,0 +1,140 @@
+═══════════════════════════════════════════════════════════════
+  INDEXING API - SETUP RAPIDO (5 MINUTI)
+═══════════════════════════════════════════════════════════════
+
+Nome API: "Web Search Indexing API"
+Cerca: "Indexing" nella Library
+
+───────────────────────────────────────────────────────────────
+STEP 1: GOOGLE CLOUD CONSOLE
+───────────────────────────────────────────────────────────────
+
+1. https://console.cloud.google.com
+2. Seleziona il tuo progetto
+3. Menu → "APIs & Services" → "Library"
+
+───────────────────────────────────────────────────────────────
+STEP 2: ABILITA LE API (2 API richieste)
+───────────────────────────────────────────────────────────────
+
+API #1: Google Search Console API
+──────────────────────────────────
+1. Cerca: "Search Console"
+2. Click: "Google Search Console API"
+3. Enable
+4. ✅ Fatto
+
+API #2: Web Search Indexing API
+────────────────────────────────
+1. Cerca: "Indexing" o "Web Search"
+2. Click: "Web Search Indexing API"
+3. Enable
+4. ✅ Fatto
+
+VERIFICA:
+─────────
+APIs & Services → Dashboard → Enabled APIs
+
+Dovresti vedere:
+✓ Google Search Console API
+✓ Web Search Indexing API
+
+───────────────────────────────────────────────────────────────
+STEP 3: SERVICE ACCOUNT (Se già hai per GSC, USA QUELLO!)
+───────────────────────────────────────────────────────────────
+
+Se GIÀ hai service account per GSC:
+→ SALTA questo step, usa lo stesso JSON!
+
+Se NON hai service account:
+1. IAM & Admin → Service Accounts
+2. Create Service Account
+3. Nome: fp-seo
+4. Create → Done
+5. Click sul service account
+6. Keys → Add Key → Create new key
+7. Type: JSON → Create
+8. ✅ File JSON scaricato
+
+───────────────────────────────────────────────────────────────
+STEP 4: AGGIUNGI A SEARCH CONSOLE (Critical!)
+───────────────────────────────────────────────────────────────
+
+1. Apri file JSON
+2. Copia "client_email" (es: fp-seo@project.iam.gserviceaccount.com)
+3. https://search.google.com/search-console
+4. Seleziona property
+5. Settings → Users and permissions
+6. Add user
+7. Email: [incolla client_email]
+8. Permission: "Owner" ← MUST BE OWNER!
+9. Add
+
+IMPORTANTE: Se permission NON è "Owner", Indexing API non funziona!
+
+───────────────────────────────────────────────────────────────
+STEP 5: PLUGIN WORDPRESS
+───────────────────────────────────────────────────────────────
+
+Settings → FP SEO → Google Search Console
+
+1. Site URL: https://tuosito.com/
+2. Service Account JSON: [incolla TUTTO]
+3. ✅ Enable GSC Data
+4. ✅ Auto-submit to Google on publish  ← Questo!
+5. Save Changes
+6. Click "Test Connection"
+7. Dovresti vedere: ✅ "Connection successful!"
+
+───────────────────────────────────────────────────────────────
+TEST FUNZIONAMENTO
+───────────────────────────────────────────────────────────────
+
+1. Post → Add New
+2. Title: "Test Indexing"
+3. Publish
+
+4. Controlla: wp-content/debug.log
+
+Dovresti vedere:
+[Date] FP SEO: URL submitted to Google Indexing API: https://... (URL_UPDATED)
+
+✅ LO VEDI? Funziona perfettamente!
+❌ NON LO VEDI? Vedi troubleshooting sotto
+
+───────────────────────────────────────────────────────────────
+TROUBLESHOOTING
+───────────────────────────────────────────────────────────────
+
+Errore: "API not enabled"
+FIX: Google Cloud → Library → Cerca "Indexing" → Enable "Web Search Indexing API"
+
+Errore: "Permission denied"
+FIX: GSC → Users → Service account deve essere "Owner" (non Full!)
+
+Nessun log:
+FIX: Settings → GSC → Verifica ✅ Auto-submit enabled
+
+───────────────────────────────────────────────────────────────
+NOME API CONFERMATO
+───────────────────────────────────────────────────────────────
+
+Nella Console Google Cloud (2025) si chiama:
+
+"Web Search Indexing API"
+
+Cerca: "Indexing" o "Web Search Indexing"
+
+Description: "Notifies Google when pages are added or updated"
+
+───────────────────────────────────────────────────────────────
+
+Quota FREE: 200 requests/day
+Costo: $0.00 (richiede billing account ma API gratuita)
+
+Version: 0.4.0
+Setup time: 5 minuti
+Status: READY
+
+═══════════════════════════════════════════════════════════════
+

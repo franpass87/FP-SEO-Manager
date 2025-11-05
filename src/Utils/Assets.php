@@ -27,8 +27,23 @@ class Assets {
 	 * Hooks asset registration into admin requests.
 	 */
 	public function register(): void {
+		// Only register assets in admin context
+		if ( ! is_admin() ) {
+			return;
+		}
+		
+		// Register type="module" filter FIRST (before any script registration)
+		add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
+		
+		// Register immediately instead of waiting for admin_init
+		$this->register_handles();
+		
+		// Also add hooks as backup
 		add_action( 'admin_init', array( $this, 'register_admin_assets' ), 10, 0 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'ensure_admin_handles' ), 5, 0 );
+		
+		// Add conditional loading for specific pages
+		add_action( 'admin_enqueue_scripts', array( $this, 'conditional_asset_loading' ), 15, 0 );
 	}
 
 	/**
@@ -50,28 +65,113 @@ class Assets {
 	}
 
 	/**
+	 * Conditionally loads assets based on current admin page.
+	 */
+	public function conditional_asset_loading(): void {
+		$screen = get_current_screen();
+		if ( ! $screen ) {
+			return;
+		}
+
+		// Only load on FP SEO pages or post editor
+		$fp_seo_pages = array(
+			'toplevel_page_fp-seo-performance',
+			'fp-seo-performance_page_fp-seo-bulk-audit',
+			'toplevel_page_fp-seo-test-suite',
+			'fp-seo-performance_page_fp-seo-social-media',
+			'fp-seo-performance_page_fp-seo-internal-links',
+			'fp-seo-performance_page_fp-seo-multiple-keywords',
+		);
+
+		$is_fp_seo_page = in_array( $screen->id, $fp_seo_pages, true );
+		$is_post_editor = in_array( $screen->base, array( 'post', 'page' ), true );
+
+		// Enqueue UI system assets ONLY on FP SEO pages and post editor
+		if ( $is_fp_seo_page || $is_post_editor ) {
+			wp_enqueue_style( 'fp-seo-ui-system' );
+			wp_enqueue_style( 'fp-seo-notifications' );
+			wp_enqueue_style( 'fp-seo-ai-enhancements' );
+			wp_enqueue_script( 'fp-seo-ui-system' );
+		}
+
+		// Dequeue heavy assets if not on FP SEO pages or post editor
+		if ( ! $is_fp_seo_page && ! $is_post_editor ) {
+			wp_dequeue_style( 'fp-seo-ui-system' );
+			wp_dequeue_style( 'fp-seo-notifications' );
+			wp_dequeue_style( 'fp-seo-ai-enhancements' );
+			wp_dequeue_script( 'fp-seo-ui-system' );
+			wp_dequeue_script( 'fp-seo-performance-bulk' );
+			wp_dequeue_script( 'fp-seo-performance-ai-generator' );
+			wp_dequeue_script( 'fp-seo-performance-serp-preview' );
+		}
+	}
+
+	/**
 	 * Registers asset handles used across admin screens.
 	 */
 	private function register_handles(): void {
 		$version = $this->asset_version();
 
+		// UI System CSS (load first)
 		wp_register_style(
-			'fp-seo-performance-admin',
-			plugins_url( 'assets/admin/css/admin.css', FP_SEO_PERFORMANCE_FILE ),
+			'fp-seo-ui-system',
+			plugins_url( 'assets/admin/css/fp-seo-ui-system.css', FP_SEO_PERFORMANCE_FILE ),
 			array(),
 			$version
 		);
 
+		// Notifications CSS
+		wp_register_style(
+			'fp-seo-notifications',
+			plugins_url( 'assets/admin/css/fp-seo-notifications.css', FP_SEO_PERFORMANCE_FILE ),
+			array( 'fp-seo-ui-system' ),
+			$version
+		);
+
+	// AI Enhancements CSS (ultra-light, < 3KB)
+	wp_register_style(
+		'fp-seo-ai-enhancements',
+		plugins_url( 'assets/admin/css/components/ai-enhancements.css', FP_SEO_PERFORMANCE_FILE ),
+		array(),
+		$version
+	);
+
+	wp_register_style(
+		'fp-seo-performance-admin',
+		plugins_url( 'assets/admin/css/admin.css', FP_SEO_PERFORMANCE_FILE ),
+			array( 'fp-seo-ui-system' ),
+			$version
+		);
+
+		// UI System JavaScript (load first)
 		wp_register_script(
-			'fp-seo-performance-admin',
-			plugins_url( 'assets/admin/js/admin.js', FP_SEO_PERFORMANCE_FILE ),
-			array(),
+			'fp-seo-ui-system',
+			plugins_url( 'assets/admin/js/fp-seo-ui-system.js', FP_SEO_PERFORMANCE_FILE ),
+			array( 'jquery' ),
 			$version,
 			true
 		);
 
 		wp_register_script(
+			'fp-seo-performance-admin',
+			plugins_url( 'assets/admin/js/admin.js', FP_SEO_PERFORMANCE_FILE ),
+			array( 'jquery', 'fp-seo-ui-system' ),
+			$version,
+			true
+		);
+
+		// Editor metabox - Legacy version (senza ES6 modules per compatibility)
+		wp_register_script(
 			'fp-seo-performance-editor',
+			plugins_url( 'assets/admin/js/editor-metabox-legacy.js', FP_SEO_PERFORMANCE_FILE ),
+			array( 'jquery' ),
+			$version,
+			true
+		);
+		
+		// Editor metabox - ES6 version (backup, se serve)
+		wp_register_script(
+			'fp-seo-performance-editor-modern',
 			plugins_url( 'assets/admin/js/editor-metabox.js', FP_SEO_PERFORMANCE_FILE ),
 			array(),
 			$version,
@@ -86,18 +186,35 @@ class Assets {
 			true
 		);
 
-		// Aggiungi attributi type="module" per supportare ES6 modules
-		add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
+		wp_register_script(
+			'fp-seo-performance-serp-preview',
+			plugins_url( 'assets/admin/js/serp-preview.js', FP_SEO_PERFORMANCE_FILE ),
+			array(),
+			$version,
+			true
+		);
+
+		wp_register_script(
+			'fp-seo-performance-ai-generator',
+			plugins_url( 'assets/admin/js/ai-generator.js', FP_SEO_PERFORMANCE_FILE ),
+			array( 'jquery' ),
+			$version,
+			true
+		);
 	}
 
 	/**
 	 * Determines whether all admin handles are registered.
 	 */
 	private function handles_registered(): bool {
-		return wp_style_is( 'fp-seo-performance-admin', 'registered' )
+		return wp_style_is( 'fp-seo-ui-system', 'registered' )
+			&& wp_style_is( 'fp-seo-notifications', 'registered' )
+			&& wp_style_is( 'fp-seo-performance-admin', 'registered' )
+			&& wp_script_is( 'fp-seo-ui-system', 'registered' )
 			&& wp_script_is( 'fp-seo-performance-admin', 'registered' )
 			&& wp_script_is( 'fp-seo-performance-editor', 'registered' )
-			&& wp_script_is( 'fp-seo-performance-bulk', 'registered' );
+			&& wp_script_is( 'fp-seo-performance-bulk', 'registered' )
+			&& wp_script_is( 'fp-seo-performance-ai-generator', 'registered' );
 	}
 
 	/**
@@ -110,7 +227,7 @@ class Assets {
 	 */
 	public function add_type_module( string $tag, string $handle, string $src ): string {
 		$module_handles = array(
-			'fp-seo-performance-editor',
+			'fp-seo-performance-editor-modern', // Solo la versione modern usa modules
 			'fp-seo-performance-bulk',
 		);
 
@@ -126,6 +243,15 @@ class Assets {
 	 */
 	private function asset_version(): string {
 		if ( defined( 'FP_SEO_PERFORMANCE_VERSION' ) && '' !== FP_SEO_PERFORMANCE_VERSION ) {
+			// Use file modification time for cache busting only when needed
+			$file_path = dirname( FP_SEO_PERFORMANCE_FILE ) . '/assets/admin/css/admin.css';
+			$file_time = file_exists( $file_path ) ? filemtime( $file_path ) : time();
+			
+			// Only add timestamp in development mode
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				return FP_SEO_PERFORMANCE_VERSION . '-' . $file_time;
+			}
+			
 			return FP_SEO_PERFORMANCE_VERSION;
 		}
 

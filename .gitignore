@@ -1,29 +1,127 @@
-# Dependencies
-/node_modules
-/vendor
+# WordPress
+.htaccess
+wp-config.php
+wp-content/uploads/
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
 
-# Testing
-/coverage
-*.log
+# Composer
+/vendor/
+/vendor/rector/
+/vendor/phpstan/
+composer.phar
+composer.lock
 
-# Build
-/dist
-/build
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
 
-# IDE
-/.idea
-/.vscode
-*.swp
-*.swo
-*~
-
-# OS
+# IDE & Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
 .DS_Store
 Thumbs.db
 
-# WordPress
-wp-config.php
-.htaccess
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 
-# Plugin specific
-*.pot~
+# Logs & Debug
+*.log
+error_log
+debug.log
+*.tmp
+
+# Build & Dist
+/build/
+/dist/
+*.zip
+*.tar.gz
+
+# Tests & Coverage
+/tests/coverage/
+/coverage/
+.phpunit.result.cache
+phpunit.xml
+*.test.local.php
+test-results/
+coverage.xml
+
+# Cache
+.cache/
+*.cache
+wp-content/cache/
+
+# AI & API Keys (SECURITY!)
+.openai-key
+.api-keys
+*-api-key.txt
+secrets.json
+.secrets/
+
+# Misc
+.env
+.env.local
+.env.production
+*.sql
+*.sqlite
+*.db
+*.bak
+*.swp
+*~
+.sass-cache/
+
+# Temporary & Local Files
+*.tmp
+*.temp
+.tmp/
+.temp/
+local-config.php
+local-settings.php
+
+# Personal Notes & TODO
+TODO.local.md
+NOTES.local.md
+.personal/
+scratch/
+
+# Build Artifacts
+.build/
+release/
+*.zip.tmp
+
+# PHPStan & Rector
+.phpstan/
+.rector/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+*.lnk
+$RECYCLE.BIN/
+
+# Version Control
+*.orig
+*.rej
+.svn/
+.hg/
+
+# Documentation Drafts
+*.draft.md
+DRAFT_*.md

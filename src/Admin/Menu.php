@@ -51,11 +51,287 @@ use function time;
 class Menu {
 	private const RECENT_RESULTS_MAX = 5;
 
-		/**
-		 * Hooks WordPress actions for the menu.
-		 */
+	/**
+	 * Hooks WordPress actions for the menu.
+	 */
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
+		add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+	}
+
+	/**
+	 * Inject modern styles directly in admin head
+	 */
+	public function inject_modern_styles(): void {
+		$screen = get_current_screen();
+		
+		if ( ! $screen ) {
+			return;
+		}
+		
+		// Only on FP SEO pages
+		if ( strpos( $screen->id, 'fp-seo-performance' ) === false ) {
+			return;
+		}
+		
+		?>
+		<style id="fp-seo-modern-ui">
+		:root {
+			--fp-seo-primary: #2563eb;
+			--fp-seo-primary-dark: #1d4ed8;
+			--fp-seo-success: #059669;
+			--fp-seo-warning: #f59e0b;
+			--fp-seo-danger: #dc2626;
+			--fp-seo-gray-50: #f9fafb;
+			--fp-seo-gray-100: #f3f4f6;
+			--fp-seo-gray-200: #e5e7eb;
+			--fp-seo-gray-300: #d1d5db;
+			--fp-seo-gray-600: #4b5563;
+			--fp-seo-gray-700: #374151;
+			--fp-seo-gray-900: #111827;
+			--fp-seo-shadow: 0 1px 3px 0 rgba(0,0,0,0.1);
+			--fp-seo-shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+		}
+		
+		.wrap.fp-seo-performance-dashboard {
+			background: var(--fp-seo-gray-50) !important;
+			margin-left: -20px !important;
+			margin-right: -20px !important;
+			padding: 32px 40px 40px !important;
+			min-height: calc(100vh - 32px) !important;
+		}
+		
+		.fp-seo-performance-dashboard > h1 {
+			background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+			-webkit-background-clip: text !important;
+			-webkit-text-fill-color: transparent !important;
+			background-clip: text !important;
+			font-size: 32px !important;
+			font-weight: 700 !important;
+			margin-bottom: 12px !important;
+		}
+		
+		.fp-seo-performance-dashboard > .description {
+			font-size: 16px !important;
+			color: var(--fp-seo-gray-600) !important;
+			margin-bottom: 28px !important;
+		}
+		
+		.fp-seo-quick-stats {
+			display: grid !important;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+			gap: 16px !important;
+			margin: 20px 0 32px !important;
+		}
+		
+		.fp-seo-quick-stat {
+			background: linear-gradient(135deg, #fff 0%, var(--fp-seo-gray-50) 100%) !important;
+			padding: 24px !important;
+			border-radius: 8px !important;
+			border: 1px solid var(--fp-seo-gray-200) !important;
+			box-shadow: var(--fp-seo-shadow) !important;
+			text-align: center !important;
+			transition: all 0.3s ease !important;
+		}
+		
+		.fp-seo-quick-stat:hover {
+			transform: translateY(-4px) !important;
+			box-shadow: var(--fp-seo-shadow-md) !important;
+		}
+		
+		.fp-seo-quick-stat__icon {
+			font-size: 32px !important;
+			margin-bottom: 12px !important;
+		}
+		
+		.fp-seo-quick-stat__value {
+			display: block !important;
+			font-size: 36px !important;
+			font-weight: 700 !important;
+			color: var(--fp-seo-gray-900) !important;
+			line-height: 1 !important;
+			margin-bottom: 8px !important;
+		}
+		
+		.fp-seo-quick-stat__label {
+			display: block !important;
+			font-size: 12px !important;
+			font-weight: 600 !important;
+			color: var(--fp-seo-gray-600) !important;
+			text-transform: uppercase !important;
+			letter-spacing: 0.5px !important;
+		}
+		
+		.fp-seo-performance-dashboard__grid {
+			display: grid !important;
+			grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)) !important;
+			gap: 20px !important;
+			margin-bottom: 32px !important;
+		}
+		
+		.fp-seo-performance-dashboard__card {
+			background: #fff !important;
+			border: 1px solid var(--fp-seo-gray-200) !important;
+			border-radius: 8px !important;
+			padding: 24px !important;
+			box-shadow: var(--fp-seo-shadow) !important;
+			transition: all 0.3s ease !important;
+		}
+		
+		.fp-seo-performance-dashboard__card:hover {
+			box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1) !important;
+			transform: translateY(-2px) !important;
+		}
+		
+		.fp-seo-performance-dashboard__card > h2 {
+			font-size: 18px !important;
+			font-weight: 600 !important;
+			color: var(--fp-seo-gray-900) !important;
+			margin: 0 0 16px !important;
+			padding-bottom: 12px !important;
+			border-bottom: 2px solid var(--fp-seo-gray-200) !important;
+		}
+		
+		.fp-seo-performance-dashboard__metrics {
+			list-style: none !important;
+			margin: 0 !important;
+			padding: 0 !important;
+			display: grid !important;
+			gap: 10px !important;
+		}
+		
+		.fp-seo-performance-dashboard__metrics li {
+			padding: 10px 12px !important;
+			background: var(--fp-seo-gray-50) !important;
+			border-radius: 6px !important;
+			font-size: 13px !important;
+			border-left: 3px solid var(--fp-seo-primary) !important;
+		}
+		
+		.fp-seo-performance-dashboard table.widefat {
+			border: 1px solid var(--fp-seo-gray-200) !important;
+			border-radius: 8px !important;
+			overflow: hidden !important;
+			box-shadow: var(--fp-seo-shadow) !important;
+			border-collapse: separate !important;
+		}
+		
+		.fp-seo-performance-dashboard table.widefat thead {
+			background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+		}
+		
+		.fp-seo-performance-dashboard table.widefat thead th {
+			color: #fff !important;
+			font-weight: 600 !important;
+			text-transform: uppercase !important;
+			font-size: 11px !important;
+			padding: 14px 10px !important;
+			border: none !important;
+		}
+		
+		.fp-seo-performance-dashboard table.widefat tbody tr {
+			transition: all 0.2s ease !important;
+			border-bottom: 1px solid var(--fp-seo-gray-200) !important;
+		}
+		
+		.fp-seo-performance-dashboard table.widefat tbody tr:hover {
+			background-color: var(--fp-seo-gray-50) !important;
+		}
+		
+		.fp-seo-performance-dashboard table.striped > tbody > tr:nth-child(odd) {
+			background-color: transparent !important;
+		}
+		
+		.fp-seo-score-display {
+			display: inline-flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			min-width: 50px !important;
+			padding: 6px 12px !important;
+			border-radius: 999px !important;
+			font-weight: 700 !important;
+			font-size: 14px !important;
+			color: #fff !important;
+			box-shadow: var(--fp-seo-shadow) !important;
+		}
+		
+		.fp-seo-score-display--high {
+			background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+		}
+		
+		.fp-seo-score-display--medium {
+			background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+		}
+		
+		.fp-seo-score-display--low {
+			background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+		}
+		
+		.fp-seo-status-badge {
+			display: inline-flex !important;
+			align-items: center !important;
+			gap: 6px !important;
+			padding: 6px 12px !important;
+			border-radius: 999px !important;
+			font-size: 12px !important;
+			font-weight: 600 !important;
+		}
+		
+		.fp-seo-status-badge::before {
+			content: '' !important;
+			display: inline-block !important;
+			width: 8px !important;
+			height: 8px !important;
+			border-radius: 50% !important;
+		}
+		
+		.fp-seo-status-badge--healthy {
+			background: #d1fae5 !important;
+			color: #059669 !important;
+		}
+		
+		.fp-seo-status-badge--healthy::before {
+			background: #059669 !important;
+			box-shadow: 0 0 0 3px rgba(5,150,105,0.2) !important;
+		}
+		
+		.fp-seo-status-badge--needs-review {
+			background: #fef3c7 !important;
+			color: #92400e !important;
+		}
+		
+		.fp-seo-status-badge--needs-review::before {
+			background: #f59e0b !important;
+		}
+		
+		.fp-seo-status-badge--critical {
+			background: #fee2e2 !important;
+			color: #dc2626 !important;
+		}
+		
+		.fp-seo-status-badge--critical::before {
+			background: #dc2626 !important;
+		}
+		
+		.fp-seo-badge {
+			display: inline-flex !important;
+			padding: 4px 10px !important;
+			border-radius: 999px !important;
+			font-size: 12px !important;
+			font-weight: 600 !important;
+		}
+		
+		.fp-seo-badge--success {
+			background: #d1fae5 !important;
+			color: #065f46 !important;
+		}
+		
+		.fp-seo-badge--warning {
+			background: #fef3c7 !important;
+			color: #92400e !important;
+		}
+		</style>
+		<?php
 	}
 
 	/**
@@ -109,7 +385,41 @@ class Menu {
 		?>
 				<div class="wrap fp-seo-performance-dashboard">
 						<h1><?php esc_html_e( 'SEO Performance Dashboard', 'fp-seo-performance' ); ?></h1>
-						<p class="description"><?php esc_html_e( 'Review analyzer health, bulk audit trends, and recent results at a glance.', 'fp-seo-performance' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Panoramica completa dello stato SEO del tuo sito', 'fp-seo-performance' ); ?></p>
+
+						<!-- Quick Stats -->
+						<div class="fp-seo-quick-stats">
+								<div class="fp-seo-quick-stat">
+										<div class="fp-seo-quick-stat__icon">📊</div>
+										<span class="fp-seo-quick-stat__value"><?php echo esc_html( number_format_i18n( $checks_active ) ); ?></span>
+										<span class="fp-seo-quick-stat__label"><?php esc_html_e( 'Check attivi', 'fp-seo-performance' ); ?></span>
+								</div>
+								<div class="fp-seo-quick-stat">
+										<div class="fp-seo-quick-stat__icon">📝</div>
+										<span class="fp-seo-quick-stat__value"><?php echo esc_html( number_format_i18n( $content_overview['eligible'] ) ); ?></span>
+										<span class="fp-seo-quick-stat__label"><?php esc_html_e( 'Contenuti analizzabili', 'fp-seo-performance' ); ?></span>
+								</div>
+								<?php if ( null !== $bulk_stats['average'] ) : ?>
+								<div class="fp-seo-quick-stat">
+										<div class="fp-seo-quick-stat__icon">⭐</div>
+										<span class="fp-seo-quick-stat__value"><?php echo esc_html( number_format_i18n( $bulk_stats['average'] ) ); ?></span>
+										<span class="fp-seo-quick-stat__label"><?php esc_html_e( 'Punteggio medio', 'fp-seo-performance' ); ?></span>
+								</div>
+								<?php endif; ?>
+								<div class="fp-seo-quick-stat">
+										<div class="fp-seo-quick-stat__icon">⚠️</div>
+										<span class="fp-seo-quick-stat__value"><?php echo esc_html( number_format_i18n( $bulk_stats['flagged'] ?? 0 ) ); ?></span>
+										<span class="fp-seo-quick-stat__label"><?php esc_html_e( 'Da migliorare', 'fp-seo-performance' ); ?></span>
+								</div>
+						</div>
+
+						<?php
+						/**
+						 * Action after quick stats
+						 * Used by GSC to display Search Console metrics
+						 */
+						do_action( 'fpseo_dashboard_after_quick_stats' );
+						?>
 
 						<div class="fp-seo-performance-dashboard__grid">
 								<div class="card fp-seo-performance-dashboard__card">
@@ -282,16 +592,54 @@ class Menu {
 														<tr>
 																<td>
 																		<?php if ( $edit_url ) : ?>
-																				<a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $title ); ?></a>
+																				<a href="<?php echo esc_url( $edit_url ); ?>"><strong><?php echo esc_html( $title ); ?></strong></a>
 																		<?php else : ?>
-																				<?php echo esc_html( $title ); ?>
+																				<strong><?php echo esc_html( $title ); ?></strong>
 																		<?php endif; ?>
 																</td>
 																<td>
-																		<?php echo null === $score ? '—' : esc_html( number_format_i18n( (int) $score ) ); ?>
+																		<?php if ( null !== $score ) : ?>
+																				<?php
+																				$score_class = 'fp-seo-score-display';
+																				if ( $score >= 80 ) {
+																					$score_class .= ' fp-seo-score-display--high';
+																				} elseif ( $score >= 60 ) {
+																					$score_class .= ' fp-seo-score-display--medium';
+																				} else {
+																					$score_class .= ' fp-seo-score-display--low';
+																				}
+																				?>
+																				<span class="<?php echo esc_attr( $score_class ); ?>"><?php echo esc_html( number_format_i18n( (int) $score ) ); ?></span>
+																		<?php else : ?>
+																				<span class="fp-seo-score-display">—</span>
+																		<?php endif; ?>
 																</td>
-																<td><?php echo esc_html( $this->status_label( $status ) ); ?></td>
-																<td><?php echo esc_html( number_format_i18n( $warnings ) ); ?></td>
+																<td>
+																		<?php
+																		$status_badge_class = 'fp-seo-status-badge';
+																		switch ( $status ) {
+																			case 'green':
+																				$status_badge_class .= ' fp-seo-status-badge--healthy';
+																				break;
+																			case 'yellow':
+																				$status_badge_class .= ' fp-seo-status-badge--needs-review';
+																				break;
+																			case 'red':
+																				$status_badge_class .= ' fp-seo-status-badge--critical';
+																				break;
+																			default:
+																				$status_badge_class .= ' fp-seo-status-badge--pending';
+																		}
+																		?>
+																		<span class="<?php echo esc_attr( $status_badge_class ); ?>"><?php echo esc_html( $this->status_label( $status ) ); ?></span>
+																</td>
+																<td>
+																		<?php if ( $warnings > 0 ) : ?>
+																				<span class="fp-seo-badge fp-seo-badge--warning"><?php echo esc_html( number_format_i18n( $warnings ) ); ?></span>
+																		<?php else : ?>
+																				<span class="fp-seo-badge fp-seo-badge--success">0</span>
+																		<?php endif; ?>
+																</td>
 																<td><?php echo esc_html( $this->format_last_updated( (int) ( $entry['updated'] ?? 0 ) ) ); ?></td>
 														</tr>
 												<?php endforeach; ?>
@@ -322,11 +670,10 @@ class Menu {
 				array(
 					'post_type'              => $types,
 					'post_status'            => 'publish',
-					'fields'                 => 'ids',
-					'meta_key'               => Metabox::META_EXCLUDE,
-					'meta_value'             => '1',
-					'posts_per_page'         => -1,
-					'nopaging'               => true,
+				'fields'                 => 'ids',
+				'meta_key'               => Metabox::META_EXCLUDE,
+				'meta_value'             => '1',
+				'posts_per_page'         => 500, // Limit to prevent memory issues
 					'no_found_rows'          => true,
 					'update_post_meta_cache' => false,
 					'update_post_term_cache' => false,

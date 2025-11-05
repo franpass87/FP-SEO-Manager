@@ -118,6 +118,22 @@ class Options {
 				'heading_depth'      => true,
 			),
 		),
+			'ai'          => array(
+				'openai_api_key'        => '',
+				'openai_model'          => 'gpt-5-nano',
+				'enable_auto_generation' => true,
+				'focus_on_keywords'     => true,
+				'optimize_for_ctr'      => true,
+			),
+			'ai_first'    => array(
+				'enable_qa'              => true,
+				'enable_entities'        => true,
+				'enable_embeddings'      => false, // Requires API calls
+				'auto_generate_on_publish' => false, // Optional
+				'batch_size'             => 10,
+				'cache_ttl'              => 86400, // 1 day
+				'content_license'        => 'All Rights Reserved',
+			),
 			'advanced'    => array(
 				'capability'        => 'manage_options',
 				'telemetry_enabled' => false,
@@ -303,6 +319,38 @@ class Options {
 			);
 		}
 
+		// AI settings sanitization.
+		$ai                                          = is_array( $input['ai'] ?? null ) ? $input['ai'] : array();
+		$sanitized['ai']['openai_api_key']           = self::sanitize_text( $ai['openai_api_key'] ?? $defaults['ai']['openai_api_key'] );
+		$sanitized['ai']['openai_model']             = self::sanitize_choice(
+			$ai['openai_model'] ?? $defaults['ai']['openai_model'],
+			array( 'gpt-5-nano', 'gpt-5-mini', 'gpt-5', 'gpt-5-pro', 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo' ),
+			$defaults['ai']['openai_model']
+		);
+		$sanitized['ai']['enable_auto_generation']   = self::to_bool( $ai['enable_auto_generation'] ?? $defaults['ai']['enable_auto_generation'] );
+		$sanitized['ai']['focus_on_keywords']        = self::to_bool( $ai['focus_on_keywords'] ?? $defaults['ai']['focus_on_keywords'] );
+		$sanitized['ai']['optimize_for_ctr']         = self::to_bool( $ai['optimize_for_ctr'] ?? $defaults['ai']['optimize_for_ctr'] );
+
+		// AI-First settings sanitization
+		$ai_first                                          = is_array( $input['ai_first'] ?? null ) ? $input['ai_first'] : array();
+		$sanitized['ai_first']['enable_qa']                = self::to_bool( $ai_first['enable_qa'] ?? $defaults['ai_first']['enable_qa'] );
+		$sanitized['ai_first']['enable_entities']          = self::to_bool( $ai_first['enable_entities'] ?? $defaults['ai_first']['enable_entities'] );
+		$sanitized['ai_first']['enable_embeddings']        = self::to_bool( $ai_first['enable_embeddings'] ?? $defaults['ai_first']['enable_embeddings'] );
+		$sanitized['ai_first']['auto_generate_on_publish'] = self::to_bool( $ai_first['auto_generate_on_publish'] ?? $defaults['ai_first']['auto_generate_on_publish'] );
+		$sanitized['ai_first']['batch_size']               = self::bounded_int(
+			$ai_first['batch_size'] ?? $defaults['ai_first']['batch_size'],
+			1,
+			100,
+			$defaults['ai_first']['batch_size']
+		);
+		$sanitized['ai_first']['cache_ttl']                = self::bounded_int(
+			$ai_first['cache_ttl'] ?? $defaults['ai_first']['cache_ttl'],
+			3600,
+			2592000,
+			$defaults['ai_first']['cache_ttl']
+		);
+		$sanitized['ai_first']['content_license']          = self::sanitize_text( $ai_first['content_license'] ?? $defaults['ai_first']['content_license'] );
+
 		$advanced                                   = is_array( $input['advanced'] ?? null ) ? $input['advanced'] : array();
 		$sanitized['advanced']['capability']        = self::sanitize_capability(
 			$advanced['capability'] ?? $defaults['advanced']['capability'],
@@ -325,6 +373,28 @@ class Options {
 		
 		// Clear cache when options are updated.
 		Cache::delete( 'options_data' );
+	}
+
+	/**
+	 * Get a specific option value by key path.
+	 *
+	 * @param string $key     Option key (can use dot notation like 'ai.openai_api_key').
+	 * @param mixed  $default Default value if not found.
+	 * @return mixed
+	 */
+	public static function get_option( string $key, mixed $default = null ): mixed {
+		$options = self::get();
+		$keys    = explode( '.', $key );
+		$value   = $options;
+
+		foreach ( $keys as $k ) {
+			if ( ! is_array( $value ) || ! isset( $value[ $k ] ) ) {
+				return $default;
+			}
+			$value = $value[ $k ];
+		}
+
+		return $value;
 	}
 
 	/**
@@ -521,11 +591,11 @@ class Options {
 		/**
 		 * Raw filtered text result.
 		 *
-		 * @var string|false
+		 * @var string
 		 */
-		$filtered = filter_var( $value, FILTER_UNSAFE_RAW );
+		$filtered = filter_var( $value, FILTER_DEFAULT );
 
-		if ( false === $filtered ) {
+		if ( false === $filtered || ! is_string( $filtered ) ) {
 			return '';
 		}
 

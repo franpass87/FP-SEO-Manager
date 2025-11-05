@@ -18,6 +18,7 @@ use FP\SEO\Utils\I18n;
 use DOMElement;
 use function count;
 use function round;
+use function sprintf;
 
 /**
  * Validates whether images contain descriptive alt attributes.
@@ -62,7 +63,7 @@ class ImageAltCheck implements CheckInterface {
 					'coverage' => 0,
 					'total'    => 0,
 				),
-				I18n::translate( 'Add relevant images with alt text to enrich the page.' ),
+				I18n::translate( '⚠️ Nessuna immagine trovata. Aggiungi immagini con alt text.' ),
 				0.08
 			);
 		}
@@ -77,18 +78,37 @@ class ImageAltCheck implements CheckInterface {
 			}
 		}
 
+		$missing  = $total - $with_alt;
 		$coverage = round( ( $with_alt / $total ) * 100 );
 		$status   = Result::STATUS_PASS;
-		$hint     = I18n::translate( 'Image alt coverage looks healthy.' );
+		$hint     = sprintf(
+			/* translators: 1: images with alt, 2: total images, 3: coverage percentage */
+			I18n::translate( '✅ Perfetto! %1$d/%2$d immagini con alt text (%3$d%%)' ),
+			$with_alt,
+			$total,
+			$coverage
+		);
 
 		if ( $coverage < 80 ) {
 			$status = Result::STATUS_WARN;
-			$hint   = I18n::translate( 'Add alt attributes describing the image content.' );
+			$hint   = sprintf(
+				/* translators: 1: missing images, 2: total images, 3: coverage percentage */
+				I18n::translate( '⚠️ Mancano %1$d alt text su %2$d immagini (%3$d%%). Aggiungili per raggiungere 80%%+' ),
+				$missing,
+				$total,
+				$coverage
+			);
 		}
 
 		if ( $coverage < 50 ) {
 			$status = Result::STATUS_FAIL;
-			$hint   = I18n::translate( 'Most images are missing alt text. Update them for accessibility.' );
+			$hint   = sprintf(
+				/* translators: 1: missing images, 2: total images, 3: coverage percentage */
+				I18n::translate( '❌ Solo %3$d%% coperto! Aggiungi alt text a %1$d immagini su %2$d (serve 80%%+)' ),
+				$missing,
+				$total,
+				$coverage
+			);
 		}
 
 		return new Result(

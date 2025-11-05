@@ -39,17 +39,30 @@ class Container {
 	 * Registers a lazy singleton for the given class name.
 	 *
 	 * @param string $id Class identifier.
+	 * @param callable|null $factory Optional factory function.
 	 */
-	public function singleton( string $id ): void {
-		$this->bindings[ $id ] = static function ( Container $container ) use ( $id ) {
-			static $instance = null;
+	public function singleton( string $id, ?callable $factory = null ): void {
+		if ( $factory ) {
+			$this->bindings[ $id ] = static function ( Container $container ) use ( $factory ) {
+				static $instance = null;
 
-			if ( null === $instance ) {
-				$instance = $container->resolve( $id );
-			}
+				if ( null === $instance ) {
+					$instance = $factory( $container );
+				}
 
-			return $instance;
-		};
+				return $instance;
+			};
+		} else {
+			$this->bindings[ $id ] = static function ( Container $container ) use ( $id ) {
+				static $instance = null;
+
+				if ( null === $instance ) {
+					$instance = $container->resolve( $id );
+				}
+
+				return $instance;
+			};
+		}
 	}
 
 	/**
@@ -70,7 +83,16 @@ class Container {
 			return $binding;
 		}
 
-		return $binding( $this );
+		try {
+			return $binding( $this );
+		} catch ( \RuntimeException $e ) {
+			// Se è un RuntimeException per funzioni WordPress non disponibili, rilancia
+			if ( strpos( $e->getMessage(), 'WordPress functions not available' ) !== false ) {
+				throw $e;
+			}
+			// Per altri errori, rilancia come RuntimeException
+			throw new \RuntimeException( 'Failed to resolve ' . $id . ': ' . $e->getMessage(), 0, $e );
+		}
 	}
 
 	/**

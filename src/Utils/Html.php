@@ -46,6 +46,20 @@ class Html {
 	}
 
 	/**
+	 * Strips HTML and PHP tags from a string.
+	 *
+	 * @param string $text Text containing HTML tags.
+	 * @return string Text without HTML tags.
+	 */
+	public static function strip_tags( string $text ): string {
+		if ( function_exists( 'wp_strip_all_tags' ) ) {
+			return wp_strip_all_tags( $text );
+		}
+
+		return strip_tags( $text );
+	}
+
+	/**
 	 * Determine the charset to use for manual HTML escaping.
 	 */
 	private static function detect_charset(): string {

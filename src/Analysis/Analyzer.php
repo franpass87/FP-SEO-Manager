@@ -209,7 +209,8 @@ class Analyzer {
 	 * @return array<int, CheckInterface>
 	 */
 	private function default_checks(): array {
-		return array(
+		// Use lazy loading for expensive checks
+		$checks = array(
 			new TitleLengthCheck(),
 			new MetaDescriptionCheck(),
 			new H1PresenceCheck(),
@@ -219,14 +220,25 @@ class Analyzer {
 			new RobotsIndexabilityCheck(),
 			new OgCardsCheck(),
 			new TwitterCardsCheck(),
-			new SchemaPresetsCheck(),
-			new InternalLinksCheck(),
-			// AI Overview optimization checks
-			new FaqSchemaCheck(),
-			new HowToSchemaCheck(),
-			new AiOptimizedContentCheck(),
-			// Search Intent optimization
-			new SearchIntentCheck(),
 		);
+
+		// Only add expensive checks if needed
+		$options = get_option( 'fp_seo_performance', array() );
+		$enable_advanced_checks = $options['analysis']['enable_advanced_checks'] ?? true;
+
+		if ( $enable_advanced_checks ) {
+			$checks = array_merge( $checks, array(
+				new SchemaPresetsCheck(),
+				new InternalLinksCheck(),
+				// AI Overview optimization checks
+				new FaqSchemaCheck(),
+				new HowToSchemaCheck(),
+				new AiOptimizedContentCheck(),
+				// Search Intent optimization
+				new SearchIntentCheck(),
+			) );
+		}
+
+		return $checks;
 	}
 }

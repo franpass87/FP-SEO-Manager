@@ -1,7 +1,7 @@
 {
   "name": "fp-seo-performance",
-  "version": "0.1.2",
-  "description": "Provides an on-page SEO analyzer with configurable checks, bulk audits, and admin guidance for editors.",
+  "version": "0.9.0-pre",
+  "description": "AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.",
   "author": "Francesco Passeri <info@francescopasseri.com> (https://francescopasseri.com)",
   "license": "GPL-2.0-or-later",
   "homepage": "https://francescopasseri.com",

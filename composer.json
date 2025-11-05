@@ -4,7 +4,9 @@
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
-        "php": "^8.0"
+        "php": "^8.0",
+        "google/apiclient": "^2.15",
+        "openai-php/client": "^0.10"
     },
     "autoload": {
         "psr-4": {
@@ -15,17 +17,6 @@
         "psr-4": {
             "FP\\SEO\\Tests\\": "tests/"
         }
-    },
-    "require-dev": {
-        "phpunit/phpunit": "^9.6",
-        "brain/monkey": "^2.6",
-        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-        "wp-coding-standards/wpcs": "^3.0",
-        "phpstan/phpstan": "^1.10",
-        "phpstan/extension-installer": "^1.3",
-        "php-stubs/wordpress-stubs": "^6.2",
-        "rector/rector": "^0.17.0",
-        "yoast/phpunit-polyfills": "^2.0"
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
@@ -40,10 +31,6 @@
         "changelog:from-git": "conventional-changelog -p angular -i CHANGELOG.md -s || true"
     },
     "config": {
-        "allow-plugins": {
-            "dealerdirect/phpcodesniffer-composer-installer": true,
-            "phpstan/extension-installer": true
-        },
         "platform": {
             "php": "8.2.0"
         },

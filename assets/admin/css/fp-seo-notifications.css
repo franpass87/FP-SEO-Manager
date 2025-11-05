@@ -1,0 +1,336 @@
+/**
+ * FP SEO Performance - Notifications System
+ * 
+ * @package FP\SEO
+ * @author Francesco Passeri
+ * @link https://francescopasseri.com
+ */
+
+/* ==========================================================================
+   Notifications Container
+   ========================================================================== */
+
+.fp-seo-notifications {
+  position: fixed;
+  top: 32px;
+  right: 20px;
+  z-index: 999999;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Notification Component
+   ========================================================================== */
+
+.fp-seo-notification {
+  margin-bottom: var(--fp-seo-space-3);
+  padding: var(--fp-seo-space-4);
+  border-radius: var(--fp-seo-radius-lg);
+  box-shadow: var(--fp-seo-shadow-lg);
+  pointer-events: auto;
+  position: relative;
+  overflow: hidden;
+  transform: translateX(100%);
+  transition: all 0.3s ease-in-out;
+}
+
+.fp-seo-notification.fp-seo-fade-in {
+  transform: translateX(0);
+}
+
+.fp-seo-notification.fp-seo-fade-out {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.fp-seo-notification-content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--fp-seo-space-3);
+}
+
+.fp-seo-notification-message {
+  flex: 1;
+  font-size: var(--fp-seo-font-size-sm);
+  line-height: 1.5;
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-notification-close {
+  background: none;
+  border: none;
+  color: var(--fp-seo-white);
+  font-size: var(--fp-seo-font-size-lg);
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--fp-seo-radius-full);
+  transition: var(--fp-seo-transition);
+  opacity: 0.7;
+}
+
+.fp-seo-notification-close:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ==========================================================================
+   Notification Types
+   ========================================================================== */
+
+.fp-seo-notification-success {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  border-left: 4px solid #1e7e34;
+}
+
+.fp-seo-notification-success::before {
+  content: "✓";
+  position: absolute;
+  top: var(--fp-seo-space-4);
+  left: var(--fp-seo-space-4);
+  font-size: var(--fp-seo-font-size-lg);
+  font-weight: bold;
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-notification-success .fp-seo-notification-content {
+  padding-left: var(--fp-seo-space-8);
+}
+
+.fp-seo-notification-error {
+  background: linear-gradient(135deg, #dc3545, #e83e8c);
+  border-left: 4px solid #c82333;
+}
+
+.fp-seo-notification-error::before {
+  content: "✕";
+  position: absolute;
+  top: var(--fp-seo-space-4);
+  left: var(--fp-seo-space-4);
+  font-size: var(--fp-seo-font-size-lg);
+  font-weight: bold;
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-notification-error .fp-seo-notification-content {
+  padding-left: var(--fp-seo-space-8);
+}
+
+.fp-seo-notification-warning {
+  background: linear-gradient(135deg, #ffc107, #fd7e14);
+  border-left: 4px solid #e0a800;
+  color: var(--fp-seo-gray-800);
+}
+
+.fp-seo-notification-warning::before {
+  content: "⚠";
+  position: absolute;
+  top: var(--fp-seo-space-4);
+  left: var(--fp-seo-space-4);
+  font-size: var(--fp-seo-font-size-lg);
+  font-weight: bold;
+  color: var(--fp-seo-gray-800);
+}
+
+.fp-seo-notification-warning .fp-seo-notification-content {
+  padding-left: var(--fp-seo-space-8);
+}
+
+.fp-seo-notification-warning .fp-seo-notification-message {
+  color: var(--fp-seo-gray-800);
+}
+
+.fp-seo-notification-warning .fp-seo-notification-close {
+  color: var(--fp-seo-gray-800);
+}
+
+.fp-seo-notification-info {
+  background: linear-gradient(135deg, #17a2b8, #0073aa);
+  border-left: 4px solid #138496;
+}
+
+.fp-seo-notification-info::before {
+  content: "ℹ";
+  position: absolute;
+  top: var(--fp-seo-space-4);
+  left: var(--fp-seo-space-4);
+  font-size: var(--fp-seo-font-size-lg);
+  font-weight: bold;
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-notification-info .fp-seo-notification-content {
+  padding-left: var(--fp-seo-space-8);
+}
+
+/* ==========================================================================
+   Progress Bar for Notifications
+   ========================================================================== */
+
+.fp-seo-notification-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 0 0 var(--fp-seo-radius-lg) var(--fp-seo-radius-lg);
+  overflow: hidden;
+}
+
+.fp-seo-notification-progress-bar {
+  height: 100%;
+  background-color: var(--fp-seo-white);
+  border-radius: 0 0 var(--fp-seo-radius-lg) var(--fp-seo-radius-lg);
+  animation: fp-seo-notification-progress 5s linear forwards;
+}
+
+@keyframes fp-seo-notification-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .fp-seo-notifications {
+    top: 20px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+  
+  .fp-seo-notification {
+    margin-bottom: var(--fp-seo-space-2);
+  }
+  
+  .fp-seo-notification-content {
+    flex-direction: column;
+    gap: var(--fp-seo-space-2);
+  }
+  
+  .fp-seo-notification-close {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .fp-seo-notifications {
+    top: 10px;
+    right: 5px;
+    left: 5px;
+  }
+  
+  .fp-seo-notification {
+    padding: var(--fp-seo-space-3);
+  }
+  
+  .fp-seo-notification::before {
+    top: var(--fp-seo-space-3);
+    left: var(--fp-seo-space-3);
+  }
+  
+  .fp-seo-notification .fp-seo-notification-content {
+    padding-left: var(--fp-seo-space-6);
+  }
+}
+
+/* ==========================================================================
+   Animation Enhancements
+   ========================================================================== */
+
+.fp-seo-notification {
+  animation: fp-seo-notification-slide-in 0.3s ease-out;
+}
+
+@keyframes fp-seo-notification-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.fp-seo-notification.fp-seo-fade-out {
+  animation: fp-seo-notification-slide-out 0.3s ease-in;
+}
+
+@keyframes fp-seo-notification-slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Accessibility
+   ========================================================================== */
+
+.fp-seo-notification[role="alert"] {
+  /* Screen reader support */
+}
+
+.fp-seo-notification-close:focus {
+  outline: 2px solid var(--fp-seo-white);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   High Contrast Mode
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+  .fp-seo-notification {
+    border: 2px solid var(--fp-seo-gray-800);
+  }
+  
+  .fp-seo-notification-success {
+    background: #28a745;
+  }
+  
+  .fp-seo-notification-error {
+    background: #dc3545;
+  }
+  
+  .fp-seo-notification-warning {
+    background: #ffc107;
+  }
+  
+  .fp-seo-notification-info {
+    background: #17a2b8;
+  }
+}
+
+/* ==========================================================================
+   Reduced Motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-seo-notification {
+    animation: none;
+    transition: none;
+  }
+  
+  .fp-seo-notification-progress-bar {
+    animation: none;
+  }
+}
