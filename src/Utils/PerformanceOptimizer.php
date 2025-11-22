@@ -49,7 +49,13 @@ class PerformanceOptimizer {
 	 * Optimize database queries.
 	 */
 	public function optimize_database_queries(): void {
-		// Add database query optimizations
+		// DISABLED in frontend: Can interfere with page rendering
+		// Only optimize database queries in admin
+		if ( ! is_admin() ) {
+			return;
+		}
+		
+		// Add database query optimizations (admin only)
 		add_filter( 'posts_where', array( $this, 'optimize_posts_where' ), 10, 2 );
 		add_filter( 'posts_orderby', array( $this, 'optimize_posts_orderby' ), 10, 2 );
 	}
@@ -98,6 +104,7 @@ class PerformanceOptimizer {
 	 * @return string Modified WHERE clause.
 	 */
 	public function optimize_posts_where( string $where, $query ): string {
+		// This method is only called in admin (filter registered only in admin)
 		// Add optimizations for common queries
 		if ( $query->is_main_query() && $query->is_home() ) {
 			// Optimize home page queries
@@ -115,6 +122,7 @@ class PerformanceOptimizer {
 	 * @return string Modified ORDER BY clause.
 	 */
 	public function optimize_posts_orderby( string $orderby, $query ): string {
+		// This method is only called in admin (filter registered only in admin)
 		// Add optimizations for common ordering
 		if ( $query->is_main_query() && $query->is_home() ) {
 			// Use indexed columns for ordering
@@ -199,13 +207,19 @@ class PerformanceOptimizer {
 	 * Optimize meta queries by enabling meta cache.
 	 */
 	public function optimize_meta_queries(): void {
+		// DISABLED in frontend: Can interfere with page rendering
+		// Only optimize meta queries in admin
+		if ( ! is_admin() ) {
+			return;
+		}
+		
 		// Enable meta cache for better performance
 		if ( ! wp_using_ext_object_cache() ) {
 			// For non-persistent cache, ensure meta is cached during request
 			add_filter( 'update_post_metadata_cache', '__return_true' );
 		}
 		
-		// Preload SEO meta for posts being displayed
+		// Preload SEO meta for posts being displayed (admin only)
 		add_action( 'the_post', array( $this, 'preload_seo_meta' ) );
 	}
 

@@ -44,7 +44,11 @@ class InternalLinkManager {
 		add_action( 'wp_ajax_fp_seo_optimize_internal_links', array( $this, 'ajax_optimize_internal_links' ) );
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_links_metabox' ) );
-		add_action( 'wp_head', array( $this, 'output_link_analysis' ) );
+		// DISABLED: output_link_analysis causes issues in frontend - only register in admin
+		// add_action( 'wp_head', array( $this, 'output_link_analysis' ) );
+		if ( is_admin() ) {
+			add_action( 'admin_head', array( $this, 'output_link_analysis' ) );
+		}
 	}
 
 	/**
@@ -1265,12 +1269,29 @@ class InternalLinkManager {
 	 * Output link analysis data in head.
 	 */
 	public function output_link_analysis(): void {
-		if ( is_admin() || is_feed() ) {
+		// DISABLED in frontend: Can interfere with page rendering
+		// This analysis is heavy and not necessary for frontend display
+		// Completely disabled in frontend to prevent conflicts
+		if ( ! is_admin() || is_feed() ) {
+			return;
+		}
+
+		// Double check we're in admin context
+		if ( ! function_exists( 'is_admin' ) || ! is_admin() ) {
 			return;
 		}
 
 		$post_id = get_the_ID();
 		if ( ! $post_id ) {
+			return;
+		}
+
+		// Only output in admin or if explicitly enabled (but still check admin)
+		$options = \FP\SEO\Utils\Options::get();
+		$enable_link_analysis = $options['advanced']['enable_link_analysis_frontend'] ?? false;
+		
+		// Never output in frontend, even if enabled
+		if ( ! is_admin() || ! $enable_link_analysis ) {
 			return;
 		}
 

@@ -253,18 +253,21 @@ class Plugin {
 		}
 
 		try {
+			// InternalLinkManager - register but output_link_analysis is disabled in frontend
 			$this->container->get( InternalLinkManager::class )->register();
 		} catch ( \Exception $e ) {
 			Logger::warning( 'Failed to register InternalLinkManager', array( 'error' => $e->getMessage() ) );
 		}
 
 		try {
+			// MultipleKeywordsManager - only adds meta tags, should be safe
 			$this->container->get( MultipleKeywordsManager::class )->register();
 		} catch ( \Exception $e ) {
 			Logger::warning( 'Failed to register MultipleKeywordsManager', array( 'error' => $e->getMessage() ) );
 		}
 
 		try {
+			// MetaTagRenderer - essential SEO meta tags, keep active
 			$this->container->get( MetaTagRenderer::class )->register();
 		} catch ( \Exception $e ) {
 			Logger::warning( 'Failed to register MetaTagRenderer', array( 'error' => $e->getMessage() ) );
@@ -319,6 +322,7 @@ class Plugin {
 			}
 
 			// Inizializza Advanced Schema Manager dopo il Menu
+			// Schema markup viene generato nel frontend per SEO, ma è sicuro
 			try {
 				$this->container->get( AdvancedSchemaManager::class )->register();
 			} catch ( \Exception $e ) {
