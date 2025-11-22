@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Integrations;
 
+use FP\SEO\Utils\Logger;
+
 use Google\Client;
 use Google\Service\Indexing;
 use Google\Service\Indexing\UrlNotification;
@@ -62,7 +64,7 @@ class IndexingApi {
 
 			return true;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Indexing API Auth Error: ' . $e->getMessage() );
+			Logger::error( 'Indexing API Auth Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -87,11 +89,11 @@ class IndexingApi {
 			$this->service->urlNotifications->publish( $notification );
 
 			// Log success
-			error_log( sprintf( 'FP SEO: URL submitted to Google Indexing API: %s (%s)', $url, $type ) );
+			Logger::info( 'URL submitted to Google Indexing API', array( 'url' => $url, 'type' => $type ) );
 
 			return true;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Indexing API Error: ' . $e->getMessage() );
+			Logger::error( 'Indexing API Error', array( 'error' => $e->getMessage(), 'url' => $url ) );
 			return false;
 		}
 	}

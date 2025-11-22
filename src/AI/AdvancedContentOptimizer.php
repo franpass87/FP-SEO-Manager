@@ -615,6 +615,7 @@ Rispondi in formato JSON con questa struttura:
 					</div>
 
 					<form id="fp-seo-content-gaps-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="gap-topic">
 								<?php esc_html_e( 'Argomento Principale', 'fp-seo-performance' ); ?>
@@ -672,6 +673,7 @@ Rispondi in formato JSON con questa struttura:
 					</div>
 
 					<form id="fp-seo-competitor-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="competitor-url">
 								<?php esc_html_e( 'URL Competitor', 'fp-seo-performance' ); ?>
@@ -719,6 +721,7 @@ Rispondi in formato JSON con questa struttura:
 					</div>
 
 					<form id="fp-seo-suggestions-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="suggestions-post">
 								<?php esc_html_e( 'Seleziona Articolo', 'fp-seo-performance' ); ?>
@@ -773,6 +776,7 @@ Rispondi in formato JSON con questa struttura:
 					</div>
 
 					<form id="fp-seo-readability-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="readability-content">
 								<?php esc_html_e( 'Contenuto da Ottimizzare', 'fp-seo-performance' ); ?>
@@ -823,6 +827,7 @@ Rispondi in formato JSON con questa struttura:
 					</div>
 
 					<form id="fp-seo-semantic-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="semantic-content">
 								<?php esc_html_e( 'Contenuto da Ottimizzare', 'fp-seo-performance' ); ?>
@@ -1069,6 +1074,11 @@ Rispondi in formato JSON con questa struttura:
 			box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 		}
 
+		.fp-seo-form-group .fp-seo-field-error {
+			border-color: #dc2626 !important;
+			box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+		}
+
 		.fp-seo-form-group textarea {
 			resize: vertical;
 			min-height: 120px;
@@ -1097,12 +1107,60 @@ Rispondi in formato JSON con questa struttura:
 			margin-top: 8px;
 		}
 
+		.button-hero.is-loading,
+		.button.is-loading {
+			opacity: 0.6;
+			pointer-events: none;
+		}
+
+		.button-hero.is-loading .dashicons:before,
+		.button.is-loading .dashicons:before {
+			content: "\f463";
+			animation: fp-seo-spin 1s linear infinite;
+		}
+
+		@keyframes fp-seo-spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
+
 		.button-hero .dashicons {
 			font-size: 20px;
 			width: 20px;
 			height: 20px;
 		}
 		
+		/* Inline notices */
+		.fp-seo-inline-notice {
+			display: none;
+			margin-bottom: 20px;
+			padding: 14px 18px;
+			border-radius: 8px;
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		.fp-seo-inline-notice.is-success {
+			display: block;
+			background: #ecfdf5;
+			color: #065f46;
+			border: 1px solid #34d399;
+		}
+
+		.fp-seo-inline-notice.is-error {
+			display: block;
+			background: #fef2f2;
+			color: #991b1b;
+			border: 1px solid #fca5a5;
+		}
+
+		.fp-seo-inline-notice.is-warning {
+			display: block;
+			background: #fffbeb;
+			color: #92400e;
+			border: 1px solid #fcd34d;
+		}
+
 		/* Results */
 		.fp-seo-results {
 			margin-top: 32px;
@@ -1161,198 +1219,626 @@ Rispondi in formato JSON con questa struttura:
 
 		<script>
 		jQuery(document).ready(function($) {
-			// Tab switching
+			const optimizerNonce = '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>';
+			const messages = <?php echo wp_json_encode(
+				array(
+					'analysisComplete'           => __( 'Analisi completata! Controlla i risultati qui sotto.', 'fp-seo-performance' ),
+					'competitorComplete'         => __( 'Analisi del competitor completata. Controlla il riepilogo qui sotto.', 'fp-seo-performance' ),
+					'suggestionsComplete'        => __( 'Suggerimenti generati con successo. Scorri per i dettagli.', 'fp-seo-performance' ),
+					'readabilityComplete'        => __( 'Ottimizzazione della leggibilità completata.', 'fp-seo-performance' ),
+					'semanticComplete'           => __( 'Analisi SEO semantica completata.', 'fp-seo-performance' ),
+					'topicRequired'              => __( 'Inserisci un argomento principale.', 'fp-seo-performance' ),
+					'keywordRequired'            => __( 'Inserisci una keyword target.', 'fp-seo-performance' ),
+					'competitorUrlRequired'      => __( 'Inserisci l\'URL del competitor da analizzare.', 'fp-seo-performance' ),
+					'competitorKeywordRequired'  => __( 'Inserisci la keyword per l\'analisi del competitor.', 'fp-seo-performance' ),
+					'postRequired'               => __( 'Seleziona un contenuto da analizzare.', 'fp-seo-performance' ),
+					'contentRequired'            => __( 'Inserisci del contenuto da analizzare.', 'fp-seo-performance' ),
+					'contentTooShort'            => __( 'Il contenuto deve contenere almeno 50 caratteri.', 'fp-seo-performance' ),
+					'semanticKeywordRequired'    => __( 'Inserisci la keyword principale per l\'ottimizzazione semantica.', 'fp-seo-performance' ),
+					'invalidUrl'                 => __( 'L\'URL "%s" non è valido. Usa un indirizzo completo che inizi con http o https.', 'fp-seo-performance' ),
+					'requestFailed'              => __( 'Richiesta fallita, riprova tra qualche istante.', 'fp-seo-performance' ),
+					'unexpectedError'            => __( 'Si è verificato un errore inatteso. Riprova più tardi.', 'fp-seo-performance' ),
+					'validationGeneric'          => __( 'Correggi i campi evidenziati e riprova.', 'fp-seo-performance' ),
+					'noneLabel'                  => __( 'Nessun dato disponibile', 'fp-seo-performance' ),
+					'contentGapTitle'            => __( 'Risultati Content Gap Analysis', 'fp-seo-performance' ),
+					'competitorTitle'            => __( 'Risultati analisi competitor', 'fp-seo-performance' ),
+					'suggestionsTitle'           => __( 'Suggerimenti contenuto', 'fp-seo-performance' ),
+					'readabilityTitle'           => __( 'Ottimizzazione leggibilità', 'fp-seo-performance' ),
+					'semanticTitle'              => __( 'Ottimizzazione SEO semantica', 'fp-seo-performance' ),
+					'missingSubtopicsLabel'      => __( 'Sottotemi mancanti', 'fp-seo-performance' ),
+					'faqSuggestionsLabel'        => __( 'Domande frequenti', 'fp-seo-performance' ),
+					'uniqueAnglesLabel'          => __( 'Angoli unici', 'fp-seo-performance' ),
+					'longTailLabel'              => __( 'Keyword long-tail', 'fp-seo-performance' ),
+					'contentScoreLabel'          => __( 'Punteggio contenuto', 'fp-seo-performance' ),
+					'strengthsLabel'             => __( 'Punti di forza', 'fp-seo-performance' ),
+					'weaknessesLabel'            => __( 'Punti deboli', 'fp-seo-performance' ),
+					'opportunitiesLabel'         => __( 'Opportunità', 'fp-seo-performance' ),
+					'structureLabel'             => __( 'Struttura', 'fp-seo-performance' ),
+					'keywordUsageLabel'          => __( 'Uso delle keyword', 'fp-seo-performance' ),
+					'overallScoreLabel'          => __( 'Punteggio complessivo', 'fp-seo-performance' ),
+					'structuralLabel'            => __( 'Miglioramenti strutturali', 'fp-seo-performance' ),
+					'keywordOptimizationsLabel'  => __( 'Ottimizzazioni keyword', 'fp-seo-performance' ),
+					'contentAdditionsLabel'      => __( 'Aggiunte di contenuto', 'fp-seo-performance' ),
+					'metaTitleLabel'             => __( 'Meta title suggerito', 'fp-seo-performance' ),
+					'metaDescriptionLabel'       => __( 'Meta description suggerita', 'fp-seo-performance' ),
+					'priorityActionsLabel'       => __( 'Azioni prioritarie', 'fp-seo-performance' ),
+					'sentenceIssuesLabel'        => __( 'Problemi nelle frasi', 'fp-seo-performance' ),
+					'vocabularyLabel'            => __( 'Suggerimenti di vocabolario', 'fp-seo-performance' ),
+					'paragraphLabel'             => __( 'Miglioramenti paragrafi', 'fp-seo-performance' ),
+					'transitionLabel'            => __( 'Transizioni', 'fp-seo-performance' ),
+					'formattingLabel'            => __( 'Suggerimenti di formattazione', 'fp-seo-performance' ),
+					'toneLabel'                  => __( 'Regolazioni tono', 'fp-seo-performance' ),
+					'readabilityScoreLabel'      => __( 'Punteggio leggibilità', 'fp-seo-performance' ),
+					'semanticIntegrationsLabel'  => __( 'Integrazioni semantiche', 'fp-seo-performance' ),
+					'topicClustersLabel'         => __( 'Topic cluster', 'fp-seo-performance' ),
+					'entityLabel'                => __( 'Ottimizzazioni entità', 'fp-seo-performance' ),
+					'contextLabel'               => __( 'Arricchimento contesto', 'fp-seo-performance' ),
+					'lsiLabel'                   => __( 'Keyword correlate (LSI)', 'fp-seo-performance' ),
+					'depthLabel'                 => __( 'Approfondimenti consigliati', 'fp-seo-performance' ),
+					'semanticScoreLabel'         => __( 'Punteggio semantico', 'fp-seo-performance' ),
+				)
+			); ?>;
+			const $gapsResults = $('#fp-seo-gaps-results');
+			const $competitorResults = $('#fp-seo-competitor-results');
+			const $suggestionsResults = $('#fp-seo-suggestions-results');
+			const $readabilityResults = $('#fp-seo-readability-results');
+			const $semanticResults = $('#fp-seo-semantic-results');
+
+			function speak(message, politeness) {
+				if (!message) {
+					return;
+				}
+
+				if (window.wp && window.wp.a11y && typeof window.wp.a11y.speak === 'function') {
+					window.wp.a11y.speak(message, politeness || 'polite');
+				}
+			}
+
+			function showNotice($form, message, type) {
+				const $notice = $form.find('[data-fp-seo-notice]');
+				if (!$notice.length) {
+					return;
+				}
+
+				const level = type === 'error' ? 'is-error' : (type === 'warning' ? 'is-warning' : 'is-success');
+				$notice
+					.removeClass('is-error is-success is-warning')
+					.addClass(level)
+					.text(message)
+					.attr('hidden', false);
+
+				speak(message, type === 'error' ? 'assertive' : 'polite');
+			}
+
+			function clearNotice($form) {
+				const $notice = $form.find('[data-fp-seo-notice]');
+				if ($notice.length) {
+					$notice.removeClass('is-error is-success is-warning').text('').attr('hidden', true);
+				}
+			}
+
+			function setLoading($button, isLoading) {
+				if (!$button || !$button.length) {
+					return;
+				}
+
+				if (isLoading) {
+					$button.prop('disabled', true).addClass('is-loading');
+				} else {
+					$button.prop('disabled', false).removeClass('is-loading');
+				}
+			}
+
+			function setFieldError($field, hasError) {
+				if (!$field || !$field.length) {
+					return;
+				}
+
+				if (hasError) {
+					$field.addClass('fp-seo-field-error').attr('aria-invalid', 'true');
+				} else {
+					$field.removeClass('fp-seo-field-error').removeAttr('aria-invalid');
+				}
+			}
+
+			function normalize(value) {
+				return $.trim(value || '');
+			}
+
+			function resetResults($target) {
+				if ($target && $target.length) {
+					$target.removeClass('show').empty();
+				}
+			}
+
+			function isValidUrl(value) {
+				if (!value) {
+					return false;
+				}
+
+				try {
+					const url = new URL(value);
+					return url.protocol === 'http:' || url.protocol === 'https:';
+				} catch (error) {
+					return false;
+				}
+			}
+
+			function formatList(value) {
+				if (Array.isArray(value) && value.length) {
+					return value.join(', ');
+				}
+
+				if (typeof value === 'string' && value.trim().length) {
+					return value.trim();
+				}
+
+				return messages.noneLabel;
+			}
+
+			function formatScore(value) {
+				if (typeof value === 'number') {
+					return value;
+				}
+
+				if (typeof value === 'string' && value.trim().length) {
+					return value.trim();
+				}
+
+				return 'N/A';
+			}
+
+			function parseError(response, fallback) {
+				if (!response) {
+					return fallback;
+				}
+
+				if (typeof response === 'string' && response.length) {
+					return response;
+				}
+
+				if (response.data) {
+					if (typeof response.data === 'string') {
+						return response.data;
+					}
+
+					if (response.data.message) {
+						return response.data.message;
+					}
+				}
+
+				if (response.message) {
+					return response.message;
+				}
+
+				return fallback;
+			}
+
+			function displayContentGapsResults(data) {
+				const html = [
+					'<div class="fp-seo-result-item">',
+					'<div class="fp-seo-result-title">' + messages.contentGapTitle + '</div>',
+					'<div class="fp-seo-result-content">',
+					'<p><strong>' + messages.missingSubtopicsLabel + ':</strong> ' + formatList(data.missing_subtopics) + '</p>',
+					'<p><strong>' + messages.faqSuggestionsLabel + ':</strong> ' + formatList(data.faq_suggestions) + '</p>',
+					'<p><strong>' + messages.uniqueAnglesLabel + ':</strong> ' + formatList(data.unique_angles) + '</p>',
+					'<p><strong>' + messages.longTailLabel + ':</strong> ' + formatList(data.long_tail_keywords) + '</p>',
+					'<p><strong>' + messages.contentScoreLabel + ':</strong> ' + formatScore(data.content_score) + '</p>',
+					'</div></div>'
+				].join('');
+
+				$gapsResults.html(html).addClass('show');
+			}
+
+			function displayCompetitorResults(data) {
+				const html = [
+					'<div class="fp-seo-result-item">',
+					'<div class="fp-seo-result-title">' + messages.competitorTitle + '</div>',
+					'<div class="fp-seo-result-content">',
+					'<p><strong>' + messages.strengthsLabel + ':</strong> ' + formatList(data.strengths) + '</p>',
+					'<p><strong>' + messages.weaknessesLabel + ':</strong> ' + formatList(data.weaknesses) + '</p>',
+					'<p><strong>' + messages.opportunitiesLabel + ':</strong> ' + formatList(data.opportunities) + '</p>',
+					'<p><strong>' + messages.structureLabel + ':</strong> ' + formatList(data.structure_analysis) + '</p>',
+					'<p><strong>' + messages.keywordUsageLabel + ':</strong> ' + formatList(data.keyword_usage) + '</p>',
+					'<p><strong>' + messages.overallScoreLabel + ':</strong> ' + formatScore(data.overall_score) + '</p>',
+					'</div></div>'
+				].join('');
+
+				$competitorResults.html(html).addClass('show');
+			}
+
+			function displaySuggestionsResults(data) {
+				const metaSuggestions = data.meta_suggestions || {};
+				const html = [
+					'<div class="fp-seo-result-item">',
+					'<div class="fp-seo-result-title">' + messages.suggestionsTitle + '</div>',
+					'<div class="fp-seo-result-content">',
+					'<p><strong>' + messages.structuralLabel + ':</strong> ' + formatList(data.structural_improvements) + '</p>',
+					'<p><strong>' + messages.keywordOptimizationsLabel + ':</strong> ' + formatList(data.keyword_optimizations) + '</p>',
+					'<p><strong>' + messages.contentAdditionsLabel + ':</strong> ' + formatList(data.content_additions) + '</p>',
+					'<p><strong>' + messages.metaTitleLabel + ':</strong> ' + (metaSuggestions.title ? metaSuggestions.title : messages.noneLabel) + '</p>',
+					'<p><strong>' + messages.metaDescriptionLabel + ':</strong> ' + (metaSuggestions.description ? metaSuggestions.description : messages.noneLabel) + '</p>',
+					'<p><strong>' + messages.priorityActionsLabel + ':</strong> ' + formatList(data.priority_actions) + '</p>',
+					'<p><strong>' + messages.overallScoreLabel + ':</strong> ' + formatScore(data.overall_score) + '</p>',
+					'</div></div>'
+				].join('');
+
+				$suggestionsResults.html(html).addClass('show');
+			}
+
+			function displayReadabilityResults(data) {
+				const html = [
+					'<div class="fp-seo-result-item">',
+					'<div class="fp-seo-result-title">' + messages.readabilityTitle + '</div>',
+					'<div class="fp-seo-result-content">',
+					'<p><strong>' + messages.sentenceIssuesLabel + ':</strong> ' + formatList(data.sentence_issues) + '</p>',
+					'<p><strong>' + messages.vocabularyLabel + ':</strong> ' + formatList(data.vocabulary_suggestions) + '</p>',
+					'<p><strong>' + messages.paragraphLabel + ':</strong> ' + formatList(data.paragraph_improvements) + '</p>',
+					'<p><strong>' + messages.transitionLabel + ':</strong> ' + formatList(data.transition_suggestions) + '</p>',
+					'<p><strong>' + messages.formattingLabel + ':</strong> ' + formatList(data.formatting_tips) + '</p>',
+					'<p><strong>' + messages.toneLabel + ':</strong> ' + formatList(data.tone_adjustments) + '</p>',
+					'<p><strong>' + messages.readabilityScoreLabel + ':</strong> ' + formatScore(data.readability_score) + '</p>',
+					'</div></div>'
+				].join('');
+
+				$readabilityResults.html(html).addClass('show');
+			}
+
+			function displaySemanticResults(data) {
+				const html = [
+					'<div class="fp-seo-result-item">',
+					'<div class="fp-seo-result-title">' + messages.semanticTitle + '</div>',
+					'<div class="fp-seo-result-content">',
+					'<p><strong>' + messages.semanticIntegrationsLabel + ':</strong> ' + formatList(data.semantic_integrations) + '</p>',
+					'<p><strong>' + messages.topicClustersLabel + ':</strong> ' + formatList(data.topic_cluster_suggestions) + '</p>',
+					'<p><strong>' + messages.entityLabel + ':</strong> ' + formatList(data.entity_optimizations) + '</p>',
+					'<p><strong>' + messages.contextLabel + ':</strong> ' + formatList(data.context_enrichments) + '</p>',
+					'<p><strong>' + messages.lsiLabel + ':</strong> ' + formatList(data.lsi_keywords) + '</p>',
+					'<p><strong>' + messages.depthLabel + ':</strong> ' + formatList(data.depth_improvements) + '</p>',
+					'<p><strong>' + messages.semanticScoreLabel + ':</strong> ' + formatScore(data.semantic_score) + '</p>',
+					'</div></div>'
+				].join('');
+
+				$semanticResults.html(html).addClass('show');
+			}
+
 			$('.fp-seo-tab-button').on('click', function() {
-				var tab = $(this).data('tab');
+				const tab = $(this).data('tab');
 				$('.fp-seo-tab-button').removeClass('active');
 				$('.fp-seo-tab-content').removeClass('active');
 				$(this).addClass('active');
 				$('#' + tab).addClass('active');
 			});
 
-			// Content gaps form
-		$('#fp-seo-content-gaps-form').on('submit', function(e) {
-			e.preventDefault();
-			var $form = $(this);
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fp_seo_analyze_content_gaps',
-					topic: $form.find('[name="topic"]').val(),
-					keyword: $form.find('[name="keyword"]').val(),
-					competitors: $form.find('[name="competitors"]').val(),
-					nonce: '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						displayContentGapsResults(response.data);
-					} else {
-						alert('Error: ' + response.data);
-					}
+			$('#fp-seo-content-gaps-form').on('submit', function(e) {
+				e.preventDefault();
+
+				const $form = $(this);
+				const $submit = $form.find('button[type="submit"]');
+				const $topic = $form.find('[name="topic"]');
+				const $keyword = $form.find('[name="keyword"]');
+				const $competitors = $form.find('[name="competitors"]');
+
+				const topic = normalize($topic.val());
+				const keyword = normalize($keyword.val());
+				const competitorsRaw = normalize($competitors.val());
+				let hasError = false;
+
+				clearNotice($form);
+				resetResults($gapsResults);
+
+				if (!topic.length) {
+					setFieldError($topic, true);
+					hasError = true;
+				} else {
+					setFieldError($topic, false);
 				}
-			});
-		});
 
-		// Competitor analysis form
-		$('#fp-seo-competitor-form').on('submit', function(e) {
-			e.preventDefault();
-			var $form = $(this);
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fp_seo_competitor_analysis',
-					url: $form.find('[name="url"]').val(),
-					keyword: $form.find('[name="keyword"]').val(),
-					nonce: '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						displayCompetitorResults(response.data);
-					} else {
-						alert('Error: ' + response.data);
-					}
+				if (!keyword.length) {
+					setFieldError($keyword, true);
+					hasError = true;
+				} else {
+					setFieldError($keyword, false);
 				}
-			});
-		});
 
-		// Content suggestions form
-		$('#fp-seo-suggestions-form').on('submit', function(e) {
-			e.preventDefault();
-			var $form = $(this);
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fp_seo_content_suggestions',
-					post_id: $form.find('[name="post_id"]').val(),
-					focus_keyword: $form.find('[name="focus_keyword"]').val(),
-					nonce: '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						displaySuggestionsResults(response.data);
-					} else {
-						alert('Error: ' + response.data);
+				let competitorsValue = '';
+				if (competitorsRaw.length) {
+					const competitorList = competitorsRaw.split(/\n+/).map(normalize).filter(Boolean);
+					const invalidUrl = competitorList.find(function(url) {
+						return !isValidUrl(url);
+					});
+
+					if (invalidUrl) {
+						setFieldError($competitors, true);
+						showNotice($form, messages.invalidUrl.replace('%s', invalidUrl), 'error');
+						$competitors.focus();
+						return;
 					}
-				}
-			});
-		});
 
-		// Readability form
-		$('#fp-seo-readability-form').on('submit', function(e) {
-			e.preventDefault();
-			var $form = $(this);
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fp_seo_readability_optimization',
-					content: $form.find('[name="content"]').val(),
-					audience: $form.find('[name="audience"]').val(),
-					nonce: '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						displayReadabilityResults(response.data);
-					} else {
-						alert('Error: ' + response.data);
+					setFieldError($competitors, false);
+					competitorsValue = competitorList.join("\n");
+				} else {
+					setFieldError($competitors, false);
+				}
+
+				if (hasError) {
+					showNotice($form, messages.validationGeneric, 'error');
+					(!topic.length ? $topic : $keyword).focus();
+					return;
+				}
+
+				setLoading($submit, true);
+
+				$.ajax({
+					url: ajaxurl,
+					method: 'POST',
+					data: {
+						action: 'fp_seo_analyze_content_gaps',
+						topic: topic,
+						keyword: keyword,
+						competitors: competitorsValue,
+						nonce: optimizerNonce
 					}
-				}
-			});
-		});
-
-		// Semantic SEO form
-		$('#fp-seo-semantic-form').on('submit', function(e) {
-			e.preventDefault();
-			var $form = $(this);
-			
-			$.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fp_seo_semantic_optimization',
-					content: $form.find('[name="content"]').val(),
-					keyword: $form.find('[name="keyword"]').val(),
-					nonce: '<?php echo wp_create_nonce( 'fp_seo_optimizer_nonce' ); ?>'
-				},
-				success: function(response) {
-					if (response.success) {
-						displaySemanticResults(response.data);
+				}).done(function(response) {
+					if (response && response.success) {
+						displayContentGapsResults(response.data || {});
+						showNotice($form, messages.analysisComplete, 'success');
 					} else {
-						alert('Error: ' + response.data);
+						showNotice($form, parseError(response, messages.unexpectedError), 'error');
 					}
-				}
+				}).fail(function(_, textStatus) {
+					showNotice($form, messages.requestFailed + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading($submit, false);
+				});
 			});
-		});
 
-			function displayContentGapsResults(data) {
-				var html = '<div class="fp-seo-result-item">';
-				html += '<div class="fp-seo-result-title">Content Gap Analysis Results</div>';
-				html += '<div class="fp-seo-result-content">';
-				html += '<p><strong>Missing Subtopics:</strong> ' + (data.missing_subtopics ? data.missing_subtopics.join(', ') : 'None') + '</p>';
-				html += '<p><strong>FAQ Suggestions:</strong> ' + (data.faq_suggestions ? data.faq_suggestions.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Unique Angles:</strong> ' + (data.unique_angles ? data.unique_angles.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Content Score:</strong> ' + (data.content_score || 'N/A') + '</p>';
-				html += '</div></div>';
-				
-				$('#fp-seo-gaps-results').html(html).addClass('show');
-			}
+			$('#fp-seo-competitor-form').on('submit', function(e) {
+				e.preventDefault();
 
-			function displayCompetitorResults(data) {
-				var html = '<div class="fp-seo-result-item">';
-				html += '<div class="fp-seo-result-title">Competitor Analysis Results</div>';
-				html += '<div class="fp-seo-result-content">';
-				html += '<p><strong>Strengths:</strong> ' + (data.strengths ? data.strengths.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Weaknesses:</strong> ' + (data.weaknesses ? data.weaknesses.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Opportunities:</strong> ' + (data.opportunities ? data.opportunities.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Overall Score:</strong> ' + (data.overall_score || 'N/A') + '</p>';
-				html += '</div></div>';
-				
-				$('#fp-seo-competitor-results').html(html).addClass('show');
-			}
+				const $form = $(this);
+				const $submit = $form.find('button[type="submit"]');
+				const $url = $form.find('[name="url"]');
+				const $keyword = $form.find('[name="keyword"]');
 
-			function displaySuggestionsResults(data) {
-				var html = '<div class="fp-seo-result-item">';
-				html += '<div class="fp-seo-result-title">Content Suggestions</div>';
-				html += '<div class="fp-seo-result-content">';
-				html += '<p><strong>Structural Improvements:</strong> ' + (data.structural_improvements ? data.structural_improvements.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Keyword Optimizations:</strong> ' + (data.keyword_optimizations ? data.keyword_optimizations.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Content Additions:</strong> ' + (data.content_additions ? data.content_additions.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Overall Score:</strong> ' + (data.overall_score || 'N/A') + '</p>';
-				html += '</div></div>';
-				
-				$('#fp-seo-suggestions-results').html(html).addClass('show');
-			}
+				const url = normalize($url.val());
+				const keyword = normalize($keyword.val());
+				let hasError = false;
 
-			function displayReadabilityResults(data) {
-				var html = '<div class="fp-seo-result-item">';
-				html += '<div class="fp-seo-result-title">Readability Optimization Results</div>';
-				html += '<div class="fp-seo-result-content">';
-				html += '<p><strong>Sentence Issues:</strong> ' + (data.sentence_issues ? data.sentence_issues.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Vocabulary Suggestions:</strong> ' + (data.vocabulary_suggestions ? data.vocabulary_suggestions.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Readability Score:</strong> ' + (data.readability_score || 'N/A') + '</p>';
-				html += '</div></div>';
-				
-				$('#fp-seo-readability-results').html(html).addClass('show');
-			}
+				clearNotice($form);
+				resetResults($competitorResults);
 
-			function displaySemanticResults(data) {
-				var html = '<div class="fp-seo-result-item">';
-				html += '<div class="fp-seo-result-title">Semantic SEO Optimization Results</div>';
-				html += '<div class="fp-seo-result-content">';
-				html += '<p><strong>Semantic Integrations:</strong> ' + (data.semantic_integrations ? data.semantic_integrations.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Topic Cluster Suggestions:</strong> ' + (data.topic_cluster_suggestions ? data.topic_cluster_suggestions.join(', ') : 'None') + '</p>';
-				html += '<p><strong>Semantic Score:</strong> ' + (data.semantic_score || 'N/A') + '</p>';
-				html += '</div></div>';
-				
-				$('#fp-seo-semantic-results').html(html).addClass('show');
-			}
+				if (!url.length) {
+					setFieldError($url, true);
+					showNotice($form, messages.competitorUrlRequired, 'error');
+					$url.focus();
+					return;
+				}
+
+				if (!isValidUrl(url)) {
+					setFieldError($url, true);
+					showNotice($form, messages.invalidUrl.replace('%s', url), 'error');
+					$url.focus();
+					return;
+				}
+
+				setFieldError($url, false);
+
+				if (!keyword.length) {
+					setFieldError($keyword, true);
+					hasError = true;
+				} else {
+					setFieldError($keyword, false);
+				}
+
+				if (hasError) {
+					showNotice($form, messages.competitorKeywordRequired, 'error');
+					$keyword.focus();
+					return;
+				}
+
+				setLoading($submit, true);
+
+				$.ajax({
+					url: ajaxurl,
+					method: 'POST',
+					data: {
+						action: 'fp_seo_competitor_analysis',
+						url: url,
+						keyword: keyword,
+						nonce: optimizerNonce
+					}
+				}).done(function(response) {
+					if (response && response.success) {
+						displayCompetitorResults(response.data || {});
+						showNotice($form, messages.competitorComplete, 'success');
+					} else {
+						showNotice($form, parseError(response, messages.unexpectedError), 'error');
+					}
+				}).fail(function(_, textStatus) {
+					showNotice($form, messages.requestFailed + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading($submit, false);
+				});
+			});
+
+			$('#fp-seo-suggestions-form').on('submit', function(e) {
+				e.preventDefault();
+
+				const $form = $(this);
+				const $submit = $form.find('button[type="submit"]');
+				const $post = $form.find('[name="post_id"]');
+				const $keyword = $form.find('[name="focus_keyword"]');
+
+				const postId = normalize($post.val());
+				const keyword = normalize($keyword.val());
+				let hasError = false;
+
+				clearNotice($form);
+				resetResults($suggestionsResults);
+
+				if (!postId.length) {
+					setFieldError($post, true);
+					hasError = true;
+				} else {
+					setFieldError($post, false);
+				}
+
+				if (!keyword.length) {
+					setFieldError($keyword, true);
+					hasError = true;
+				} else {
+					setFieldError($keyword, false);
+				}
+
+				if (hasError) {
+					showNotice($form, messages.validationGeneric, 'error');
+					if (!postId.length) {
+						$post.focus();
+					} else {
+						$keyword.focus();
+					}
+					return;
+				}
+
+				setLoading($submit, true);
+
+				$.ajax({
+					url: ajaxurl,
+					method: 'POST',
+					data: {
+						action: 'fp_seo_content_suggestions',
+						post_id: postId,
+						keyword: keyword,
+						focus_keyword: keyword,
+						nonce: optimizerNonce
+					}
+				}).done(function(response) {
+					if (response && response.success) {
+						displaySuggestionsResults(response.data || {});
+						showNotice($form, messages.suggestionsComplete, 'success');
+					} else {
+						showNotice($form, parseError(response, messages.unexpectedError), 'error');
+					}
+				}).fail(function(_, textStatus) {
+					showNotice($form, messages.requestFailed + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading($submit, false);
+				});
+			});
+
+			$('#fp-seo-readability-form').on('submit', function(e) {
+				e.preventDefault();
+
+				const $form = $(this);
+				const $submit = $form.find('button[type="submit"]');
+				const $content = $form.find('[name="content"]');
+				const $audience = $form.find('[name="audience"]');
+
+				const content = normalize($content.val());
+				const audience = normalize($audience.val()) || 'general';
+
+				clearNotice($form);
+				resetResults($readabilityResults);
+
+				if (!content.length) {
+					setFieldError($content, true);
+					showNotice($form, messages.contentRequired, 'error');
+					$content.focus();
+					return;
+				}
+
+				if (content.length < 50) {
+					setFieldError($content, true);
+					showNotice($form, messages.contentTooShort, 'error');
+					$content.focus();
+					return;
+				}
+
+				setFieldError($content, false);
+				setLoading($submit, true);
+
+				$.ajax({
+					url: ajaxurl,
+					method: 'POST',
+					data: {
+						action: 'fp_seo_readability_optimization',
+						content: content,
+						audience: audience,
+						nonce: optimizerNonce
+					}
+				}).done(function(response) {
+					if (response && response.success) {
+						displayReadabilityResults(response.data || {});
+						showNotice($form, messages.readabilityComplete, 'success');
+					} else {
+						showNotice($form, parseError(response, messages.unexpectedError), 'error');
+					}
+				}).fail(function(_, textStatus) {
+					showNotice($form, messages.requestFailed + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading($submit, false);
+				});
+			});
+
+			$('#fp-seo-semantic-form').on('submit', function(e) {
+				e.preventDefault();
+
+				const $form = $(this);
+				const $submit = $form.find('button[type="submit"]');
+				const $content = $form.find('[name="content"]');
+				const $keyword = $form.find('[name="keyword"]');
+				const $semanticKeywords = $form.find('[name="semantic_keywords"]');
+
+				const content = normalize($content.val());
+				const keyword = normalize($keyword.val());
+				const semanticKeywords = normalize($semanticKeywords.val());
+
+				clearNotice($form);
+				resetResults($semanticResults);
+
+				if (!content.length) {
+					setFieldError($content, true);
+					showNotice($form, messages.contentRequired, 'error');
+					$content.focus();
+					return;
+				}
+
+				setFieldError($content, false);
+
+				if (!keyword.length) {
+					setFieldError($keyword, true);
+					showNotice($form, messages.semanticKeywordRequired, 'error');
+					$keyword.focus();
+					return;
+				}
+
+				setFieldError($keyword, false);
+				setLoading($submit, true);
+
+				$.ajax({
+					url: ajaxurl,
+					method: 'POST',
+					data: {
+						action: 'fp_seo_semantic_optimization',
+						content: content,
+						keyword: keyword,
+						semantic_keywords: semanticKeywords,
+						nonce: optimizerNonce
+					}
+				}).done(function(response) {
+					if (response && response.success) {
+						displaySemanticResults(response.data || {});
+						showNotice($form, messages.semanticComplete, 'success');
+					} else {
+						showNotice($form, parseError(response, messages.unexpectedError), 'error');
+					}
+				}).fail(function(_, textStatus) {
+					showNotice($form, messages.requestFailed + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading($submit, false);
+				});
+			});
 		});
 		</script>
 		<?php
@@ -1364,12 +1850,30 @@ Rispondi in formato JSON con questa struttura:
 	public function ajax_analyze_content_gaps(): void {
 		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$topic = sanitize_text_field( $_POST['topic'] ?? '' );
 		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
-		$competitors = array_filter( array_map( 'esc_url_raw', explode( "\n", $_POST['competitors'] ?? '' ) ) );
+		$competitors = array_filter(
+			array_map(
+				static function( $url ) {
+					$url = esc_url_raw( trim( (string) $url ) );
+					return ( $url && wp_http_validate_url( $url ) ) ? $url : '';
+				},
+				explode( "\n", $_POST['competitors'] ?? '' )
+			)
+		);
 
 		if ( empty( $topic ) || empty( $keyword ) ) {
-			wp_send_json_error( 'Topic and keyword are required' );
+			wp_send_json_error(
+				array( 'message' => __( 'Argomento e keyword sono obbligatori.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		try {
@@ -1386,11 +1890,28 @@ Rispondi in formato JSON con questa struttura:
 	public function ajax_competitor_analysis(): void {
 		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
 
-		$url = esc_url_raw( $_POST['url'] ?? '' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
+		$url     = esc_url_raw( $_POST['url'] ?? '' );
 		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
 
-		if ( empty( $url ) || empty( $keyword ) ) {
-			wp_send_json_error( 'URL and keyword are required' );
+		if ( ! $url || ! wp_http_validate_url( $url ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'URL non valido. Inserisci un indirizzo completo con http o https.', 'fp-seo-performance' ) ),
+				400
+			);
+		}
+
+		if ( empty( $keyword ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'La keyword per l\'analisi del competitor è obbligatoria.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		try {
@@ -1407,16 +1928,36 @@ Rispondi in formato JSON con questa struttura:
 	public function ajax_content_suggestions(): void {
 		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
+		$keyword = sanitize_text_field( $_POST['keyword'] ?? ( $_POST['focus_keyword'] ?? '' ) );
 
 		if ( ! $post_id || empty( $keyword ) ) {
-			wp_send_json_error( 'Post ID and keyword are required' );
+			wp_send_json_error(
+				array( 'message' => __( 'Seleziona un contenuto e indica la keyword da analizzare.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		$post = get_post( $post_id );
 		if ( ! $post ) {
-			wp_send_json_error( 'Post not found' );
+			wp_send_json_error(
+				array( 'message' => __( 'Contenuto non trovato.', 'fp-seo-performance' ) ),
+				404
+			);
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per analizzare questo contenuto.', 'fp-seo-performance' ) ),
+				403
+			);
 		}
 
 		try {
@@ -1433,11 +1974,21 @@ Rispondi in formato JSON con questa struttura:
 	public function ajax_readability_optimization(): void {
 		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$content = wp_unslash( $_POST['content'] ?? '' );
 		$audience = sanitize_text_field( $_POST['audience'] ?? 'general' );
 
 		if ( empty( $content ) ) {
-			wp_send_json_error( 'Content is required' );
+			wp_send_json_error(
+				array( 'message' => __( 'Il contenuto da analizzare è obbligatorio.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		try {
@@ -1454,12 +2005,22 @@ Rispondi in formato JSON con questa struttura:
 	public function ajax_semantic_optimization(): void {
 		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$content = wp_unslash( $_POST['content'] ?? '' );
 		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
 		$semantic_keywords = array_filter( array_map( 'trim', explode( ',', $_POST['semantic_keywords'] ?? '' ) ) );
 
 		if ( empty( $content ) || empty( $keyword ) ) {
-			wp_send_json_error( 'Content and keyword are required' );
+			wp_send_json_error(
+				array( 'message' => __( 'Contenuto e keyword sono obbligatori per l\'ottimizzazione semantica.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		try {

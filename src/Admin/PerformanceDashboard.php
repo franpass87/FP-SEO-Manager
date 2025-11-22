@@ -662,9 +662,7 @@ class PerformanceDashboard {
 
 		// Trigger asset optimization
 		if ( $this->asset_optimizer ) {
-			$this->asset_optimizer->optimize_css_assets();
-			$this->asset_optimizer->optimize_js_assets();
-			$this->asset_optimizer->optimize_image_assets();
+			$this->asset_optimizer->optimize_all();
 		}
 		
 		wp_send_json_success( 'Assets optimized successfully' );

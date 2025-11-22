@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Integrations;
 
+use FP\SEO\Utils\Logger;
+
 /**
  * Handles automatic indexing on publish/update
  */
@@ -48,38 +50,39 @@ class AutoIndexing {
 	 * @param \WP_Post $post    Post object.
 	 */
 	public function on_publish( int $post_id, \WP_Post $post ): void {
-		error_log( sprintf( '[FP-SEO-AutoIndex] on_publish chiamato per post %d (%s)', $post_id, $post->post_type ) );
+		Logger::debug( 'Auto-indexing on_publish triggered', array( 'post_id' => $post_id, 'post_type' => $post->post_type ) );
 
 		// Check if auto-indexing is enabled
 		if ( ! $this->is_enabled() ) {
-			error_log( '[FP-SEO-AutoIndex] Auto-indexing NON abilitato nelle impostazioni' );
+			Logger::debug( 'Auto-indexing disabled in settings' );
 			return;
 		}
 
 		// Skip autosave/revisions
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
-			error_log( '[FP-SEO-AutoIndex] Skipped: autosave' );
+			Logger::debug( 'Skipped: autosave' );
 			return;
 		}
 
 		if ( wp_is_post_revision( $post_id ) ) {
-			error_log( '[FP-SEO-AutoIndex] Skipped: revision' );
+			Logger::debug( 'Skipped: revision' );
 			return;
 		}
 
 		// Check if post is actually published (not draft/pending)
 		if ( 'publish' !== $post->post_status ) {
-			error_log( sprintf( '[FP-SEO-AutoIndex] Skipped: status = %s (deve essere publish)', $post->post_status ) );
+			Logger::debug( 'Skipped: post not published', array( 'status' => $post->post_status ) );
 			return;
 		}
 
 		// Check if post type is enabled
 		if ( ! $this->is_post_type_enabled( $post->post_type ) ) {
-			error_log( sprintf( '[FP-SEO-AutoIndex] Skipped: post_type %s non abilitato', $post->post_type ) );
+			Logger::debug( 'Skipped: post type not enabled', array( 'post_type' => $post->post_type ) );
 			return;
 		}
 
-		error_log( sprintf( '[FP-SEO-AutoIndex] Invio a Google Indexing API: %s (post %d)', get_permalink( $post_id ), $post_id ) );
+		$permalink = get_permalink( $post_id );
+		Logger::info( 'Submitting to Google Indexing API', array( 'url' => $permalink, 'post_id' => $post_id ) );
 
 		// Submit to Google
 		$submitted = $this->indexing_api->submit_post( $post_id );
@@ -88,9 +91,9 @@ class AutoIndexing {
 			// Store submission timestamp
 			update_post_meta( $post_id, '_fp_seo_last_indexing_submission', time() );
 			update_post_meta( $post_id, '_fp_seo_indexing_status', 'submitted' );
-			error_log( sprintf( '[FP-SEO-AutoIndex] ✅ Successo! Post %d inviato a Google', $post_id ) );
+			Logger::info( 'Successfully submitted to Google', array( 'post_id' => $post_id ) );
 		} else {
-			error_log( sprintf( '[FP-SEO-AutoIndex] ❌ Errore: impossibile inviare post %d', $post_id ) );
+			Logger::error( 'Failed to submit to Google', array( 'post_id' => $post_id ) );
 		}
 	}
 

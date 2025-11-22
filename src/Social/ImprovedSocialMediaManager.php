@@ -13,6 +13,17 @@ namespace FP\SEO\Social;
 
 use FP\SEO\Utils\Cache;
 use FP\SEO\Utils\PerformanceConfig;
+use function get_permalink;
+use function get_post;
+use function get_post_field;
+use function get_queried_object_id;
+use function get_the_excerpt;
+use function get_the_post_thumbnail_url;
+use function get_the_title;
+use function is_singular;
+use function trim;
+use function wp_strip_all_tags;
+use function wp_trim_words;
 
 /**
  * Enhanced Social Media Manager with improved UI/UX.
@@ -719,29 +730,46 @@ class ImprovedSocialMediaManager {
 			return;
 		}
 
-		$post_id = get_the_ID();
+		if ( ! is_singular() ) {
+			return;
+		}
+
+		$post_id = get_queried_object_id();
 		if ( ! $post_id ) {
 			return;
 		}
 
 		$social_meta = $this->get_social_meta( $post_id );
-		if ( empty( $social_meta ) ) {
-			return;
+		$post        = get_post( $post_id );
+		$post_title  = get_the_title( $post_id );
+		$post_excerpt = get_the_excerpt( $post_id );
+		$post_content = $post ? (string) $post->post_content : (string) get_post_field( 'post_content', $post_id );
+		$permalink   = get_permalink( $post_id );
+
+		if ( '' === trim( (string) $post_excerpt ) ) {
+			$post_excerpt = wp_trim_words( wp_strip_all_tags( $post_content ), 30, '' );
 		}
+
+		$defaults = array(
+			'title'       => $post_title,
+			'description' => trim( (string) $post_excerpt ),
+			'permalink'   => $permalink,
+			'post_id'     => $post_id,
+		);
 
 		echo "\n<!-- FP SEO Performance Social Media Tags -->\n";
 		
 		// Open Graph tags
-		$this->output_open_graph_tags( $social_meta );
+		$this->output_open_graph_tags( $social_meta, $defaults );
 		
 		// Twitter Card tags
-		$this->output_twitter_card_tags( $social_meta );
+		$this->output_twitter_card_tags( $social_meta, $defaults );
 		
 		// LinkedIn tags
-		$this->output_linkedin_tags( $social_meta );
+		$this->output_linkedin_tags( $social_meta, $defaults );
 		
 		// Pinterest tags
-		$this->output_pinterest_tags( $social_meta );
+		$this->output_pinterest_tags( $social_meta, $defaults );
 		
 		echo "<!-- End FP SEO Performance Social Media Tags -->\n";
 	}
@@ -751,23 +779,27 @@ class ImprovedSocialMediaManager {
 	 *
 	 * @param array<string, mixed> $meta Social meta data.
 	 */
-	private function output_open_graph_tags( array $meta ): void {
+	private function output_open_graph_tags( array $meta, array $defaults ): void {
+		$title       = ! empty( $meta['facebook_title'] ) ? $meta['facebook_title'] : $defaults['title'];
+		$description = ! empty( $meta['facebook_description'] ) ? $meta['facebook_description'] : $defaults['description'];
+		$permalink   = $defaults['permalink'];
+
 		$og_tags = array(
-			'og:title' => $meta['facebook_title'] ?? get_the_title(),
-			'og:description' => $meta['facebook_description'] ?? get_the_excerpt(),
+			'og:title' => $title,
+			'og:description' => $description,
 			'og:type' => 'article',
-			'og:url' => get_permalink(),
+			'og:url' => $permalink,
 			'og:site_name' => get_bloginfo( 'name' ),
 			'og:locale' => get_locale(),
 		);
 
 		// Add image
-		$og_image = $this->get_social_image( $meta, 'facebook' );
+		$og_image = $this->get_social_image( $meta, 'facebook', $defaults['post_id'] );
 		if ( $og_image ) {
 			$og_tags['og:image'] = $og_image;
 			$og_tags['og:image:width'] = 1200;
 			$og_tags['og:image:height'] = 630;
-			$og_tags['og:image:alt'] = $meta['facebook_title'] ?? get_the_title();
+			$og_tags['og:image:alt'] = $title;
 		}
 
 		foreach ( $og_tags as $property => $content ) {
@@ -782,19 +814,23 @@ class ImprovedSocialMediaManager {
 	 *
 	 * @param array<string, mixed> $meta Social meta data.
 	 */
-	private function output_twitter_card_tags( array $meta ): void {
+	private function output_twitter_card_tags( array $meta, array $defaults ): void {
+		$title       = ! empty( $meta['twitter_title'] ) ? $meta['twitter_title'] : $defaults['title'];
+		$description = ! empty( $meta['twitter_description'] ) ? $meta['twitter_description'] : $defaults['description'];
+		$permalink   = $defaults['permalink'];
+
 		$twitter_tags = array(
 			'twitter:card' => $meta['twitter_card_type'] ?? 'summary_large_image',
-			'twitter:title' => $meta['twitter_title'] ?? get_the_title(),
-			'twitter:description' => $meta['twitter_description'] ?? get_the_excerpt(),
-			'twitter:url' => get_permalink(),
+			'twitter:title' => $title,
+			'twitter:description' => $description,
+			'twitter:url' => $permalink,
 		);
 
 		// Add image
-		$twitter_image = $this->get_social_image( $meta, 'twitter' );
+		$twitter_image = $this->get_social_image( $meta, 'twitter', $defaults['post_id'] );
 		if ( $twitter_image ) {
 			$twitter_tags['twitter:image'] = $twitter_image;
-			$twitter_tags['twitter:image:alt'] = $meta['twitter_title'] ?? get_the_title();
+			$twitter_tags['twitter:image:alt'] = $title;
 		}
 
 		foreach ( $twitter_tags as $name => $content ) {
@@ -809,14 +845,18 @@ class ImprovedSocialMediaManager {
 	 *
 	 * @param array<string, mixed> $meta Social meta data.
 	 */
-	private function output_linkedin_tags( array $meta ): void {
+	private function output_linkedin_tags( array $meta, array $defaults ): void {
+		$title       = ! empty( $meta['linkedin_title'] ) ? $meta['linkedin_title'] : $defaults['title'];
+		$description = ! empty( $meta['linkedin_description'] ) ? $meta['linkedin_description'] : $defaults['description'];
+		$permalink   = $defaults['permalink'];
+
 		$linkedin_tags = array(
-			'linkedin:title' => $meta['linkedin_title'] ?? get_the_title(),
-			'linkedin:description' => $meta['linkedin_description'] ?? get_the_excerpt(),
-			'linkedin:url' => get_permalink(),
+			'linkedin:title' => $title,
+			'linkedin:description' => $description,
+			'linkedin:url' => $permalink,
 		);
 
-		$linkedin_image = $this->get_social_image( $meta, 'linkedin' );
+		$linkedin_image = $this->get_social_image( $meta, 'linkedin', $defaults['post_id'] );
 		if ( $linkedin_image ) {
 			$linkedin_tags['linkedin:image'] = $linkedin_image;
 		}
@@ -833,14 +873,18 @@ class ImprovedSocialMediaManager {
 	 *
 	 * @param array<string, mixed> $meta Social meta data.
 	 */
-	private function output_pinterest_tags( array $meta ): void {
+	private function output_pinterest_tags( array $meta, array $defaults ): void {
+		$title       = ! empty( $meta['pinterest_title'] ) ? $meta['pinterest_title'] : $defaults['title'];
+		$description = ! empty( $meta['pinterest_description'] ) ? $meta['pinterest_description'] : $defaults['description'];
+		$permalink   = $defaults['permalink'];
+
 		$pinterest_tags = array(
-			'pinterest:title' => $meta['pinterest_title'] ?? get_the_title(),
-			'pinterest:description' => $meta['pinterest_description'] ?? get_the_excerpt(),
-			'pinterest:url' => get_permalink(),
+			'pinterest:title' => $title,
+			'pinterest:description' => $description,
+			'pinterest:url' => $permalink,
 		);
 
-		$pinterest_image = $this->get_social_image( $meta, 'pinterest' );
+		$pinterest_image = $this->get_social_image( $meta, 'pinterest', $defaults['post_id'] );
 		if ( $pinterest_image ) {
 			$pinterest_tags['pinterest:image'] = $pinterest_image;
 		}
@@ -859,7 +903,7 @@ class ImprovedSocialMediaManager {
 	 * @param string $platform Platform name.
 	 * @return string|null
 	 */
-	private function get_social_image( array $meta, string $platform = 'facebook' ): ?string {
+	private function get_social_image( array $meta, string $platform, int $post_id ): ?string {
 		// Check for platform-specific image
 		$platform_image = $meta[ $platform . '_image' ] ?? null;
 		if ( ! empty( $platform_image ) ) {
@@ -867,7 +911,7 @@ class ImprovedSocialMediaManager {
 		}
 
 		// Check for featured image
-		$featured_image = get_the_post_thumbnail_url( get_the_ID(), 'full' );
+		$featured_image = get_the_post_thumbnail_url( $post_id, 'full' );
 		if ( $featured_image ) {
 			return $featured_image;
 		}
@@ -945,8 +989,14 @@ class ImprovedSocialMediaManager {
 		$count_posts = wp_count_posts( 'post' );
 		$total_posts = isset( $count_posts->publish ) ? (int) $count_posts->publish : 0;
 		$optimized_posts = $this->get_posts_with_social_meta_count();
-		
-		return $total_posts > 0 ? (int) round( ( $optimized_posts / $total_posts ) * 100 ) : 0;
+
+		if ( $total_posts <= 0 ) {
+			return 0;
+		}
+
+		$score = ( $optimized_posts / $total_posts ) * 100;
+
+		return (int) max( 0, min( 100, round( $score ) ) );
 	}
 
 	/**

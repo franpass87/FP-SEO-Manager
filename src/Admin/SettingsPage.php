@@ -217,6 +217,19 @@ class SettingsPage {
 		$current_tab = $this->get_current_tab();
 		$options     = Options::get();
 
+		if ( isset( $_GET['settings-updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Core handles nonce in options.php redirect.
+			$flag = sanitize_text_field( wp_unslash( (string) $_GET['settings-updated'] ) );
+
+			if ( 'true' === $flag ) {
+				add_settings_error(
+					Options::OPTION_GROUP,
+					'fp_seo_perf_settings_saved',
+					__( 'Impostazioni salvate correttamente.', 'fp-seo-performance' ),
+					'updated'
+				);
+			}
+		}
+
 		$tabs = array(
 			'general'     => __( 'General', 'fp-seo-performance' ),
 			'analysis'    => __( 'Analysis', 'fp-seo-performance' ),

@@ -38,19 +38,42 @@ if ( is_readable( $autoload ) ) {
 	require_once $autoload;
 }
 
+// Carica Container prima di Plugin per evitare errori di autoload
+require_once __DIR__ . '/src/Infrastructure/Container.php';
 require_once __DIR__ . '/src/Infrastructure/Plugin.php';
+
+add_action(
+	'init',
+	static function () {
+		load_plugin_textdomain(
+			'fp-seo-performance',
+			false,
+			dirname( plugin_basename( __FILE__ ) ) . '/languages'
+		);
+	},
+	0
+);
 
 FP\SEO\Infrastructure\Plugin::instance()->init();
 
-// TEMPORARY: Force flush menu cache UNA SOLA VOLTA - rimuovi dopo 1-2 giorni
-add_action( 'init', function() {
-	// Controlla se il flush è già stato fatto
-	if ( false === get_transient( 'fp_seo_menu_flushed_v3' ) ) {
-		// Flush cache
-		wp_cache_flush();
-		// Imposta transient per 7 giorni - dopo questo periodo si auto-riabilita
-		set_transient( 'fp_seo_menu_flushed_v3', true, 7 * DAY_IN_SECONDS );
-		// Log per debug
-		error_log( 'FP SEO Performance: Cache flushed after menu restructure' );
-	}
-}, 1 );
+add_action(
+	'init',
+	static function () {
+		if ( ! function_exists( 'get_role' ) ) {
+			return;
+		}
+
+		$capability = \FP\SEO\Utils\Options::get_capability();
+
+		if ( empty( $capability ) || 'manage_options' === $capability ) {
+			return;
+		}
+
+		$administrator = get_role( 'administrator' );
+
+		if ( $administrator && ! $administrator->has_cap( $capability ) ) {
+			$administrator->add_cap( $capability );
+		}
+	},
+	5
+);

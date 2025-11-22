@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Utils;
 
+use FP\SEO\Utils\Logger;
+
 /**
  * Performance monitoring system with detailed metrics.
  */
@@ -396,6 +398,6 @@ class PerformanceMonitor {
 		}
 
 		$summary = $this->get_summary();
-		error_log( 'FP SEO Performance Metrics: ' . $this->export_json() );
+		Logger::debug( 'Performance Metrics', array( 'metrics' => $this->export_json() ) );
 	}
 }

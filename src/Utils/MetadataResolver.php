@@ -15,8 +15,10 @@ namespace FP\SEO\Utils;
 
 use WP_Post;
 use function get_post_meta;
+use function get_post_field;
 use function is_string;
 use function wp_strip_all_tags;
+use function wp_trim_words;
 
 /**
  * Resolves SEO metadata (description, canonical, robots) from post meta.
@@ -35,6 +37,7 @@ class MetadataResolver {
 	public static function resolve_meta_description( $post ): string {
 		$post_id = $post instanceof WP_Post ? (int) $post->ID : (int) $post;
 		$excerpt = $post instanceof WP_Post ? (string) $post->post_excerpt : '';
+		$content = $post instanceof WP_Post ? (string) $post->post_content : (string) get_post_field( 'post_content', $post_id );
 
 		$meta = get_post_meta( $post_id, '_fp_seo_meta_description', true );
 
@@ -42,7 +45,17 @@ class MetadataResolver {
 			return $meta;
 		}
 
-		return wp_strip_all_tags( $excerpt );
+		if ( '' === $excerpt ) {
+			$excerpt = wp_trim_words( wp_strip_all_tags( $content ), 30, '' );
+		}
+
+		$description = wp_strip_all_tags( $excerpt );
+
+		if ( '' === $description ) {
+			$description = wp_trim_words( wp_strip_all_tags( $content ), 30, '' );
+		}
+
+		return $description;
 	}
 
 	/**

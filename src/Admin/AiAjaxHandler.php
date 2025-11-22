@@ -13,6 +13,7 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\Logger;
 
 /**
  * Handles AJAX requests for AI-powered SEO generation.
@@ -103,22 +104,23 @@ class AiAjaxHandler {
 
 	// Generate AI content.
 	try {
-		error_log( '[FP-SEO-AI-AJAX] Starting generate_seo_suggestions for post_id: ' . $post_id );
-		error_log( '[FP-SEO-AI-AJAX] Content length: ' . strlen( $content ) . ', Title: ' . $title );
-		error_log( '[FP-SEO-AI-AJAX] Focus keyword: ' . $focus_keyword );
+		Logger::debug( 'Starting AI SEO generation', array(
+			'post_id' => $post_id,
+			'content_length' => strlen( $content ),
+			'title' => $title,
+			'focus_keyword' => $focus_keyword,
+		) );
 		
 		$result = $this->client->generate_seo_suggestions( $post_id, $content, $title, $focus_keyword );
 		
-		error_log( '[FP-SEO-AI-AJAX] Result received: ' . print_r( $result, true ) );
+		Logger::debug( 'AI generation result received', array( 'success' => $result['success'] ?? false ) );
 
 		if ( ! $result['success'] ) {
 			$error_msg = $result['error'] ?? __( 'Errore sconosciuto.', 'fp-seo-performance' );
-			error_log( '[FP-SEO-AI-AJAX] Generation failed: ' . $error_msg );
-			
-			// Include debug info if available
-			if ( isset( $result['debug'] ) ) {
-				error_log( '[FP-SEO-AI-AJAX] Debug info: ' . print_r( $result['debug'], true ) );
-			}
+			Logger::error( 'AI generation failed', array(
+				'error' => $error_msg,
+				'debug' => $result['debug'] ?? array(),
+			) );
 			
 			wp_send_json_error(
 				array(
@@ -129,7 +131,7 @@ class AiAjaxHandler {
 			);
 		}
 
-		error_log( '[FP-SEO-AI-AJAX] Generation successful, sending response' );
+		Logger::debug( 'AI generation successful' );
 		
 		// Return generated data.
 		wp_send_json_success(
@@ -142,8 +144,10 @@ class AiAjaxHandler {
 			)
 		);
 	} catch ( \Exception $e ) {
-		error_log( '[FP-SEO-AI-AJAX] Exception caught: ' . $e->getMessage() );
-		error_log( '[FP-SEO-AI-AJAX] Stack trace: ' . $e->getTraceAsString() );
+		Logger::error( 'AI generation exception', array(
+			'message' => $e->getMessage(),
+			'trace' => $e->getTraceAsString(),
+		) );
 		wp_send_json_error(
 			array(
 				'message' => $e->getMessage(),

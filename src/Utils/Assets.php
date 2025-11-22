@@ -35,9 +35,6 @@ class Assets {
 		// Register type="module" filter FIRST (before any script registration)
 		add_filter( 'script_loader_tag', array( $this, 'add_type_module' ), 10, 3 );
 		
-		// Register immediately instead of waiting for admin_init
-		$this->register_handles();
-		
 		// Also add hooks as backup
 		add_action( 'admin_init', array( $this, 'register_admin_assets' ), 10, 0 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'ensure_admin_handles' ), 5, 0 );
@@ -76,6 +73,8 @@ class Assets {
 		// Only load on FP SEO pages or post editor
 		$fp_seo_pages = array(
 			'toplevel_page_fp-seo-performance',
+			'fp-seo-performance_page_fp-seo-performance-bulk',
+			'seo-performance_page_fp-seo-performance-bulk',
 			'fp-seo-performance_page_fp-seo-bulk-audit',
 			'toplevel_page_fp-seo-test-suite',
 			'fp-seo-performance_page_fp-seo-social-media',

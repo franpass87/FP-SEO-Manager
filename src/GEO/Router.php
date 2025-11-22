@@ -322,7 +322,9 @@ class Router {
 			}
 		}
 
+		header( 'Content-Length: ' . strlen( $json ) );
 		echo $json;
+		exit;
 	}
 
 	/**
@@ -331,7 +333,10 @@ class Router {
 	private function send_404(): void {
 		http_response_code( 404 );
 		header( 'Content-Type: application/json; charset=utf-8' );
-		echo wp_json_encode( array( 'error' => 'Not Found' ) );
+		$payload = wp_json_encode( array( 'error' => 'Not Found' ) );
+		header( 'Content-Length: ' . strlen( $payload ) );
+		echo $payload;
+		exit;
 	}
 
 	// NEW AI-FIRST ENDPOINT HANDLERS

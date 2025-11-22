@@ -16,6 +16,7 @@ namespace FP\SEO\Integrations;
 use FP\SEO\AI\QAPairExtractor;
 use FP\SEO\GEO\MultiModalOptimizer;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\Logger;
 
 /**
  * Handles automatic generation of AI-first data on post publish
@@ -84,7 +85,7 @@ class AutoGenerationHook {
 		try {
 			$this->generate_ai_data( $post_id, $post );
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Auto-Generation Error: ' . $e->getMessage() );
+			Logger::error( 'Auto-generation error', array( 'error' => $e->getMessage(), 'post_id' => $post_id ) );
 		} finally {
 			// Unmark
 			$this->set_generating( $post_id, false );
@@ -136,7 +137,7 @@ class AutoGenerationHook {
 			// On update, regenerate only Q&A (images likely unchanged)
 			$this->regenerate_qa_only( $post_id, $post );
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Auto-Regeneration Error: ' . $e->getMessage() );
+			Logger::error( 'Auto-regeneration error', array( 'error' => $e->getMessage(), 'post_id' => $post_id ) );
 		} finally {
 			// Unmark
 			$this->set_generating( $post_id, false );
@@ -216,18 +217,18 @@ class AutoGenerationHook {
 		if ( ! empty( $options['ai_first']['enable_qa'] ) ) {
 			try {
 				$this->qa_extractor->extract_qa_pairs( $post_id, true );
-				error_log( sprintf( 'FP SEO: Auto-generated Q&A for post %d', $post_id ) );
+				Logger::info( 'Auto-generated Q&A', array( 'post_id' => $post_id ) );
 			} catch ( \Exception $e ) {
-				error_log( sprintf( 'FP SEO: Failed to auto-generate Q&A for post %d: %s', $post_id, $e->getMessage() ) );
+				Logger::error( 'Failed to auto-generate Q&A', array( 'post_id' => $post_id, 'error' => $e->getMessage() ) );
 			}
 		}
 
 		// 2. Optimize images (always, doesn't require API)
 		try {
 			$this->image_optimizer->optimize_images( $post_id );
-			error_log( sprintf( 'FP SEO: Auto-optimized images for post %d', $post_id ) );
+			Logger::info( 'Auto-optimized images', array( 'post_id' => $post_id ) );
 		} catch ( \Exception $e ) {
-			error_log( sprintf( 'FP SEO: Failed to optimize images for post %d: %s', $post_id, $e->getMessage() ) );
+			Logger::error( 'Failed to optimize images', array( 'post_id' => $post_id, 'error' => $e->getMessage() ) );
 		}
 
 		// 3. Optional: Generate entities (if enabled and doesn't require API)
@@ -235,9 +236,9 @@ class AutoGenerationHook {
 			try {
 				$entity_graph = new \FP\SEO\GEO\EntityGraph();
 				$entity_graph->build_entity_graph( $post_id );
-				error_log( sprintf( 'FP SEO: Auto-generated entity graph for post %d', $post_id ) );
+				Logger::info( 'Auto-generated entity graph', array( 'post_id' => $post_id ) );
 			} catch ( \Exception $e ) {
-				error_log( sprintf( 'FP SEO: Failed to generate entities for post %d: %s', $post_id, $e->getMessage() ) );
+				Logger::error( 'Failed to generate entities', array( 'post_id' => $post_id, 'error' => $e->getMessage() ) );
 			}
 		}
 
@@ -271,9 +272,9 @@ class AutoGenerationHook {
 			// Generate new Q&A
 			$this->qa_extractor->extract_qa_pairs( $post_id, true );
 
-			error_log( sprintf( 'FP SEO: Regenerated Q&A for updated post %d', $post_id ) );
+			Logger::info( 'Regenerated Q&A for updated post', array( 'post_id' => $post_id ) );
 		} catch ( \Exception $e ) {
-			error_log( sprintf( 'FP SEO: Failed to regenerate Q&A for post %d: %s', $post_id, $e->getMessage() ) );
+			Logger::error( 'Failed to regenerate Q&A', array( 'post_id' => $post_id, 'error' => $e->getMessage() ) );
 		}
 
 		/**

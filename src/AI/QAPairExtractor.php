@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
+use FP\SEO\Utils\Logger;
+
 use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\Utils\Cache;
 
@@ -104,7 +106,7 @@ class QAPairExtractor {
 			return $this->parse_qa_response( $response, $post );
 
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Q&A Extraction Error: ' . $e->getMessage() );
+			Logger::error( 'Q&A Extraction Error', array( 'error' => $e->getMessage(), 'post_id' => $post_id ) );
 			return array();
 		}
 	}

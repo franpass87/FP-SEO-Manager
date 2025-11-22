@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre
+Stable tag: 0.9.0-pre.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -90,6 +90,16 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 
 == Changelog ==
 
+= 0.9.0-pre.11 - 2025-01-27 =
+* **SECURITY & QUALITY UPDATE**
+* Fixed: Potential SQL injection in DatabaseOptimizer
+* Fixed: Infinite loop risk in Metabox save operations
+* Improved: Centralized logging with Logger class (85+ improvements)
+* Improved: Error handling and race condition prevention
+* Removed: Temporary cache flush code
+* Enhanced: 100% prepared statements, input sanitization, output escaping
+* See `CHANGELOG.md` for complete details
+
 = 0.9.0-pre - 2025-10-25 =
 * **MAJOR RELEASE** - AI Integration Complete + Test Suite
 * Added: Full OpenAI GPT-5 integration (Nano, Mini, Pro)
@@ -103,7 +113,6 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 * Changed: Enhanced character validation (60/155 strict limits)
 * Fixed: WordPress loading for junction/symlink setups
 * Fixed: AJAX compatibility issues
-* See `CHANGELOG.md` for complete details
 
 = 0.4.0 - 2025-10-25 =
 * Added: GEO (Generative Engine Optimization) support
@@ -121,6 +130,9 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 * Initial scaffold.
 
 == Upgrade Notice ==
+
+= 0.9.0-pre.11 =
+SECURITY & QUALITY UPDATE! Fixed potential SQL injection, infinite loop risks, and improved logging. No breaking changes - safe to update immediately.
 
 = 0.9.0-pre =
 MAJOR UPDATE! AI-powered content generation with GPT-5 Nano is here! Get an OpenAI API key and generate SEO-optimized content with one click. Includes comprehensive test suite and enhanced documentation.

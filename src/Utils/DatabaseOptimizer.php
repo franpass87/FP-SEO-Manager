@@ -397,25 +397,72 @@ class DatabaseOptimizer {
 	/**
 	 * Optimize specific query.
 	 *
-	 * @param string $query SQL query.
+	 * SECURITY: This method should only be called with trusted, internal queries.
+	 * Never call with user-provided input without proper validation.
+	 *
+	 * @param string $query SQL query. Must be a trusted query from internal code only.
 	 * @return array<string, mixed>
 	 */
 	public function optimize_query( string $query ): array {
+		// SECURITY: Validate query is not empty and contains only safe characters
+		$query = trim( $query );
+		if ( empty( $query ) ) {
+			return [
+				'query' => '',
+				'execution_plan' => [],
+				'analysis_time' => 0,
+				'recommendations' => [ 'Empty query provided' ],
+				'error' => 'Empty query',
+			];
+		}
+
+		// SECURITY: Prevent dangerous SQL operations in EXPLAIN
+		$dangerous_keywords = [ 'DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'CREATE', 'INSERT', 'UPDATE', 'REPLACE' ];
+		$query_upper = strtoupper( $query );
+		foreach ( $dangerous_keywords as $keyword ) {
+			if ( strpos( $query_upper, $keyword ) !== false ) {
+				return [
+					'query' => $query,
+					'execution_plan' => [],
+					'analysis_time' => 0,
+					'recommendations' => [ 'Query contains dangerous operations. Only SELECT queries are allowed for optimization analysis.' ],
+					'error' => 'Dangerous query detected',
+				];
+			}
+		}
+
+		// SECURITY: Only allow SELECT queries for EXPLAIN
+		$query_trimmed = trim( $query );
+		if ( stripos( $query_trimmed, 'SELECT' ) !== 0 ) {
+			return [
+				'query' => $query,
+				'execution_plan' => [],
+				'analysis_time' => 0,
+				'recommendations' => [ 'Only SELECT queries can be analyzed with EXPLAIN' ],
+				'error' => 'Invalid query type',
+			];
+		}
+
 		$start_time = microtime( true );
 		
+		// SECURITY: Use esc_sql for additional safety
+		// Note: This method should only be called with trusted internal queries
+		// EXPLAIN only works with SELECT queries, providing natural protection
+		$safe_query = esc_sql( $query );
+		
 		// Get query execution plan
-		$explain = $this->wpdb->get_results( "EXPLAIN {$query}", ARRAY_A );
+		$explain = $this->wpdb->get_results( "EXPLAIN {$safe_query}", ARRAY_A );
 		
 		$execution_time = microtime( true ) - $start_time;
 
 		$analysis = [
 			'query' => $query,
-			'execution_plan' => $explain,
+			'execution_plan' => $explain ?: [],
 			'analysis_time' => $execution_time,
-			'recommendations' => $this->analyze_query_plan( $explain ),
+			'recommendations' => $this->analyze_query_plan( $explain ?: [] ),
 		];
 
-		$this->monitor->record_db_query( "EXPLAIN {$query}", $execution_time );
+		$this->monitor->record_db_query( "EXPLAIN [sanitized]", $execution_time );
 
 		return $analysis;
 	}

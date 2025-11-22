@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Integrations;
 
+use FP\SEO\Utils\Logger;
+
 use Google\Client;
 use Google\Service\SearchConsole;
 use Google\Service\SearchConsole\SearchAnalyticsQueryRequest;
@@ -63,7 +65,7 @@ class GscClient {
 
 			return true;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO GSC Auth Error: ' . $e->getMessage() );
+			Logger::error( 'GSC Auth Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -102,7 +104,7 @@ class GscClient {
 				'responseAggregationType' => $response->getResponseAggregationType(),
 			);
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO GSC Query Error: ' . $e->getMessage() );
+			Logger::error( 'GSC Query Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}
 	}
@@ -188,7 +190,7 @@ class GscClient {
 
 			return $totals;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO GSC URL Query Error: ' . $e->getMessage() );
+			Logger::error( 'GSC URL Query Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}
 	}
@@ -215,7 +217,7 @@ class GscClient {
 			$sites = $this->service->sites->listSites();
 			return true;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO GSC Connection Test Error: ' . $e->getMessage() );
+			Logger::error( 'GSC Connection Test Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -286,7 +288,7 @@ class GscClient {
 
 			return $queries;
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO GSC Top Queries Error: ' . $e->getMessage() );
+			Logger::error( 'GSC Top Queries Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}
 	}

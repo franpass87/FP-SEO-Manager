@@ -681,6 +681,7 @@ class AdvancedSchemaManager {
 						<p class="fp-seo-generator-desc"><?php esc_html_e( 'Genera Schema Markup personalizzati in formato JSON-LD', 'fp-seo-performance' ); ?></p>
 					</div>
 					<form id="fp-seo-schema-form">
+						<div class="fp-seo-inline-notice" data-fp-seo-schema-notice hidden role="status" aria-live="polite"></div>
 						<div class="fp-seo-form-group">
 							<label for="schema-type">
 								<?php esc_html_e( 'Tipo di Schema', 'fp-seo-performance' ); ?>
@@ -981,6 +982,37 @@ class AdvancedSchemaManager {
 			font-size: 14px;
 		}
 		
+		/* Inline notices */
+		.fp-seo-inline-notice {
+			display: none;
+			margin-bottom: 20px;
+			padding: 14px 18px;
+			border-radius: 8px;
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		.fp-seo-inline-notice.is-success {
+			display: block;
+			background: #ecfdf5;
+			color: #065f46;
+			border: 1px solid #34d399;
+		}
+
+		.fp-seo-inline-notice.is-error {
+			display: block;
+			background: #fef2f2;
+			color: #991b1b;
+			border: 1px solid #fca5a5;
+		}
+
+		.fp-seo-inline-notice.is-warning {
+			display: block;
+			background: #fffbeb;
+			color: #92400e;
+			border: 1px solid #fcd34d;
+		}
+
 		/* Form */
 		.fp-seo-form-group {
 			margin-bottom: 28px;
@@ -1030,6 +1062,11 @@ class AdvancedSchemaManager {
 			outline: none;
 			border-color: #2563eb;
 			box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+		}
+
+		.fp-seo-form-group .fp-seo-field-error {
+			border-color: #dc2626 !important;
+			box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
 		}
 
 		.fp-seo-form-group textarea {
@@ -1105,6 +1142,18 @@ class AdvancedSchemaManager {
 			gap: 8px !important;
 		}
 
+		.button-hero.is-loading,
+		.button.is-loading {
+			opacity: 0.6;
+			pointer-events: none;
+		}
+
+		.button-hero.is-loading .dashicons:before,
+		.button.is-loading .dashicons:before {
+			content: "\f463";
+			animation: fp-seo-spin 1s linear infinite;
+		}
+
 		.button-hero .dashicons {
 			font-size: 20px;
 			width: 20px;
@@ -1143,36 +1192,174 @@ class AdvancedSchemaManager {
 			margin: 0;
 			font-family: 'Courier New', monospace;
 		}
+
+		@keyframes fp-seo-spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
 		</style>
 
 		<script>
 		jQuery(document).ready(function($) {
-			$('#fp-seo-generate-schema').on('click', function() {
-				var schemaType = $('#schema-type').val();
-				var schemaData = $('#schema-data').val();
-				
+			const schemaNonce = '<?php echo wp_create_nonce( 'fp_seo_schema_nonce' ); ?>';
+			const messages = <?php echo wp_json_encode(
+				array(
+					'schemaGenerated'     => __( 'Schema generato correttamente. Consulta l\'anteprima qui sotto.', 'fp-seo-performance' ),
+					'schemaDataRequired'  => __( 'Inserisci i dati dello schema in formato JSON.', 'fp-seo-performance' ),
+					'schemaTypeRequired'  => __( 'Seleziona il tipo di schema da generare.', 'fp-seo-performance' ),
+					'schemaInvalidJson'   => __( 'Il JSON inserito non è valido. Controlla la sintassi e riprova.', 'fp-seo-performance' ),
+					'schemaErrorGeneric'  => __( 'Impossibile generare lo schema. Riprova tra qualche istante.', 'fp-seo-performance' ),
+					'previewVisible'      => __( 'Anteprima visualizzata.', 'fp-seo-performance' ),
+					'previewHidden'       => __( 'Anteprima nascosta.', 'fp-seo-performance' ),
+					'permissionError'     => __( 'Permessi insufficienti per generare lo schema.', 'fp-seo-performance' ),
+				)
+			); ?>;
+
+			const $form = $('#fp-seo-schema-form');
+			const $notice = $form.find('[data-fp-seo-schema-notice]');
+			const $typeField = $('#schema-type');
+			const $dataField = $('#schema-data');
+			const $generateButton = $('#fp-seo-generate-schema');
+			const $previewButton = $('#fp-seo-preview-schema');
+			const $previewContainer = $('#fp-seo-schema-preview');
+			const $output = $('#fp-seo-schema-output');
+
+			function speak(message, politeness) {
+				if (!message) {
+					return;
+				}
+
+				if (window.wp && window.wp.a11y && typeof window.wp.a11y.speak === 'function') {
+					window.wp.a11y.speak(message, politeness || 'polite');
+				}
+			}
+
+			function showNotice(message, type) {
+				if (!$notice.length) {
+					return;
+				}
+
+				const level = type === 'error' ? 'is-error' : (type === 'warning' ? 'is-warning' : 'is-success');
+				$notice.removeClass('is-error is-success is-warning')
+					.addClass(level)
+					.text(message)
+					.attr('hidden', false);
+
+				speak(message, type === 'error' ? 'assertive' : 'polite');
+			}
+
+			function clearNotice() {
+				if ($notice.length) {
+					$notice.removeClass('is-error is-success is-warning')
+						.text('')
+						.attr('hidden', true);
+				}
+			}
+
+			function setFieldError($field, hasError) {
+				if (!$field || !$field.length) {
+					return;
+				}
+
+				if (hasError) {
+					$field.addClass('fp-seo-field-error').attr('aria-invalid', 'true');
+				} else {
+					$field.removeClass('fp-seo-field-error').removeAttr('aria-invalid');
+				}
+			}
+
+			function setLoading(isLoading) {
+				if (isLoading) {
+					$generateButton.prop('disabled', true).addClass('is-loading');
+				} else {
+					$generateButton.prop('disabled', false).removeClass('is-loading');
+				}
+			}
+
+			function parseSchemaError(response) {
+				if (!response) {
+					return messages.schemaErrorGeneric;
+				}
+
+				if (response.data) {
+					if (typeof response.data === 'string') {
+						return response.data;
+					}
+
+					if (response.data.message) {
+						return response.data.message;
+					}
+				}
+
+				if (response.message) {
+					return response.message;
+				}
+
+				return messages.schemaErrorGeneric;
+			}
+
+			$generateButton.on('click', function() {
+				clearNotice();
+				setFieldError($typeField, false);
+				setFieldError($dataField, false);
+
+				const schemaType = $typeField.val();
+				const rawData = ($dataField.val() || '').trim();
+
+				if (!schemaType) {
+					setFieldError($typeField, true);
+					showNotice(messages.schemaTypeRequired, 'error');
+					$typeField.focus();
+					return;
+				}
+
+				if (!rawData.length) {
+					setFieldError($dataField, true);
+					showNotice(messages.schemaDataRequired, 'error');
+					$dataField.focus();
+					return;
+				}
+
+				try {
+					JSON.parse(rawData);
+					setFieldError($dataField, false);
+				} catch (error) {
+					setFieldError($dataField, true);
+					showNotice(messages.schemaInvalidJson, 'error');
+					$dataField.focus();
+					return;
+				}
+
+				setLoading(true);
+
 				$.ajax({
 					url: ajaxurl,
-					type: 'POST',
+					method: 'POST',
 					data: {
 						action: 'fp_seo_generate_schema',
 						schema_type: schemaType,
-						schema_data: schemaData,
-						nonce: '<?php echo wp_create_nonce( 'fp_seo_schema_nonce' ); ?>'
-					},
-					success: function(response) {
-						if (response.success) {
-							$('#fp-seo-schema-output').text(JSON.stringify(response.data, null, 2));
-							$('#fp-seo-schema-preview').show();
-						} else {
-							alert('Error: ' + response.data);
-						}
+						schema_data: rawData,
+						nonce: schemaNonce
 					}
+				}).done(function(response) {
+					if (response && response.success) {
+						const formatted = JSON.stringify(response.data || {}, null, 2);
+						$output.text(formatted);
+						$previewContainer.show();
+						showNotice(messages.schemaGenerated, 'success');
+					} else {
+						showNotice(parseSchemaError(response), 'error');
+					}
+				}).fail(function(_, textStatus) {
+					showNotice(messages.schemaErrorGeneric + ' (' + textStatus + ')', 'error');
+				}).always(function() {
+					setLoading(false);
 				});
 			});
-			
-			$('#fp-seo-preview-schema').on('click', function() {
-				$('#fp-seo-schema-preview').toggle();
+
+			$previewButton.on('click', function() {
+				const isVisible = $previewContainer.toggle().is(':visible');
+				speak(isVisible ? messages.previewVisible : messages.previewHidden, 'polite');
 			});
 		});
 		</script>
@@ -1185,16 +1372,36 @@ class AdvancedSchemaManager {
 	public function ajax_generate_schema(): void {
 		check_ajax_referer( 'fp_seo_schema_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per generare lo schema.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$schema_type = sanitize_text_field( $_POST['schema_type'] ?? '' );
 		$schema_data = wp_unslash( $_POST['schema_data'] ?? '' );
 
 		if ( empty( $schema_type ) || ! array_key_exists( $schema_type, self::SCHEMA_TYPES ) ) {
-			wp_send_json_error( 'Invalid schema type' );
+			wp_send_json_error(
+				array( 'message' => __( 'Tipo di schema non valido.', 'fp-seo-performance' ) ),
+				400
+			);
+		}
+
+		if ( '' === trim( $schema_data ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Inserisci i dati dello schema prima di procedere.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		$data = json_decode( $schema_data, true );
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			wp_send_json_error( 'Invalid JSON data' );
+			wp_send_json_error(
+				array( 'message' => __( 'Il JSON fornito non è valido.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		$schema = array(
@@ -1213,9 +1420,19 @@ class AdvancedSchemaManager {
 	public function ajax_preview_schema(): void {
 		check_ajax_referer( 'fp_seo_schema_nonce', 'nonce' );
 
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Permessi insufficienti per visualizzare l\'anteprima dello schema.', 'fp-seo-performance' ) ),
+				403
+			);
+		}
+
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
 		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
+			wp_send_json_error(
+				array( 'message' => __( 'ID contenuto non valido.', 'fp-seo-performance' ) ),
+				400
+			);
 		}
 
 		$schemas = $this->get_active_schemas();

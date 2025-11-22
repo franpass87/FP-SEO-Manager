@@ -6,31 +6,51 @@ Benvenuto nella documentazione del plugin FP SEO Performance. Questa cartella co
 
 ### 🚀 Getting Started
 
-1. **[overview.md](overview.md)** - Panoramica generale del plugin
+1. **[QUICK_START.md](QUICK_START.md)** ⭐ **NEW** - Quick start guide
+   - 5-minute setup
+   - Essential configuration
+   - First steps
+
+2. **[overview.md](overview.md)** - Panoramica generale del plugin
    - Caratteristiche principali
    - Architettura del sistema
    - Requisiti e installazione
 
-2. **[architecture.md](architecture.md)** - Architettura tecnica
+3. **[architecture.md](architecture.md)** - Architettura tecnica
    - Struttura del codice
    - Design patterns utilizzati
    - Flusso di esecuzione
 
 ### 🔧 Per Sviluppatori
 
-3. **[MODULARIZATION.md](MODULARIZATION.md)** ⭐ **NUOVO**
+3. **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** ⭐ **NUOVO** - Guida completa per sviluppatori
+   - Architettura e struttura del plugin
+   - Setup ambiente di sviluppo
+   - Core concepts e design patterns
+   - Come estendere il plugin
+   - Testing e debugging
+   - Best practices di sicurezza e performance
+
+4. **[API_REFERENCE.md](API_REFERENCE.md)** ⭐ **NUOVO** - Riferimento completo API
+   - Tutti gli action hooks disponibili
+   - Tutti i filtri disponibili
+   - Reference delle classi core
+   - Helper functions
+   - Esempi di utilizzo comuni
+
+5. **[MODULARIZATION.md](MODULARIZATION.md)**
    - Refactoring di modularizzazione completato
    - Analisi CSS, JavaScript, PHP
    - Statistiche e metriche
    - Pattern applicati (DRY, SRP, Strategy, Template Method)
 
-4. **[EXTENDING.md](EXTENDING.md)** ⭐ **NUOVO**
+6. **[EXTENDING.md](EXTENDING.md)**
    - Guida completa per estendere il plugin
    - Esempi pratici di codice
    - Hook e filtri disponibili
    - Best practices per estensioni
 
-5. **[BEST_PRACTICES.md](BEST_PRACTICES.md)** ⭐ **NUOVO**
+7. **[BEST_PRACTICES.md](BEST_PRACTICES.md)**
    - SOLID principles
    - Convenzioni di naming
    - Testing guidelines
@@ -241,8 +261,9 @@ Vedi [../CHANGELOG.md](../CHANGELOG.md) per la storia completa.
 
 ---
 
-**Ultimo aggiornamento:** 8 Ottobre 2025  
-**Versione documentazione:** 2.0  
+**Ultimo aggiornamento:** 27 Gennaio 2025  
+**Versione documentazione:** 3.0  
+**Plugin Version:** 0.9.0-pre.11  
 **Maintainer:** Francesco Passeri
 
 ---

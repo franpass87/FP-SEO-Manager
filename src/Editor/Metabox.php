@@ -19,6 +19,7 @@ use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\Options;
 use FP\SEO\Utils\PostTypes;
 use FP\SEO\Integrations\GscData;
+use FP\SEO\Utils\Logger;
 use WP_Post;
 use function absint;
 use function admin_url;
@@ -62,7 +63,8 @@ class Metabox {
 	public function register(): void {
 		// Priorità 5 per essere registrato tra i primi metabox (prima di altri plugin)
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
-		add_action( 'save_post', array( $this, 'save_meta' ) );
+		// Save meta with priority 10 (default) and 1 argument
+		add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 		add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
@@ -82,6 +84,10 @@ class Metabox {
 			// (we have our own excerpt field in SEO Performance metabox with better UX)
 			remove_meta_box( 'postexcerpt', $post_type, 'normal' );
 			remove_meta_box( 'postexcerpt', $post_type, 'side' );
+			// Remove native slug box to prevent duplicate slug editors
+			remove_meta_box( 'slugdiv', $post_type, 'normal' );
+			remove_meta_box( 'slugdiv', $post_type, 'advanced' );
+			remove_meta_box( 'slugdiv', $post_type, 'side' );
 			
 			add_meta_box(
 				'fp-seo-performance-metabox',
@@ -404,6 +410,25 @@ class Metabox {
 			position: absolute;
 			width: 1px;
 			word-wrap: normal !important;
+		}
+		
+		/* Hide native WordPress slug UI to avoid duplication with FP SEO slug field */
+		#slugdiv,
+		#slugdiv .inside,
+		#edit-slug-box,
+		#editable-post-name,
+		#editable-post-name-full,
+		#post-name,
+		#permalink,
+		.edit-slug,
+		.edit-post-post-link,
+		.components-panel__body[data-editor-panel-id="post-link"],
+		.components-panel__body[data-panel-id="post-link"],
+		.editor-post-url,
+		.editor-post-url .components-panel__body,
+		.editor-post-permalink,
+		.editor-document-permalink-panel {
+			display: none !important;
 		}
 		
 		#fp-seo-performance-metabox.postbox,
@@ -1613,7 +1638,7 @@ class Metabox {
 							$qa_metabox->render( $post );
 						}
 					} catch ( \Exception $e ) {
-						error_log( 'FP SEO Performance: QAMetaBox not available: ' . $e->getMessage() );
+						Logger::debug( 'QAMetaBox not available', array( 'error' => $e->getMessage() ) );
 					}
 					?>
 				</div>
@@ -1638,7 +1663,7 @@ class Metabox {
 							$geo_metabox->render( $post );
 						}
 					} catch ( \Exception $e ) {
-						error_log( 'FP SEO Performance: GeoMetaBox not available: ' . $e->getMessage() );
+						Logger::debug( 'GeoMetaBox not available', array( 'error' => $e->getMessage() ) );
 					}
 					?>
 				</div>
@@ -1659,7 +1684,7 @@ class Metabox {
 							$freshness_metabox->render( $post );
 						}
 					} catch ( \Exception $e ) {
-						error_log( 'FP SEO Performance: FreshnessMetaBox not available: ' . $e->getMessage() );
+						Logger::debug( 'FreshnessMetaBox not available', array( 'error' => $e->getMessage() ) );
 					}
 					?>
 				</div>
@@ -1688,7 +1713,7 @@ class Metabox {
 							$social_metabox->render_improved_social_metabox( $post );
 						}
 					} catch ( \Exception $e ) {
-						error_log( 'FP SEO Performance: Social metabox not available: ' . $e->getMessage() );
+						Logger::debug( 'Social metabox not available', array( 'error' => $e->getMessage() ) );
 					}
 					?>
 				</div>
@@ -1717,7 +1742,7 @@ class Metabox {
 							$links_manager->render_links_metabox( $post );
 						}
 					} catch ( \Exception $e ) {
-						error_log( 'FP SEO Performance: Internal Links not available: ' . $e->getMessage() );
+						Logger::debug( 'Internal Links not available', array( 'error' => $e->getMessage() ) );
 					}
 				?>
 			</div>
@@ -1747,7 +1772,7 @@ class Metabox {
 						$schema_metaboxes->render_faq_metabox( $post );
 					}
 				} catch ( \Exception $e ) {
-					error_log( 'FP SEO Performance: FAQ Schema not available: ' . $e->getMessage() );
+					Logger::debug( 'FAQ Schema not available', array( 'error' => $e->getMessage() ) );
 				}
 				?>
 			</div>
@@ -1777,7 +1802,7 @@ class Metabox {
 						$schema_metaboxes->render_howto_metabox( $post );
 					}
 				} catch ( \Exception $e ) {
-					error_log( 'FP SEO Performance: HowTo Schema not available: ' . $e->getMessage() );
+					Logger::debug( 'HowTo Schema not available', array( 'error' => $e->getMessage() ) );
 				}
 				?>
 			</div>
@@ -1841,29 +1866,43 @@ class Metabox {
 	// Save Slug (post_name)
 	if ( isset( $_POST['fp_seo_slug'] ) ) {
 		$slug = sanitize_title( wp_unslash( (string) $_POST['fp_seo_slug'] ) );
-		if ( '' !== trim( $slug ) ) {
+		if ( '' !== trim( $slug ) && $slug !== get_post_field( 'post_name', $post_id ) ) {
+			// SECURITY: Remove save_post hook temporarily to prevent infinite loop
+			remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
+			
 			// Update post slug using wp_update_post
 			$updated = wp_update_post(
 				array(
 					'ID'        => $post_id,
 					'post_name' => $slug,
-				),
-				false // Don't trigger infinite loop
+				)
 			);
+			
+			// Re-add the hook with same priority and arguments
+			add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
 		}
 	}
 
 	// Save Excerpt (post_excerpt)
 	if ( isset( $_POST['fp_seo_excerpt'] ) ) {
 		$excerpt = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) );
-		// Update post excerpt using wp_update_post
-		$updated = wp_update_post(
-			array(
-				'ID'           => $post_id,
-				'post_excerpt' => $excerpt,
-			),
-			false // Don't trigger infinite loop
-		);
+		$current_excerpt = get_post_field( 'post_excerpt', $post_id );
+		
+		if ( $excerpt !== $current_excerpt ) {
+			// SECURITY: Remove save_post hook temporarily to prevent infinite loop
+			remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
+			
+			// Update post excerpt using wp_update_post
+			$updated = wp_update_post(
+				array(
+					'ID'           => $post_id,
+					'post_excerpt' => $excerpt,
+				)
+			);
+			
+			// Re-add the hook with same priority and arguments
+			add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
+		}
 	}
 
 	// Save focus keyword

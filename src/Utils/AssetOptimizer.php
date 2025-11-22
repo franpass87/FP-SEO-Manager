@@ -11,6 +11,10 @@ declare(strict_types=1);
 
 namespace FP\SEO\Utils;
 
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+
 /**
  * Asset optimization system for better performance.
  */
@@ -101,6 +105,15 @@ class AssetOptimizer {
 
 		$this->optimize_css_assets();
 		$this->optimize_js_assets();
+	}
+
+	/**
+	 * Run full optimization on demand (e.g. via AJAX).
+	 */
+	public function optimize_all(): void {
+		$this->optimize_css_assets();
+		$this->optimize_js_assets();
+		$this->optimize_image_assets();
 	}
 
 	/**
@@ -540,22 +553,31 @@ class AssetOptimizer {
 	 */
 	public function get_optimization_stats(): array {
 		$stats = [
-			'css_files' => count( $this->get_css_files() ),
-			'js_files' => count( $this->get_js_files() ),
-			'image_files' => count( $this->get_image_files() ),
-			'minified_css' => count( glob( $this->minified_dir . '**/*.min.css', GLOB_BRACE ) ),
-			'minified_js' => count( glob( $this->minified_dir . '**/*.min.js', GLOB_BRACE ) ),
-			'optimized_images' => count( glob( $this->minified_dir . '**/*.optimized.*', GLOB_BRACE ) ),
+			'css_files'        => count( $this->get_css_files() ),
+			'js_files'         => count( $this->get_js_files() ),
+			'image_files'      => count( $this->get_image_files() ),
+			'minified_css'     => $this->count_files_matching(
+				$this->minified_dir,
+				static fn( \SplFileInfo $file ): bool => str_ends_with( $file->getFilename(), '.min.css' )
+			),
+			'minified_js'      => $this->count_files_matching(
+				$this->minified_dir,
+				static fn( \SplFileInfo $file ): bool => str_ends_with( $file->getFilename(), '.min.js' )
+			),
+			'optimized_images' => $this->count_files_matching(
+				$this->minified_dir,
+				static fn( \SplFileInfo $file ): bool => str_contains( $file->getFilename(), '.optimized.' )
+			),
 		];
 
 		// Calculate space savings
 		$original_size = $this->calculate_directory_size( $this->assets_dir );
 		$minified_size = $this->calculate_directory_size( $this->minified_dir );
-		
-		$stats['original_size_mb'] = round( $original_size / 1024 / 1024, 2 );
-		$stats['minified_size_mb'] = round( $minified_size / 1024 / 1024, 2 );
-		$stats['space_saved_mb'] = round( ( $original_size - $minified_size ) / 1024 / 1024, 2 );
-		$stats['compression_ratio'] = $original_size > 0 ? round( ( 1 - ( $minified_size / $original_size ) ) * 100, 2 ) : 0;
+
+		$stats['original_size_mb']   = round( $original_size / 1024 / 1024, 2 );
+		$stats['minified_size_mb']   = round( $minified_size / 1024 / 1024, 2 );
+		$stats['space_saved_mb']     = round( ( $original_size - $minified_size ) / 1024 / 1024, 2 );
+		$stats['compression_ratio']  = $original_size > 0 ? round( ( 1 - ( $minified_size / $original_size ) ) * 100, 2 ) : 0;
 
 		return $stats;
 	}
@@ -567,15 +589,61 @@ class AssetOptimizer {
 	 * @return int
 	 */
 	private function calculate_directory_size( string $directory ): int {
+		$iterator = $this->get_recursive_iterator( $directory );
+
+		if ( null === $iterator ) {
+			return 0;
+		}
+
 		$size = 0;
-		$files = glob( $directory . '**/*', GLOB_BRACE );
-		
-		foreach ( $files as $file ) {
-			if ( is_file( $file ) ) {
-				$size += filesize( $file );
+
+		foreach ( $iterator as $file ) {
+			if ( $file instanceof \SplFileInfo && $file->isFile() ) {
+				$size += (int) $file->getSize();
 			}
 		}
 
 		return $size;
+	}
+
+	/**
+	 * Count files that satisfy a filter.
+	 *
+	 * @param string   $directory Base directory.
+	 * @param callable $filter    Callback receiving SplFileInfo.
+	 */
+	private function count_files_matching( string $directory, callable $filter ): int {
+		$iterator = $this->get_recursive_iterator( $directory );
+
+		if ( null === $iterator ) {
+			return 0;
+		}
+
+		$count = 0;
+
+		foreach ( $iterator as $file ) {
+			if ( $file instanceof \SplFileInfo && $file->isFile() && $filter( $file ) ) {
+				++$count;
+			}
+		}
+
+		return $count;
+	}
+
+	/**
+	 * Safely create a recursive iterator for the given directory.
+	 */
+	private function get_recursive_iterator( string $directory ): ?RecursiveIteratorIterator {
+		if ( ! is_dir( $directory ) ) {
+			return null;
+		}
+
+		try {
+			return new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator( $directory, FilesystemIterator::SKIP_DOTS )
+			);
+		} catch ( \UnexpectedValueException $e ) {
+			return null;
+		}
 	}
 }

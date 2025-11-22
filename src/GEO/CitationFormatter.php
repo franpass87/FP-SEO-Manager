@@ -606,20 +606,5 @@ class CitationFormatter {
 		}, $related );
 	}
 
-	/**
-	 * Get author certifications (helper method)
-	 *
-	 * @param int $author_id Author ID.
-	 * @return array<int, string> Certifications.
-	 */
-	private function get_author_certifications( int $author_id ): array {
-		$certs = get_user_meta( $author_id, 'fp_author_certifications', true );
-
-		if ( ! is_array( $certs ) ) {
-			return array();
-		}
-
-		return array_map( 'sanitize_text_field', $certs );
-	}
 }
 

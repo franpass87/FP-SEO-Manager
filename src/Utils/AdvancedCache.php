@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Utils;
 
 use FP\SEO\Exceptions\CacheException;
+use FP\SEO\Utils\Logger;
 
 /**
  * Advanced caching system with Redis, Memcached, and WordPress object cache support.
@@ -408,15 +409,11 @@ class AdvancedCache {
 				return $unserialized !== false ? $unserialized : false;
 			} catch ( \Exception $e ) {
 				// Log error for debugging
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( 'FP SEO: Redis unserialize error: ' . $e->getMessage() );
-				}
+				Logger::debug( 'Redis unserialize error', array( 'error' => $e->getMessage() ) );
 				return false;
 			}
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Redis connection error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Redis connection error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -432,9 +429,7 @@ class AdvancedCache {
 			$redis->close();
 			return (bool) $result;
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Redis set error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Redis set error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -450,9 +445,7 @@ class AdvancedCache {
 			$redis->close();
 			return $result > 0;
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Redis delete error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Redis delete error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -472,9 +465,7 @@ class AdvancedCache {
 			$redis->close();
 			return true;
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Redis clear group error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Redis clear group error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -492,9 +483,7 @@ class AdvancedCache {
 			$value = $memcached->get( $key );
 			return $value !== false ? $value : false;
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Memcached get error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Memcached get error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -508,9 +497,7 @@ class AdvancedCache {
 			
 			return $memcached->set( $key, $value, $ttl );
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Memcached set error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Memcached set error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -524,9 +511,7 @@ class AdvancedCache {
 			
 			return $memcached->delete( $key );
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: Memcached delete error: ' . $e->getMessage() );
-			}
+			Logger::debug( 'Memcached delete error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}

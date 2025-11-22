@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
+use FP\SEO\Utils\Logger;
+
 use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\GEO\SemanticChunker;
 use WP_Post;
@@ -156,7 +158,7 @@ class EmbeddingsGenerator {
 			);
 
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Embeddings Error: ' . $e->getMessage() );
+			Logger::error( 'Embeddings Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ?? 0 ) );
 
 			return array(
 				'error'   => 'API Error',

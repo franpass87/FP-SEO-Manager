@@ -114,7 +114,12 @@ class BulkAuditPage {
 		 * @param string $hook Current admin page hook name.
 		 */
 	public function enqueue_assets( string $hook ): void {
-		if ( 'fp-seo-performance_page_' . self::PAGE_SLUG !== $hook ) {
+		$allowed_hooks = array(
+			'fp-seo-performance_page_' . self::PAGE_SLUG,
+			'seo-performance_page_' . self::PAGE_SLUG,
+		);
+
+		if ( ! in_array( $hook, $allowed_hooks, true ) ) {
 			return;
 		}
 

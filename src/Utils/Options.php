@@ -28,11 +28,11 @@ class Options {
 		 */
 	public static function get_language_choices(): array {
 			return array(
-				'en' => __( 'English', 'fp-seo-performance' ),
-				'es' => __( 'Spanish', 'fp-seo-performance' ),
-				'fr' => __( 'French', 'fp-seo-performance' ),
-				'de' => __( 'German', 'fp-seo-performance' ),
-				'it' => __( 'Italian', 'fp-seo-performance' ),
+				'en' => self::translate_label( 'English' ),
+				'es' => self::translate_label( 'Spanish' ),
+				'fr' => self::translate_label( 'French' ),
+				'de' => self::translate_label( 'German' ),
+				'it' => self::translate_label( 'Italian' ),
 			);
 	}
 
@@ -118,6 +118,22 @@ class Options {
 				'heading_depth'      => true,
 			),
 		),
+			'geo'         => array(
+				'enabled'            => true,
+				'publisher_name'     => '',
+				'publisher_url'      => '',
+				'publisher_logo'     => '',
+				'license_url'        => '',
+				'ai_usage'           => 'allow-with-attribution',
+				'default_confidence' => 0.7,
+				'pretty_print'       => false,
+				'post_types'         => array(
+					'post' => array(
+						'expose'     => true,
+						'in_sitemap' => true,
+					),
+				),
+			),
 			'ai'          => array(
 				'openai_api_key'        => '',
 				'openai_model'          => 'gpt-5-nano',
@@ -171,7 +187,11 @@ class Options {
 	 *
 	 * @return array<string, mixed> Sanitized options.
 	 */
-	public static function sanitize( array $input ): array {
+	public static function sanitize( ?array $input ): array {
+		if ( ! is_array( $input ) ) {
+			$input = array();
+		}
+
 		$defaults  = self::get_defaults();
 		$sanitized = $defaults;
 
@@ -330,6 +350,52 @@ class Options {
 		$sanitized['ai']['enable_auto_generation']   = self::to_bool( $ai['enable_auto_generation'] ?? $defaults['ai']['enable_auto_generation'] );
 		$sanitized['ai']['focus_on_keywords']        = self::to_bool( $ai['focus_on_keywords'] ?? $defaults['ai']['focus_on_keywords'] );
 		$sanitized['ai']['optimize_for_ctr']         = self::to_bool( $ai['optimize_for_ctr'] ?? $defaults['ai']['optimize_for_ctr'] );
+
+		// GEO settings sanitization.
+		$geo                                          = is_array( $input['geo'] ?? null ) ? $input['geo'] : array();
+		$sanitized['geo']['enabled']                  = self::to_bool( $geo['enabled'] ?? $defaults['geo']['enabled'] );
+		$sanitized['geo']['publisher_name']           = self::sanitize_text( $geo['publisher_name'] ?? $defaults['geo']['publisher_name'] );
+		$sanitized['geo']['publisher_url']            = self::sanitize_url( $geo['publisher_url'] ?? $defaults['geo']['publisher_url'] );
+		$sanitized['geo']['publisher_logo']           = self::sanitize_url( $geo['publisher_logo'] ?? $defaults['geo']['publisher_logo'] );
+		$sanitized['geo']['license_url']              = self::sanitize_url( $geo['license_url'] ?? $defaults['geo']['license_url'] );
+		$sanitized['geo']['ai_usage']                 = self::sanitize_choice(
+			$geo['ai_usage'] ?? $defaults['geo']['ai_usage'],
+			array( 'allow', 'allow-with-attribution', 'deny' ),
+			$defaults['geo']['ai_usage']
+		);
+		$sanitized['geo']['default_confidence']       = self::bounded_float(
+			$geo['default_confidence'] ?? $defaults['geo']['default_confidence'],
+			0.0,
+			1.0,
+			$defaults['geo']['default_confidence']
+		);
+		$sanitized['geo']['pretty_print']             = self::to_bool( $geo['pretty_print'] ?? $defaults['geo']['pretty_print'] );
+
+		$post_types_input = is_array( $geo['post_types'] ?? null ) ? $geo['post_types'] : array();
+		$post_types       = array();
+
+		if ( ! empty( $post_types_input ) ) {
+			foreach ( $post_types_input as $type => $settings ) {
+				$type_key = is_string( $type ) ? sanitize_key( $type ) : '';
+
+				if ( '' === $type_key ) {
+					continue;
+				}
+
+				$settings = is_array( $settings ) ? $settings : array();
+
+				$post_types[ $type_key ] = array(
+					'expose'     => self::to_bool( $settings['expose'] ?? false ),
+					'in_sitemap' => self::to_bool( $settings['in_sitemap'] ?? false ),
+				);
+			}
+		}
+
+		if ( empty( $post_types ) ) {
+			$post_types = $defaults['geo']['post_types'];
+		}
+
+		$sanitized['geo']['post_types'] = $post_types;
 
 		// AI-First settings sanitization
 		$ai_first                                          = is_array( $input['ai_first'] ?? null ) ? $input['ai_first'] : array();
@@ -603,6 +669,25 @@ class Options {
 	}
 
 	/**
+	 * Sanitizes a URL value.
+	 *
+	 * @param mixed $value Raw input.
+	 */
+	private static function sanitize_url( mixed $value ): string {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return '';
+		}
+
+		if ( function_exists( 'esc_url_raw' ) ) {
+			return esc_url_raw( $value );
+		}
+
+		$filtered = filter_var( $value, FILTER_SANITIZE_URL );
+
+		return is_string( $filtered ) ? trim( $filtered ) : '';
+	}
+
+	/**
 	 * Sanitizes a capability string.
 	 *
 	 * @param mixed  $value    Raw capability input.
@@ -637,5 +722,16 @@ class Options {
 		if ( function_exists( 'add_settings_error' ) ) {
 			add_settings_error( self::OPTION_GROUP, $code, $message, $type );
 		}
+	}
+
+	/**
+	 * Ritorna una label tradotta solo quando il dominio testuale è pronto.
+	 */
+	private static function translate_label( string $label ): string {
+		if ( function_exists( 'did_action' ) && did_action( 'init' ) ) {
+			return __( $label, 'fp-seo-performance' );
+		}
+
+		return $label;
 	}
 }

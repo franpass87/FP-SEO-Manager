@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
+use FP\SEO\Utils\Logger;
+
 use FP\SEO\Integrations\OpenAiClient;
 use WP_Post;
 
@@ -150,7 +152,7 @@ class ConversationalVariants {
 			return trim( $variant );
 
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO Variant Generation Error: ' . $e->getMessage() );
+			Logger::error( 'Variant Generation Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ?? 0 ) );
 			return $this->generate_rule_based_variant( $post, $type );
 		}
 	}

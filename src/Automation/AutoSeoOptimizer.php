@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Automation;
 
+use FP\SEO\Utils\Logger;
+
 use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\Utils\Options;
 
@@ -194,10 +196,9 @@ class AutoSeoOptimizer {
 		// Check if AI generation was successful
 		if ( ! $result['success'] || empty( $result['data'] ) ) {
 			// Log error for debugging
-			error_log( sprintf(
-				'FP SEO Auto-Optimizer: Failed to generate suggestions for post %d. Error: %s',
-				$post_id,
-				$result['error'] ?? 'Unknown error'
+			Logger::error( 'Auto-Optimizer failed to generate suggestions', array(
+				'post_id' => $post_id,
+				'error' => $result['error'] ?? 'Unknown error',
 			) );
 			
 			// Store error in transient for admin notice
@@ -268,10 +269,9 @@ class AutoSeoOptimizer {
 			);
 
 			// Log success
-			error_log( sprintf(
-				'FP SEO Auto-Optimizer: Successfully optimized post %d. Updated: %s',
-				$post_id,
-				implode( ', ', $updated_fields )
+			Logger::info( 'Auto-Optimizer successfully optimized post', array(
+				'post_id' => $post_id,
+				'updated_fields' => $updated_fields,
 			) );
 		}
 

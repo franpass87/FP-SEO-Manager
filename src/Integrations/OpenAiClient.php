@@ -13,6 +13,7 @@ namespace FP\SEO\Integrations;
 
 use OpenAI;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\Logger;
 
 /**
  * Handles OpenAI API integration for AI-powered SEO suggestions.
@@ -144,44 +145,41 @@ class OpenAiClient {
 			$api_params['temperature'] = 0.7;
 		}
 
-		error_log( '[FP-SEO-OpenAI] Calling OpenAI API with model: ' . $api_params['model'] );
-		error_log( '[FP-SEO-OpenAI] API params: ' . print_r( array_keys( $api_params ), true ) );
+		Logger::debug( 'Calling OpenAI API', array( 'model' => $api_params['model'], 'params' => array_keys( $api_params ) ) );
 
 		try {
 			$response = $client->chat()->create( $api_params );
-			error_log( '[FP-SEO-OpenAI] Response received successfully' );
-			error_log( '[FP-SEO-OpenAI] Response type: ' . gettype( $response ) );
-			error_log( '[FP-SEO-OpenAI] Response choices count: ' . ( isset( $response->choices ) ? count( $response->choices ) : '0' ) );
+			Logger::debug( 'OpenAI API response received', array( 'type' => gettype( $response ), 'choices_count' => isset( $response->choices ) ? count( $response->choices ) : 0 ) );
 			
 			// Debug full response structure
 			if ( isset( $response->choices[0] ) ) {
-				error_log( '[FP-SEO-OpenAI] First choice exists' );
-				
 				$message = $response->choices[0]->message;
 				$finish_reason = $response->choices[0]->finishReason ?? 'unknown';
 				
-				error_log( '[FP-SEO-OpenAI] Finish reason: ' . $finish_reason );
-				error_log( '[FP-SEO-OpenAI] Message role: ' . ( $message->role ?? 'NULL' ) );
-				error_log( '[FP-SEO-OpenAI] Message content: ' . ( $message->content ?? 'NULL' ) );
-				error_log( '[FP-SEO-OpenAI] Message refusal: ' . ( $message->refusal ?? 'NULL' ) );
+				Logger::debug( 'OpenAI response details', array(
+					'finish_reason' => $finish_reason,
+					'message_role' => $message->role ?? 'NULL',
+					'has_content' => ! empty( $message->content ),
+					'has_refusal' => ! empty( $message->refusal ),
+				) );
 				
 				// Check if there's a refusal
 				if ( ! empty( $message->refusal ) ) {
-					error_log( '[FP-SEO-OpenAI] ERROR: Request refused by OpenAI: ' . $message->refusal );
+					Logger::error( 'OpenAI request refused', array( 'refusal' => $message->refusal ) );
 					return array(
 						'success' => false,
 						'error'   => sprintf( __( 'OpenAI ha rifiutato la richiesta: %s', 'fp-seo-performance' ), $message->refusal ),
 					);
 				}
 			} else {
-				error_log( '[FP-SEO-OpenAI] ERROR: No choices in response' );
+				Logger::error( 'No choices in OpenAI response' );
 				return array(
 					'success' => false,
 					'error'   => __( 'Risposta OpenAI non valida: nessuna scelta disponibile.', 'fp-seo-performance' ),
 				);
 			}
 		} catch ( \Exception $e ) {
-			error_log( '[FP-SEO-OpenAI] API call exception: ' . $e->getMessage() );
+			Logger::error( 'OpenAI API call exception', array( 'message' => $e->getMessage() ) );
 			return array(
 				'success' => false,
 				'error'   => sprintf( __( 'Errore API OpenAI: %s', 'fp-seo-performance' ), $e->getMessage() ),
@@ -190,10 +188,13 @@ class OpenAiClient {
 
 		$result = $response->choices[0]->message->content ?? '';
 
-		error_log( '[FP-SEO-OpenAI] Extracted result length: ' . strlen( $result ) );
+		Logger::debug( 'Extracted OpenAI result', array( 'length' => strlen( $result ) ) );
 
 			if ( empty( $result ) ) {
-				error_log( '[FP-SEO-OpenAI] ERROR: Empty result from OpenAI API' );
+				Logger::error( 'Empty result from OpenAI API', array(
+					'model' => $api_params['model'],
+					'finish_reason' => $response->choices[0]->finishReason ?? 'unknown',
+				) );
 				
 				// Messaggio più dettagliato per l'utente
 				$error_details = array(

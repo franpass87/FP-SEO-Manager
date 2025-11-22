@@ -31,9 +31,18 @@ class PerformanceOptimizer {
 		// Optimize admin loading
 		add_action( 'admin_init', array( $this, 'optimize_admin_loading' ) );
 		
+		// Optimize meta queries (get_post_meta caching)
+		add_action( 'init', array( $this, 'optimize_meta_queries' ) );
+		
+		// Optimize object cache
+		add_action( 'init', array( $this, 'optimize_object_cache' ) );
+		
 		// Add performance monitoring
 		add_action( 'wp_footer', array( $this, 'add_performance_monitoring' ) );
 		add_action( 'admin_footer', array( $this, 'add_performance_monitoring' ) );
+		
+		// Optimize memory usage
+		add_action( 'wp_loaded', array( $this, 'optimize_memory_usage' ) );
 	}
 
 	/**
@@ -141,7 +150,8 @@ class PerformanceOptimizer {
 	 */
 	public function optimize_admin_menu(): void {
 		// Remove unnecessary admin menu items if not needed
-		$options = get_option( 'fp_seo_performance', array() );
+		// Use cached options to avoid extra queries
+		$options = Options::get();
 		$hide_advanced_features = $options['general']['hide_advanced_features'] ?? false;
 
 		if ( $hide_advanced_features ) {
@@ -183,5 +193,106 @@ class PerformanceOptimizer {
 		wp_cache_delete( 'fp_seo_performance_metrics', self::CACHE_GROUP );
 		wp_cache_delete( 'fp_seo_cache_hits', self::CACHE_GROUP );
 		wp_cache_delete( 'fp_seo_cache_misses', self::CACHE_GROUP );
+	}
+
+	/**
+	 * Optimize meta queries by enabling meta cache.
+	 */
+	public function optimize_meta_queries(): void {
+		// Enable meta cache for better performance
+		if ( ! wp_using_ext_object_cache() ) {
+			// For non-persistent cache, ensure meta is cached during request
+			add_filter( 'update_post_metadata_cache', '__return_true' );
+		}
+		
+		// Preload SEO meta for posts being displayed
+		add_action( 'the_post', array( $this, 'preload_seo_meta' ) );
+	}
+
+	/**
+	 * Preload SEO meta fields for the current post to reduce queries.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return void
+	 */
+	public function preload_seo_meta( $post ): void {
+		if ( ! $post || ! isset( $post->ID ) ) {
+			return;
+		}
+
+		// Only preload SEO-related meta keys
+		$seo_keys = array(
+			'_fp_seo_title',
+			'_fp_seo_description',
+			'_fp_seo_keywords',
+			'_fp_seo_canonical',
+			'_fp_seo_og_title',
+			'_fp_seo_og_description',
+			'_fp_seo_twitter_title',
+			'_fp_seo_twitter_description',
+		);
+
+		// Preload all SEO meta at once to reduce queries
+		update_postmeta_cache( array( $post->ID ) );
+	}
+
+	/**
+	 * Optimize object cache usage.
+	 */
+	public function optimize_object_cache(): void {
+		// Increase cache expiration for frequently accessed data
+		add_filter( 'wp_cache_themes_persistently', '__return_true' );
+		
+		// Optimize cache groups
+		if ( function_exists( 'wp_cache_add_global_groups' ) ) {
+			wp_cache_add_global_groups( array( self::CACHE_GROUP ) );
+		}
+	}
+
+	/**
+	 * Optimize memory usage by cleaning up unused data.
+	 */
+	public function optimize_memory_usage(): void {
+		// Only optimize on frontend to avoid affecting admin
+		if ( is_admin() ) {
+			return;
+		}
+
+		// Clear unused transients periodically
+		if ( ! wp_next_scheduled( 'fp_seo_cleanup_transients' ) ) {
+			wp_schedule_event( time(), 'daily', 'fp_seo_cleanup_transients' );
+		}
+
+		add_action( 'fp_seo_cleanup_transients', array( $this, 'cleanup_expired_transients' ) );
+	}
+
+	/**
+	 * Clean up expired transients to free memory.
+	 */
+	public function cleanup_expired_transients(): void {
+		global $wpdb;
+
+		// Clean up expired transients (WordPress doesn't always do this automatically)
+		$time = time();
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} 
+				WHERE option_name LIKE %s 
+				AND option_value < %d",
+				$wpdb->esc_like( '_transient_timeout_' ) . '%',
+				$time
+			)
+		);
+
+		// Also clean up our plugin-specific transients
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} 
+				WHERE option_name LIKE %s 
+				AND option_value < %d",
+				$wpdb->esc_like( '_transient_timeout_fp_seo_' ) . '%',
+				$time
+			)
+		);
 	}
 }

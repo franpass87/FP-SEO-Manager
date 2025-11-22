@@ -34,13 +34,14 @@ use FP\SEO\Utils\PerformanceMonitor;
 use FP\SEO\Utils\DatabaseOptimizer;
 use FP\SEO\Utils\AssetOptimizer;
 use FP\SEO\Utils\HealthChecker;
+use FP\SEO\Utils\Logger;
 use FP\SEO\Admin\PerformanceDashboard;
 use FP\SEO\Schema\AdvancedSchemaManager;
 use FP\SEO\AI\AdvancedContentOptimizer;
-use FP\SEO\Social\SocialMediaManager;
 use FP\SEO\Social\ImprovedSocialMediaManager;
 use FP\SEO\Links\InternalLinkManager;
 use FP\SEO\Keywords\MultipleKeywordsManager;
+use FP\SEO\Front\MetaTagRenderer;
 use FP\SEO\AI\QAPairExtractor;
 use FP\SEO\AI\ConversationalVariants;
 use FP\SEO\AI\EmbeddingsGenerator;
@@ -111,7 +112,15 @@ class Plugin {
 		// Inizializza AssetOptimizer quando WordPress è pronto
 		add_action( 'init', array( $this, 'init_asset_optimizer' ), 1 );
 
+		add_action( 'init', array( $this, 'load_textdomain' ) );
 		add_action( 'plugins_loaded', array( $this, 'boot' ) );
+	}
+
+	/**
+	 * Load plugin translations at init.
+	 */
+	public function load_textdomain(): void {
+		load_plugin_textdomain( 'fp-seo-performance', false, dirname( plugin_basename( FP_SEO_PERFORMANCE_FILE ) ) . '/languages' );
 	}
 
 	/**
@@ -124,13 +133,13 @@ class Plugin {
 				$asset_optimizer->init();
 			} catch ( \RuntimeException $e ) {
 				// WordPress functions not available or other critical errors, skip silently
-				error_log( 'FP SEO Performance: AssetOptimizer skipped - ' . $e->getMessage() );
+				Logger::debug( 'AssetOptimizer skipped', array( 'reason' => $e->getMessage() ) );
 			} catch ( \Exception $e ) {
 				// Other errors, log but don't break the plugin
-				error_log( 'FP SEO Performance: Failed to initialize AssetOptimizer: ' . $e->getMessage() );
+				Logger::warning( 'Failed to initialize AssetOptimizer', array( 'error' => $e->getMessage() ) );
 			} catch ( \Error $e ) {
 				// Fatal errors, log but don't break the plugin
-				error_log( 'FP SEO Performance: Fatal error initializing AssetOptimizer: ' . $e->getMessage() );
+				Logger::error( 'Fatal error initializing AssetOptimizer', array( 'error' => $e->getMessage() ) );
 			}
 		}
 	}
@@ -140,8 +149,6 @@ class Plugin {
 	 * Implements lazy loading to reduce memory footprint on shared hosting.
 	 */
 	public function boot(): void {
-		load_plugin_textdomain( 'fp-seo-performance', false, dirname( plugin_basename( FP_SEO_PERFORMANCE_FILE ) ) . '/languages' );
-
 		// Core services - always load (minimal footprint)
 		$this->container->singleton( SeoHealth::class );
 		$this->container->get( SeoHealth::class )->register();
@@ -190,7 +197,7 @@ class Plugin {
 				$asset_optimizer = $this->container->get( AssetOptimizer::class );
 			} catch ( \Exception $e ) {
 				// AssetOptimizer non disponibile, continua senza
-				error_log( 'FP SEO Performance: AssetOptimizer not available for HealthChecker: ' . $e->getMessage() );
+				Logger::debug( 'AssetOptimizer not available for HealthChecker', array( 'error' => $e->getMessage() ) );
 			}
 			
 			return new HealthChecker(
@@ -208,7 +215,7 @@ class Plugin {
 				$asset_optimizer = $this->container->get( AssetOptimizer::class );
 			} catch ( \Exception $e ) {
 				// AssetOptimizer non disponibile, continua senza
-				error_log( 'FP SEO Performance: AssetOptimizer not available for PerformanceDashboard: ' . $e->getMessage() );
+				Logger::debug( 'AssetOptimizer not available for PerformanceDashboard', array( 'error' => $e->getMessage() ) );
 			}
 			
 			return new PerformanceDashboard(
@@ -235,6 +242,33 @@ class Plugin {
 
 		// Multiple Keywords Manager - registra singleton ma inizializza dopo il Menu
 		$this->container->singleton( MultipleKeywordsManager::class );
+
+		// Frontend meta tag renderer
+		$this->container->singleton( MetaTagRenderer::class );
+
+		try {
+			$this->container->get( ImprovedSocialMediaManager::class )->register();
+		} catch ( \Exception $e ) {
+			Logger::warning( 'Failed to register ImprovedSocialMediaManager', array( 'error' => $e->getMessage() ) );
+		}
+
+		try {
+			$this->container->get( InternalLinkManager::class )->register();
+		} catch ( \Exception $e ) {
+			Logger::warning( 'Failed to register InternalLinkManager', array( 'error' => $e->getMessage() ) );
+		}
+
+		try {
+			$this->container->get( MultipleKeywordsManager::class )->register();
+		} catch ( \Exception $e ) {
+			Logger::warning( 'Failed to register MultipleKeywordsManager', array( 'error' => $e->getMessage() ) );
+		}
+
+		try {
+			$this->container->get( MetaTagRenderer::class )->register();
+		} catch ( \Exception $e ) {
+			Logger::warning( 'Failed to register MetaTagRenderer', array( 'error' => $e->getMessage() ) );
+		}
 
 		// OpenAI Client - Always register (needed for AI features)
 		$this->container->singleton( OpenAiClient::class );
@@ -281,42 +315,21 @@ class Plugin {
 			try {
 				$this->container->get( PerformanceDashboard::class )->register();
 			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register PerformanceDashboard: ' . $e->getMessage() );
+				Logger::warning( 'Failed to register PerformanceDashboard', array( 'error' => $e->getMessage() ) );
 			}
 
 			// Inizializza Advanced Schema Manager dopo il Menu
 			try {
 				$this->container->get( AdvancedSchemaManager::class )->register();
 			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register AdvancedSchemaManager: ' . $e->getMessage() );
+				Logger::warning( 'Failed to register AdvancedSchemaManager', array( 'error' => $e->getMessage() ) );
 			}
 
 			// Inizializza Advanced Content Optimizer dopo il Menu
 			try {
 				$this->container->get( AdvancedContentOptimizer::class )->register();
 			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register AdvancedContentOptimizer: ' . $e->getMessage() );
-			}
-
-			// Inizializza Improved Social Media Manager dopo il Menu
-			try {
-				$this->container->get( ImprovedSocialMediaManager::class )->register();
-			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register ImprovedSocialMediaManager: ' . $e->getMessage() );
-			}
-
-			// Inizializza Internal Link Manager dopo il Menu
-			try {
-				$this->container->get( InternalLinkManager::class )->register();
-			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register InternalLinkManager: ' . $e->getMessage() );
-			}
-
-			// Inizializza Multiple Keywords Manager dopo il Menu
-			try {
-				$this->container->get( MultipleKeywordsManager::class )->register();
-			} catch ( \Exception $e ) {
-				error_log( 'FP SEO Performance: Failed to register MultipleKeywordsManager: ' . $e->getMessage() );
+				Logger::warning( 'Failed to register AdvancedContentOptimizer', array( 'error' => $e->getMessage() ) );
 			}
 
 			// AI Settings tab - sempre disponibile per permettere configurazione API key

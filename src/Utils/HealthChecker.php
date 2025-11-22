@@ -404,7 +404,7 @@ class HealthChecker {
 			}
 		}
 
-		return $count > 0 ? round( $total_score / $count ) : 0;
+		return $count > 0 ? (int) round( $total_score / $count ) : 0;
 	}
 
 	/**
