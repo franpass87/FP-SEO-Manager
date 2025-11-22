@@ -200,6 +200,14 @@ class Assets {
 			$version,
 			true
 		);
+
+		wp_register_script(
+			'fp-seo-performance-metabox-ai-fields',
+			plugins_url( 'assets/admin/js/metabox-ai-fields.js', FP_SEO_PERFORMANCE_FILE ),
+			array( 'jquery' ),
+			$version,
+			true
+		);
 	}
 
 	/**

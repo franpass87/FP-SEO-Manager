@@ -78,15 +78,20 @@ class ScoreEngine {
 				continue;
 			}
 
-				$base_weight    = $this->extract_weight( $check );
-				$config_weight  = $this->extract_config_weight( $weights, $check_id );
-				$applied_weight = $base_weight * $config_weight;
-				$max_total     += $applied_weight;
+			// Validate check is an array
+			if ( ! is_array( $check ) ) {
+				continue;
+			}
 
-				$status       = is_string( $check['status'] ?? null ) ? $check['status'] : Result::STATUS_WARN;
-				$multiplier   = $this->status_multiplier( $status );
-				$contribution = $applied_weight * $multiplier;
-				$score_sum   += $contribution;
+			$base_weight    = $this->extract_weight( $check );
+			$config_weight  = $this->extract_config_weight( $weights, $check_id );
+			$applied_weight = $base_weight * $config_weight;
+			$max_total     += $applied_weight;
+
+			$status       = is_string( $check['status'] ?? null ) ? $check['status'] : Result::STATUS_WARN;
+			$multiplier   = $this->status_multiplier( $status );
+			$contribution = $applied_weight * $multiplier;
+			$score_sum   += $contribution;
 
 				$breakdown[ $check_id ] = array(
 					'id'           => $check_id,
@@ -164,9 +169,14 @@ class ScoreEngine {
 		 * @param array<string, mixed> $check Check payload.
 		 */
 	private function extract_weight( array $check ): float {
-			$weight = $check['weight'] ?? 0.0;
+		// Validate input
+		if ( ! is_array( $check ) ) {
+			return 0.0;
+		}
+		
+		$weight = $check['weight'] ?? 0.0;
 
-			return $this->normalize_float( $weight, 0.0, 1.0, 0.0 );
+		return $this->normalize_float( $weight, 0.0, 1.0, 0.0 );
 	}
 
 		/**
@@ -215,21 +225,26 @@ class ScoreEngine {
 		 * @param float $fallback Fallback when validation fails.
 		 */
 	private function normalize_float( mixed $value, float $min, float $max, float $fallback ): float {
+		// Handle null or invalid values
+		if ( null === $value || ( ! is_numeric( $value ) && ! is_string( $value ) ) ) {
+			return $fallback;
+		}
+		
 		if ( is_numeric( $value ) ) {
-				$numeric = (float) $value;
+			$numeric = (float) $value;
 
 			if ( $numeric < $min ) {
 				return $min;
 			}
 
 			if ( $numeric > $max ) {
-					return $max;
+				return $max;
 			}
 
-				return $numeric;
+			return $numeric;
 		}
 
-			return $fallback;
+		return $fallback;
 	}
 
 		/**

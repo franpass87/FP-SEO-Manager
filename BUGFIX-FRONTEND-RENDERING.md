@@ -137,3 +137,5 @@ Per verificare che il problema sia risolto:
 ✅ **SEO meta tag** - Ancora presenti e funzionanti
 ✅ **Admin funziona** - Nessun impatto sulle funzionalità admin
 
+
+

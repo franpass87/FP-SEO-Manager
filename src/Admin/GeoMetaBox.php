@@ -78,10 +78,47 @@ class GeoMetaBox {
 	public function render( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_geo_metabox', 'fp_seo_geo_nonce' );
 
+		// Clear cache before retrieving
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
 		// Get existing data
 		$claims      = get_post_meta( $post->ID, '_fp_seo_geo_claims', true );
 		$expose      = get_post_meta( $post->ID, '_fp_seo_geo_expose', true );
 		$no_ai_reuse = get_post_meta( $post->ID, '_fp_seo_geo_no_ai_reuse', true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( empty( $claims ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_geo_claims' ) );
+			if ( $db_value !== null ) {
+				$unserialized = maybe_unserialize( $db_value );
+				$claims = is_array( $unserialized ) ? $unserialized : array();
+			}
+		}
+		
+		if ( '' === $expose ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_geo_expose' ) );
+			if ( $db_value !== null ) {
+				$expose = $db_value;
+			}
+		}
+		
+		if ( '' === $no_ai_reuse ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_geo_no_ai_reuse' ) );
+			if ( $db_value !== null ) {
+				$no_ai_reuse = $db_value;
+			}
+		}
 
 		if ( ! is_array( $claims ) ) {
 			$claims = array();

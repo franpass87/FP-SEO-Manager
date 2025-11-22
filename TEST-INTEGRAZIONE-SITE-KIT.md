@@ -123,3 +123,5 @@ php -l wp-content/plugins/FP-SEO-Manager/src/Admin/Settings/PerformanceTabRender
 ✅ Frontend funziona senza conflitti (immagini/video/loghi visibili)
 ✅ Admin funziona normalmente
 
+
+

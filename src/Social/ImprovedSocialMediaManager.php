@@ -666,10 +666,32 @@ class ImprovedSocialMediaManager {
 	 * @return array<string, mixed>
 	 */
 	private function get_social_meta( int $post_id ): array {
+		// Clear cache before retrieving
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+		wp_cache_delete( $post_id, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post_id ) );
+		}
+		
 		$cache_key = 'fp_seo_social_meta_' . $post_id;
 		
 		return Cache::remember( $cache_key, function() use ( $post_id ) {
 			$meta = get_post_meta( $post_id, '_fp_seo_social_meta', true );
+			
+			// Fallback: query diretta al database se get_post_meta restituisce vuoto
+			if ( empty( $meta ) ) {
+				global $wpdb;
+				$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_social_meta' ) );
+				if ( $db_value !== null ) {
+					$unserialized = maybe_unserialize( $db_value );
+					$meta = is_array( $unserialized ) ? $unserialized : array();
+				}
+			}
+			
 			return is_array( $meta ) ? $meta : array();
 		}, HOUR_IN_SECONDS );
 	}

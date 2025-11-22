@@ -71,6 +71,7 @@ class Container {
 	 * @param string $id Class identifier.
 	 *
 	 * @return object Resolved instance.
+	 * @throws RuntimeException When the class cannot be resolved.
 	 */
 	public function get( string $id ): object {
 		if ( ! isset( $this->bindings[ $id ] ) ) {
@@ -84,14 +85,37 @@ class Container {
 		}
 
 		try {
-			return $binding( $this );
+			$instance = $binding( $this );
+			
+			// Verifica che l'istanza sia valida
+			if ( ! is_object( $instance ) ) {
+				throw new \RuntimeException( sprintf( 'Binding for %s returned non-object', $id ) );
+			}
+			
+			return $instance;
 		} catch ( \RuntimeException $e ) {
 			// Se è un RuntimeException per funzioni WordPress non disponibili, rilancia
 			if ( strpos( $e->getMessage(), 'WordPress functions not available' ) !== false ) {
 				throw $e;
 			}
-			// Per altri errori, rilancia come RuntimeException
-			throw new \RuntimeException( 'Failed to resolve ' . $id . ': ' . $e->getMessage(), 0, $e );
+			// Per altri errori, rilancia come RuntimeException con più dettagli
+			throw new \RuntimeException( 
+				sprintf( 'Failed to resolve %s: %s', $id, $e->getMessage() ), 
+				0, 
+				$e 
+			);
+		} catch ( \Throwable $e ) {
+			// Cattura anche Error e altri Throwable
+			throw new \RuntimeException( 
+				sprintf( 'Fatal error resolving %s: %s in %s:%d', 
+					$id, 
+					$e->getMessage(),
+					$e->getFile(),
+					$e->getLine()
+				), 
+				0, 
+				$e 
+			);
 		}
 	}
 

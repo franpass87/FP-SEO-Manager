@@ -117,3 +117,5 @@ Il codice funziona come previsto. AssetOptimizer non interferisce più con il re
 2. **Frontend rendering:** Nessun conflitto con immagini/video - **RISOLTO**
 3. **Site Kit Integration:** Codice pronto, test admin in attesa - **PENDING**
 
+
+

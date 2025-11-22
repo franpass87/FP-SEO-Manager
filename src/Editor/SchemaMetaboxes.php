@@ -66,7 +66,29 @@ class SchemaMetaboxes {
 	public function render_faq_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_faq_schema_nonce', 'fp_seo_faq_schema_nonce' );
 
+		// Clear cache before retrieving
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
 		$faq_questions = get_post_meta( $post->ID, '_fp_seo_faq_questions', true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( empty( $faq_questions ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_faq_questions' ) );
+			if ( $db_value !== null ) {
+				$unserialized = maybe_unserialize( $db_value );
+				$faq_questions = is_array( $unserialized ) ? $unserialized : array();
+			}
+		}
+		
 		if ( ! is_array( $faq_questions ) ) {
 			$faq_questions = array();
 		}
@@ -174,7 +196,29 @@ class SchemaMetaboxes {
 	public function render_howto_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_howto_schema_nonce', 'fp_seo_howto_schema_nonce' );
 
+		// Clear cache before retrieving
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
 		$howto_data = get_post_meta( $post->ID, '_fp_seo_howto', true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( empty( $howto_data ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_howto' ) );
+			if ( $db_value !== null ) {
+				$unserialized = maybe_unserialize( $db_value );
+				$howto_data = is_array( $unserialized ) ? $unserialized : array();
+			}
+		}
+		
 		if ( ! is_array( $howto_data ) ) {
 			$howto_data = array(
 				'name'        => '',

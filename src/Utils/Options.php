@@ -166,7 +166,21 @@ class Options {
 		return Cache::remember(
 			'options_data',
 			static function (): array {
+				// Clear WordPress option cache before retrieving
+				wp_cache_delete( self::OPTION_KEY, 'options' );
+				wp_cache_delete( 'alloptions', 'options' );
+				
 				$stored = get_option( self::OPTION_KEY, array() );
+				
+				// Fallback: query diretta al database se get_option restituisce vuoto o non array
+				if ( empty( $stored ) || ! is_array( $stored ) ) {
+					global $wpdb;
+					$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", self::OPTION_KEY ) );
+					if ( $db_value !== null ) {
+						$unserialized = maybe_unserialize( $db_value );
+						$stored = is_array( $unserialized ) ? $unserialized : array();
+					}
+				}
 
 				if ( ! is_array( $stored ) ) {
 					$stored = array();
@@ -431,14 +445,45 @@ class Options {
 
 	/**
 	 * Updates the stored options value.
+	 * Merges new values with existing options to preserve unmodified settings.
+	 * 
+	 * IMPORTANTE: Questo metodo preserva SEMPRE le opzioni esistenti.
+	 * Usa array_replace_recursive() per garantire che i valori esistenti non vengano persi.
+	 * Questo è fondamentale per preservare le configurazioni durante aggiornamenti/disattivazioni.
 	 *
-	 * @param array<string, mixed> $value Option payload.
+	 * @param array<string, mixed> $value Option payload (can be partial).
 	 */
 	public static function update( array $value ): void {
-		update_option( self::OPTION_KEY, self::sanitize( $value ) );
-		
-		// Clear cache when options are updated.
+		// Clear cache before retrieving existing options to ensure fresh data
 		Cache::delete( 'options_data' );
+		
+		// Get existing options first
+		// IMPORTANTE: get_option() con default array() restituisce array() solo se l'opzione non esiste
+		// Se l'opzione esiste, restituisce il valore salvato
+		$existing = get_option( self::OPTION_KEY, array() );
+		
+		if ( ! is_array( $existing ) ) {
+			$existing = array();
+		}
+		
+		// Merge new values with existing options recursively
+		// array_replace_recursive() preserva i valori esistenti e aggiunge/sovrascrive solo quelli nuovi
+		// Questo garantisce che le opzioni personalizzate non vengano perse
+		$merged = array_replace_recursive( $existing, $value );
+		
+		// Sanitize the merged options
+		$sanitized = self::sanitize( $merged );
+		
+		// Update the option
+		$result = update_option( self::OPTION_KEY, $sanitized );
+		
+		// Clear cache when options are updated (anche se update_option fallisce, puliamo comunque)
+		Cache::delete( 'options_data' );
+		
+		// Log per debug
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO: Options::update - result: ' . ( $result ? 'true' : 'false' ) . ', keys: ' . implode( ', ', array_keys( $sanitized ) ) );
+		}
 	}
 
 	/**
@@ -509,6 +554,9 @@ class Options {
 
 	/**
 	 * Merges defaults with user supplied values.
+	 * 
+	 * IMPORTANTE: Usa array_replace_recursive per preservare i valori esistenti.
+	 * I defaults vengono applicati SOLO per chiavi mancanti, non sovrascrivono valori esistenti.
 	 *
 	 * @param array<string, mixed> $value Partial options.
 	 *
@@ -517,6 +565,9 @@ class Options {
 	public static function merge_defaults( array $value ): array {
 		$defaults = self::get_defaults();
 
+		// array_replace_recursive preserva i valori esistenti in $value
+		// e aggiunge solo i defaults per chiavi mancanti
+		// Questo garantisce che le opzioni personalizzate non vengano sovrascritte
 		return array_replace_recursive( $defaults, $value );
 	}
 

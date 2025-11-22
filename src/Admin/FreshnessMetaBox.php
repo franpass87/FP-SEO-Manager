@@ -70,6 +70,17 @@ class FreshnessMetaBox {
 	public function render( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_freshness_metabox', 'fp_seo_freshness_nonce' );
 
+		// Clear cache before retrieving
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
 		// Get freshness data
 		$freshness_data = $this->freshness->get_freshness_data( $post->ID );
 
@@ -77,6 +88,31 @@ class FreshnessMetaBox {
 		$update_frequency = get_post_meta( $post->ID, '_fp_seo_update_frequency', true );
 		$fact_checked     = get_post_meta( $post->ID, '_fp_seo_fact_checked', true );
 		$content_type     = get_post_meta( $post->ID, '_fp_seo_content_type', true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( '' === $update_frequency ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_update_frequency' ) );
+			if ( $db_value !== null ) {
+				$update_frequency = $db_value;
+			}
+		}
+		
+		if ( '' === $fact_checked ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_fact_checked' ) );
+			if ( $db_value !== null ) {
+				$fact_checked = $db_value;
+			}
+		}
+		
+		if ( '' === $content_type ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_content_type' ) );
+			if ( $db_value !== null ) {
+				$content_type = $db_value;
+			}
+		}
 
 		?>
 		<div class="fp-seo-freshness-metabox">

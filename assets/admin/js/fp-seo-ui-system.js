@@ -192,15 +192,52 @@
          * Initialize AJAX handlers
          */
         initAjaxHandlers: function() {
-            // Generic AJAX error handler
+            // Specific AJAX error handler - only for FP SEO plugin requests
             $(document).ajaxError(function(event, xhr, settings, thrownError) {
-                FPSeoUI.showNotification('An error occurred. Please try again.', 'error');
+                // Skip if it's a WordPress core request (heartbeat, autosave, etc.)
+                if (settings.data) {
+                    const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                    if (dataStr.indexOf('action=heartbeat') !== -1 ||
+                        dataStr.indexOf('action=autosave') !== -1 ||
+                        dataStr.indexOf('action=wp-remove-post-lock') !== -1) {
+                        return; // Skip WordPress core requests
+                    }
+                }
+                
+                // Only handle errors for FP SEO plugin AJAX requests
+                let isFpSeoRequest = false;
+                
+                if (settings.url && settings.url.indexOf('admin-ajax.php') !== -1) {
+                    // Check if it's a FormData request - we need to check the URL pattern
+                    if (settings.data instanceof FormData) {
+                        // For FormData, we can't inspect directly, but we check if URL contains admin-ajax.php
+                        // and rely on the action being set correctly in the request
+                        // We'll be more conservative and only show errors for confirmed FP SEO actions
+                        return; // Skip FormData requests to avoid false positives
+                    } else if (settings.data) {
+                        const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                        isFpSeoRequest = dataStr.indexOf('action=fp_seo_performance') !== -1 ||
+                                       dataStr.indexOf('action=fp-seo') !== -1;
+                    }
+                }
+                
+                // Only show notification for confirmed FP SEO requests with real errors
+                if (isFpSeoRequest && (xhr.status >= 500 || (xhr.status === 0 && thrownError))) {
+                    FPSeoUI.showNotification('An error occurred. Please try again.', 'error');
+                }
             });
 
-            // Generic AJAX success handler
+            // Specific AJAX success handler - only for FP SEO plugin requests
             $(document).ajaxSuccess(function(event, xhr, settings) {
-                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-                    FPSeoUI.showNotification(xhr.responseJSON.data.message, 'success');
+                // Only handle success for confirmed FP SEO plugin AJAX requests
+                if (settings.url && settings.url.indexOf('admin-ajax.php') !== -1 && settings.data) {
+                    const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                    const isFpSeoRequest = dataStr.indexOf('action=fp_seo_performance') !== -1 ||
+                                         dataStr.indexOf('action=fp-seo') !== -1;
+                    
+                    if (isFpSeoRequest && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                        FPSeoUI.showNotification(xhr.responseJSON.data.message, 'success');
+                    }
                 }
             });
         },

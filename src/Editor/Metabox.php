@@ -53,21 +53,128 @@ class Metabox {
 	private const NONCE_ACTION = 'fp_seo_performance_meta';
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
+	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
 
 	/**
+	 * @var MetaboxRenderer
+	 */
+	private $renderer;
+
+	/**
+	 * Costruttore - registra gli hook immediatamente
+	 */
+	public function __construct() {
+		// REGISTRA GLI HOOK IMMEDIATAMENTE nel costruttore per garantire che vengano sempre registrati
+		error_log( 'FP SEO: Metabox::__construct() called' );
+		$this->register_hooks();
+		error_log( 'FP SEO: Metabox::__construct() completed - hooks should be registered' );
+	}
+
+	/**
+	 * Registra gli hook di salvataggio - chiamato dal costruttore e da register()
+	 */
+	private function register_hooks(): void {
+		// MULTIPLE HOOKS con priorità diverse per garantire il salvataggio
+		// save_post receives: (int $post_id, WP_Post $post, bool $update)
+		add_action( 'save_post', array( $this, 'save_meta' ), 1, 3 ); // Priorità 1 - molto presto
+		add_action( 'save_post', array( $this, 'save_meta' ), 5, 3 ); // Priorità 5 - normale
+		add_action( 'save_post', array( $this, 'save_meta' ), 99, 3 ); // Priorità 99 - molto tardi
+		
+		// Hook aggiuntivo per edit_post (chiamato anche in Gutenberg)
+		add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 1, 2 );
+		add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 99, 2 );
+		
+		// Hook wp_insert_post per catturare anche questo
+		add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
+		
+		// Hook wp_insert_post_data per salvare prima che il post venga inserito
+		add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 10, 4 );
+		
+		// Log registrazione
+		error_log( 'FP SEO: Metabox hooks registered in register_hooks() - save_post (1,5,99), edit_post (1,99), wp_insert_post (10), wp_insert_post_data (10)' );
+	}
+
+	/**
 	 * Hooks WordPress actions for registering and saving the metabox.
 	 */
 	public function register(): void {
+		// Inizializza renderer con gestione errori robusta
+		try {
+			// Verifica che la classe esista prima di istanziarla
+			if ( ! class_exists( 'FP\\SEO\\Editor\\MetaboxRenderer' ) ) {
+				throw new \RuntimeException( 'MetaboxRenderer class not found' );
+			}
+			
+			$this->renderer = new MetaboxRenderer();
+			
+			// Verifica che il renderer sia stato creato correttamente
+			if ( ! $this->renderer instanceof MetaboxRenderer ) {
+				throw new \RuntimeException( 'MetaboxRenderer instance invalid' );
+			}
+		} catch ( \Exception $e ) {
+			// Log errore ma continua - useremo fallback rendering
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+			}
+			// Crea un renderer fallback invece di non registrare gli hook
+			$this->renderer = null;
+		} catch ( \Throwable $e ) {
+			// Log errore fatale ma continua - useremo fallback rendering
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Fatal error initializing MetaboxRenderer', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+			}
+			// Crea un renderer fallback invece di non registrare gli hook
+			$this->renderer = null;
+		}
+		
+		// Registra sempre gli hook, anche se il renderer non è disponibile
 		// Priorità 5 per essere registrato tra i primi metabox (prima di altri plugin)
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
-		// Save meta with priority 10 (default) and 1 argument
-		add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
-		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
-		add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+		
+		// Gli hook di salvataggio sono già registrati nel costruttore, ma li registriamo di nuovo per sicurezza
+		$this->register_hooks();
+		
+		// Questo permette al salvataggio di funzionare anche se il rendering fallisce
+		try {
+			
+			// Hook per REST API (Gutenberg) - registra per tutti i post types supportati
+			$post_types = PostTypes::analyzable();
+			foreach ( $post_types as $post_type ) {
+				add_action( 'rest_after_insert_' . $post_type, array( $this, 'save_meta_rest' ), 10, 3 );
+			}
+			
+			// Registra meta fields per REST API (Gutenberg)
+			add_action( 'rest_api_init', array( $this, 'register_rest_meta_fields' ) );
+			
+			// Hook pre_post_update rimosso - usiamo solo save_post per evitare doppi salvataggi
+			// add_filter( 'pre_post_update', array( $this, 'save_meta_pre_update' ), 5, 2 );
+			
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
+			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
+			add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+		} catch ( \Throwable $e ) {
+			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Failed to register metabox hooks', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+			}
+		}
 	}
 
 	/**
@@ -79,7 +186,25 @@ class Metabox {
 	 * 3. Metabox secondari (side, default) - se presenti
 	 */
 	public function add_meta_box(): void {
-		foreach ( $this->get_supported_post_types() as $post_type ) {
+		try {
+			$post_types = $this->get_supported_post_types();
+			if ( ! is_array( $post_types ) || empty( $post_types ) ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'FP SEO: No supported post types found', array( 'post_types' => $post_types ) );
+				}
+				return;
+			}
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Error getting supported post types', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+			}
+			return;
+		}
+		
+		foreach ( $post_types as $post_type ) {
 			// Remove native WordPress excerpt metabox to avoid duplication
 			// (we have our own excerpt field in SEO Performance metabox with better UX)
 			remove_meta_box( 'postexcerpt', $post_type, 'normal' );
@@ -128,6 +253,7 @@ class Metabox {
 		wp_enqueue_script( 'fp-seo-performance-editor' );
 		wp_enqueue_script( 'fp-seo-performance-serp-preview' );
 		wp_enqueue_script( 'fp-seo-performance-ai-generator' );
+		wp_enqueue_script( 'fp-seo-performance-metabox-ai-fields' );
 
 		// Prepara i dati per il JavaScript PRIMA che il module si carichi
 		$options  = Options::get();
@@ -136,19 +262,44 @@ class Metabox {
 		$analysis = array();
 
 		if ( $enabled && ! $excluded ) {
+			try {
 			$analysis = $this->run_analysis_for_post( $post );
+			} catch ( \Exception $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Error running analysis in enqueue_assets', array(
+						'post_id' => $post->ID ?? 0,
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+					) );
+				}
+				$analysis = array();
+			} catch ( \Throwable $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Fatal error running analysis in enqueue_assets', array(
+						'post_id' => $post->ID ?? 0,
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+					) );
+				}
+				$analysis = array();
+			}
 		}
 
+		// Get AI configuration
+		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
+		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
+
 		// Localizza lo script per renderlo disponibile al module
-		wp_localize_script(
-			'fp-seo-performance-editor',
-			'fpSeoPerformanceMetabox',
-			array(
+		$localized_data = array(
 				'postId'   => (int) $post->ID,
 				'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
 				'nonce'    => wp_create_nonce( self::AJAX_ACTION ),
+			'saveNonce' => wp_create_nonce( self::AJAX_SAVE_FIELDS ),
+			'saveAction' => self::AJAX_SAVE_FIELDS,
 				'enabled'  => $enabled,
 				'excluded' => $excluded,
+			'aiEnabled' => $ai_enabled,
+			'apiKeyPresent' => ! empty( $api_key ),
 				'initial'  => $analysis,
 				'labels'   => array(
 					'score'      => __( 'SEO Score', 'fp-seo-performance' ),
@@ -165,7 +316,19 @@ class Metabox {
 					Result::STATUS_WARN => __( 'Attenzione', 'fp-seo-performance' ),
 					Result::STATUS_FAIL => __( 'Critico', 'fp-seo-performance' ),
 				),
-			)
+		);
+
+		wp_localize_script(
+			'fp-seo-performance-editor',
+			'fpSeoPerformanceMetabox',
+			$localized_data
+		);
+
+		// Also localize for the AI fields script
+		wp_localize_script(
+			'fp-seo-performance-metabox-ai-fields',
+			'fpSeoPerformanceMetabox',
+			$localized_data
 		);
 	}
 
@@ -1168,7 +1331,44 @@ class Metabox {
 	 * @param WP_Post $post Current post instance.
 	 */
 	public function render( WP_Post $post ): void {
-		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
+		// Validazione input
+		if ( ! $post instanceof WP_Post ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Invalid post object in render', array(
+					'post' => gettype( $post ),
+					'post_id' => isset( $post->ID ) ? $post->ID : 'unknown',
+				) );
+			}
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: oggetto post non valido.', 'fp-seo-performance' ) . '</p></div>';
+			return;
+		}
+		
+		// Output sempre il nonce e il campo nascosto, anche se il rendering fallisce
+		try {
+			wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
+			
+			// Add hidden field to ensure metabox is always recognized in POST
+			// This helps WordPress identify that our metabox fields should be processed
+			echo '<input type="hidden" name="fp_seo_performance_metabox_present" value="1" />';
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Error outputting nonce', array(
+					'error' => $e->getMessage(),
+				) );
+			}
+		}
+
+		// Se il renderer non è disponibile, mostra un messaggio di fallback
+		if ( ! $this->renderer ) {
+			echo '<div class="notice notice-warning">';
+			echo '<p><strong>' . esc_html__( 'FP SEO Manager', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'Il metabox non può essere visualizzato correttamente. I campi SEO verranno comunque salvati.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small>' . esc_html__( 'Controlla i log per dettagli.', 'fp-seo-performance' ) . '</small></p>';
+			}
+			echo '</div>';
+			return;
+		}
 
 		// I dati per JS sono già stati preparati in enqueue_assets()
 		$options  = Options::get();
@@ -1177,950 +1377,619 @@ class Metabox {
 		$analysis = array();
 
 		if ( $enabled && ! $excluded ) {
-			$analysis = $this->run_analysis_for_post( $post );
+			try {
+				$analysis = $this->run_analysis_for_post( $post );
+			} catch ( \Exception $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Error running analysis', array(
+						'post_id' => $post->ID,
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+						'file' => $e->getFile(),
+						'line' => $e->getLine(),
+					) );
+				}
+				$analysis = array();
+			} catch ( \Throwable $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Fatal error running analysis', array(
+						'post_id' => $post->ID,
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+						'file' => $e->getFile(),
+						'line' => $e->getLine(),
+					) );
+				}
+				$analysis = array();
+			}
 		}
 
-		$score_value  = isset( $analysis['score']['score'] ) ? (int) $analysis['score']['score'] : 0;
-		$score_status = isset( $analysis['score']['status'] ) ? (string) $analysis['score']['status'] : 'pending';
-		$checks       = $analysis['checks'] ?? array();
-		$recommend    = $analysis['score']['recommendations'] ?? array();
-		?>
-		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
-			<!-- Banner informativo -->
-			<div class="fp-seo-metabox-help-banner">
-				<div class="fp-seo-metabox-help-banner__icon">ℹ️</div>
-				<div class="fp-seo-metabox-help-banner__content">
-					<h4 class="fp-seo-metabox-help-banner__title">
-						<?php esc_html_e( 'Come funziona l\'analisi SEO?', 'fp-seo-performance' ); ?>
-					</h4>
-					<p class="fp-seo-metabox-help-banner__text">
-						<?php esc_html_e( 'Questo tool analizza in tempo reale il tuo contenuto e ti assegna un punteggio SEO da 0 a 100. Ogni modifica che fai (titolo, contenuto, ecc.) viene automaticamente analizzata dopo 500ms.', 'fp-seo-performance' ); ?>
-					</p>
-					<div class="fp-seo-metabox-help-banner__legend">
-						<span class="fp-seo-legend-item fp-seo-legend-item--pass">
-							<span class="fp-seo-legend-dot"></span> <?php esc_html_e( 'Ottimo (tutto ok)', 'fp-seo-performance' ); ?>
-						</span>
-						<span class="fp-seo-legend-item fp-seo-legend-item--warn">
-							<span class="fp-seo-legend-dot"></span> <?php esc_html_e( 'Attenzione (da migliorare)', 'fp-seo-performance' ); ?>
-						</span>
-						<span class="fp-seo-legend-item fp-seo-legend-item--fail">
-							<span class="fp-seo-legend-dot"></span> <?php esc_html_e( 'Critico (richiede azione)', 'fp-seo-performance' ); ?>
-						</span>
-					</div>
-				</div>
-				<button type="button" class="fp-seo-metabox-help-banner__close" title="<?php esc_attr_e( 'Chiudi', 'fp-seo-performance' ); ?>">×</button>
-			</div>
-
-			<div class="fp-seo-performance-metabox__controls">
-				<label for="fp-seo-performance-exclude">
-					<input type="checkbox" name="fp_seo_performance_exclude" id="fp-seo-performance-exclude" value="1" <?php checked( $excluded ); ?> data-fp-seo-exclude />
-					<?php esc_html_e( 'Exclude this content from analysis', 'fp-seo-performance' ); ?>
-					<span class="fp-seo-tooltip-trigger" data-tooltip="<?php esc_attr_e( 'Attiva questa opzione per escludere completamente questo contenuto dall\'analisi SEO. Utile per pagine di servizio, ringraziamenti, ecc.', 'fp-seo-performance' ); ?>">ℹ️</span>
-				</label>
-			</div>
-			<div class="fp-seo-performance-metabox__message" role="status" aria-live="polite" data-fp-seo-message></div>
-			<div class="fp-seo-performance-metabox__score" role="status" aria-live="polite" aria-atomic="true" data-fp-seo-score data-status="<?php echo esc_attr( $score_status ); ?>" aria-label="<?php echo esc_attr( sprintf( __( 'Punteggio SEO corrente: %d su 100', 'fp-seo-performance' ), $score_value ) ); ?>">
-				<strong class="fp-seo-performance-metabox__score-label"><?php esc_html_e( 'SEO Score', 'fp-seo-performance' ); ?></strong>
-				<span class="fp-seo-performance-metabox__score-value" data-fp-seo-score-value><?php echo esc_html( (string) $score_value ); ?></span>
-			</div>
-		<!-- 📊 SEO OPTIMIZATION FIELDS - Organized by Impact -->
-		
-		<!-- Section 1: SERP OPTIMIZATION (Very High Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #10b981;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">🎯</span>
-					<?php esc_html_e( 'SERP Optimization', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
-					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +40%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-		<div class="fp-seo-performance-metabox__section-content">
-		<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
-			<strong style="color: #059669;">💡 Questi campi appaiono direttamente su Google e influenzano la SERP</strong><br>
-			Ottimizzali per massimizzare visibilità e click-through rate. Totale impatto sezione: <strong>+40% score</strong> (Title +15%, Description +10%, Excerpt +9%, Slug +6%).
-		</p>
-		
-		<!-- CAMPI PRINCIPALI SEMPRE VISIBILI -->
-		<div style="display: grid; gap: 16px; margin-bottom: 20px;">
-			<!-- SEO Title -->
-					<div style="position: relative;">
-						<label for="fp-seo-title" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-							<span style="display: flex; align-items: center; gap: 8px;">
-								<span style="font-size: 16px;">📝</span>
-								<?php esc_html_e( 'SEO Title', 'fp-seo-performance' ); ?>
-								<span style="display: inline-flex; padding: 2px 8px; background: #10b981; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+15%</span>
-							</span>
-							<span id="fp-seo-title-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/60</span>
-						</label>
-						<div style="display: flex; gap: 8px; align-items: stretch;">
-							<input 
-								type="text" 
-								id="fp-seo-title" 
-								name="fp_seo_title"
-								value="<?php echo esc_attr( wp_specialchars_decode( get_post_meta( $post->ID, '_fp_seo_title', true ), ENT_QUOTES ) ); ?>"
-								placeholder="<?php esc_attr_e( 'es: Guida Completa alla SEO WordPress 2025 | Nome Sito', 'fp-seo-performance' ); ?>"
-								maxlength="70"
-								aria-label="<?php esc_attr_e( 'SEO Title - Titolo ottimizzato per SERP', 'fp-seo-performance' ); ?>"
-								style="flex: 1; padding: 10px 14px; font-size: 14px; border: 2px solid #10b981; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-								data-fp-seo-title
-							/>
-							<button 
-								type="button" 
-								class="fp-seo-ai-generate-field-btn" 
-								data-field="seo_title"
-								data-target-id="fp-seo-title"
-								data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-								data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-								style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2);"
-								onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-								onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
-								title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-							>
-								<span style="font-size: 14px;">🤖</span>
-								<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-							</button>
-						</div>
-						<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-							<strong style="color: #059669;">🎯 Alto impatto (+15%)</strong> - Appare come titolo principale in Google. Lunghezza ottimale: 50-60 caratteri con keyword all'inizio.
-						</p>
-					</div>
-
-					<!-- Meta Description -->
-					<div style="position: relative;">
-						<label for="fp-seo-meta-description" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-							<span style="display: flex; align-items: center; gap: 8px;">
-								<span style="font-size: 16px;">📄</span>
-								<?php esc_html_e( 'Meta Description', 'fp-seo-performance' ); ?>
-								<span style="display: inline-flex; padding: 2px 8px; background: #10b981; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+10%</span>
-							</span>
-							<span id="fp-seo-meta-description-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/160</span>
-						</label>
-						<div style="display: flex; gap: 8px; align-items: flex-start;">
-							<textarea 
-								id="fp-seo-meta-description" 
-								name="fp_seo_meta_description"
-								placeholder="<?php esc_attr_e( 'es: Scopri come ottimizzare WordPress per la SEO con la nostra guida completa 2025. Aumenta il traffico del 300% seguendo 5 step comprovati.', 'fp-seo-performance' ); ?>"
-								maxlength="200"
-								rows="3"
-								aria-label="<?php esc_attr_e( 'Meta Description - Descrizione per SERP', 'fp-seo-performance' ); ?>"
-								style="flex: 1; padding: 10px 14px; font-size: 13px; border: 2px solid #10b981; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
-								data-fp-seo-meta-description
-							><?php echo esc_textarea( wp_specialchars_decode( get_post_meta( $post->ID, '_fp_seo_meta_description', true ), ENT_QUOTES ) ); ?></textarea>
-							<button 
-								type="button" 
-								class="fp-seo-ai-generate-field-btn" 
-								data-field="meta_description"
-								data-target-id="fp-seo-meta-description"
-								data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-								data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-								style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2); height: fit-content;"
-								onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-								onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
-								title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-							>
-								<span style="font-size: 14px;">🤖</span>
-								<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-							</button>
-						</div>
-					<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-						<strong style="color: #059669;">🎯 Medio-Alto impatto (+10%)</strong> - Descrizione sotto il titolo in Google. Include keyword + CTA. Ottimale: 150-160 caratteri.
-					</p>
-				</div>
-
-				<!-- Slug (URL Permalink) -->
-				<div style="position: relative;">
-					<label for="fp-seo-slug" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-						<span style="display: flex; align-items: center; gap: 8px;">
-							<span style="font-size: 16px;">🔗</span>
-							<?php esc_html_e( 'Slug (URL Permalink)', 'fp-seo-performance' ); ?>
-							<span style="display: inline-flex; padding: 2px 8px; background: #6b7280; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+6%</span>
-						</span>
-						<span id="fp-seo-slug-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0 parole</span>
-					</label>
-					<div style="display: flex; gap: 8px; align-items: stretch;">
-						<input 
-							type="text" 
-							id="fp-seo-slug" 
-							name="fp_seo_slug"
-							value="<?php echo esc_attr( $post->post_name ); ?>"
-							placeholder="<?php esc_attr_e( 'es: guida-seo-wordpress-2025 (lowercase, separate-con-trattini)', 'fp-seo-performance' ); ?>"
-							maxlength="100"
-							aria-label="<?php esc_attr_e( 'Slug URL - Permalink SEO-friendly', 'fp-seo-performance' ); ?>"
-							style="flex: 1; padding: 10px 14px; font-size: 13px; font-family: monospace; border: 2px solid #9ca3af; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-							data-fp-seo-slug
-						/>
-						<button 
-							type="button" 
-							class="fp-seo-ai-generate-field-btn" 
-							data-field="slug"
-							data-target-id="fp-seo-slug"
-							data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-							data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-							style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2);"
-							onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-							onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
-							title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-						>
-							<span style="font-size: 14px;">🤖</span>
-							<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-						</button>
-					</div>
-					<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-						<strong style="color: #6b7280;">📊 Medio-Basso impatto (+6%)</strong> - URL della pagina (dopo il dominio). Breve, con keyword, solo lowercase e trattini. Es: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 10px;">dominio.it/<strong>questo-e-lo-slug</strong></code>
-					</p>
-				</div>
-
-				<!-- Riassunto (Excerpt) -->
-				<div style="position: relative;">
-					<label for="fp-seo-excerpt" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-						<span style="display: flex; align-items: center; gap: 8px;">
-							<span style="font-size: 16px;">📋</span>
-							<?php esc_html_e( 'Riassunto (Excerpt)', 'fp-seo-performance' ); ?>
-							<span style="display: inline-flex; padding: 2px 8px; background: #3b82f6; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+9%</span>
-						</span>
-						<span id="fp-seo-excerpt-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/150</span>
-					</label>
-					<textarea 
-						id="fp-seo-excerpt" 
-						name="fp_seo_excerpt"
-						placeholder="<?php esc_attr_e( 'es: Breve riassunto del contenuto. Usato come fallback per meta description se non compilata. 100-150 caratteri ottimali.', 'fp-seo-performance' ); ?>"
-						maxlength="300"
-						rows="3"
-						aria-label="<?php esc_attr_e( 'Riassunto - Excerpt usato come fallback meta description', 'fp-seo-performance' ); ?>"
-						style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #3b82f6; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
-						data-fp-seo-excerpt
-					><?php echo esc_textarea( $post->post_excerpt ); ?></textarea>
-					<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-						<strong style="color: #3b82f6;">🎯 Medio impatto (+9%)</strong> - Riassunto breve del contenuto. Usato come fallback se Meta Description è vuota. Appare anche in archivi/elenchi. Ottimale: 100-150 caratteri.
-					</p>
-				</div>
-
-				<!-- Separator -->
-				<div style="height: 1px; background: linear-gradient(90deg, transparent 0%, #e5e7eb 50%, transparent 100%); margin: 8px 0;"></div>
-				
-				<!-- Focus Keyword -->
-					<div style="position: relative;">
-						<label for="fp-seo-focus-keyword" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-							<span style="display: flex; align-items: center; gap: 8px;">
-								<span style="font-size: 16px;">🔑</span>
-								<?php esc_html_e( 'Focus Keyword (Principale)', 'fp-seo-performance' ); ?>
-								<span style="display: inline-flex; padding: 2px 8px; background: #3b82f6; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+8%</span>
-							</span>
-						</label>
-						<input 
-							type="text" 
-							id="fp-seo-focus-keyword" 
-							name="fp_seo_focus_keyword"
-							value="<?php echo esc_attr( get_post_meta( $post->ID, self::META_FOCUS_KEYWORD, true ) ); ?>"
-							placeholder="<?php esc_attr_e( 'es: seo wordpress, ottimizzazione motori ricerca', 'fp-seo-performance' ); ?>"
-							aria-label="<?php esc_attr_e( 'Focus Keyword - Parola chiave principale per ottimizzazione SEO', 'fp-seo-performance' ); ?>"
-							aria-describedby="fp-seo-focus-keyword-hint"
-							style="width: 100%; padding: 10px 14px; font-size: 14px; border: 2px solid #3b82f6; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-							data-fp-seo-focus-keyword
-						/>
-						<span id="fp-seo-focus-keyword-hint" class="screen-reader-text">
-							<?php esc_html_e( 'Inserisci la parola chiave principale che vuoi ottimizzare per questo contenuto. Verrà analizzata nei title, meta description e contenuto.', 'fp-seo-performance' ); ?>
-						</span>
-						<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-							<strong style="color: #3b82f6;">🎯 Medio impatto (+8%)</strong> - Keyword principale che guida l'analisi SEO. Usala nel title, description e contenuto.
-						</p>
-					</div>
-					
-					<!-- Secondary Keywords -->
-					<div style="position: relative;">
-						<label for="fp-seo-secondary-keywords" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-							<span style="display: flex; align-items: center; gap: 8px;">
-								<span style="font-size: 16px;">🔐</span>
-								<?php esc_html_e( 'Secondary Keywords', 'fp-seo-performance' ); ?>
-								<span style="display: inline-flex; padding: 2px 8px; background: #6b7280; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+5%</span>
-							</span>
-						</label>
-						<input 
-							type="text" 
-							id="fp-seo-secondary-keywords" 
-							name="fp_seo_secondary_keywords"
-							value="<?php 
-								$secondary = get_post_meta( $post->ID, self::META_SECONDARY_KEYWORDS, true );
-								echo esc_attr( is_array( $secondary ) ? implode( ', ', $secondary ) : $secondary );
-							?>"
-							placeholder="<?php esc_attr_e( 'es: plugin seo, guida ottimizzazione, wordpress performance (separate con virgola)', 'fp-seo-performance' ); ?>"
-							aria-label="<?php esc_attr_e( 'Keyword Secondarie - Separate con virgola', 'fp-seo-performance' ); ?>"
-							aria-describedby="fp-seo-secondary-keywords-hint"
-							style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #9ca3af; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-							data-fp-seo-secondary-keywords
-						/>
-						<span id="fp-seo-secondary-keywords-hint" class="screen-reader-text">
-							<?php esc_html_e( 'Inserisci keyword secondarie separate da virgola. Aiutano l\'analisi a valutare la copertura semantica del contenuto.', 'fp-seo-performance' ); ?>
-						</span>
-						<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-					<strong style="color: #6b7280;">📊 Basso-Medio impatto (+5%)</strong> - Keyword correlate per copertura semantica. Separate con virgola.
-				</p>
-			</div>
-		</div>
-		
-		<!-- Advanced Keywords Manager (optional integration) -->
-		<?php
+		// Use renderer to output HTML con gestione errori robusta
 		try {
-			$keywords_manager = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Keywords\MultipleKeywordsManager::class );
-			if ( $keywords_manager && method_exists( $keywords_manager, 'render_keywords_metabox' ) ) {
-				// Il manager potrebbe aggiungere tab o funzionalità avanzate
-				// $keywords_manager->render_keywords_metabox( $post );
-			}
+			$this->renderer->render( $post, $analysis, $excluded );
 		} catch ( \Exception $e ) {
-			// Manager non disponibile - campi base già mostrati sopra
-		}
-		?>
-		</div>
-	</div>
-	
-	<div class="fp-seo-performance-metabox__section">
-		<h4 class="fp-seo-performance-metabox__section-heading">
-			<span class="fp-seo-section-icon">📈</span>
-			<?php esc_html_e( 'Analisi SEO', 'fp-seo-performance' ); ?>
-		</h4>
-		<div class="fp-seo-performance-metabox__section-content">
-		<div class="fp-seo-performance-metabox__unified-analysis">
-			<?php
-			// Count by status
-			$status_counts = array(
-				'fail' => 0,
-				'warn' => 0,
-				'pass' => 0,
-			);
-			foreach ( $checks as $check ) {
-				$status = $check['status'] ?? 'pending';
-				if ( isset( $status_counts[ $status ] ) ) {
-					$status_counts[ $status ]++;
-				}
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Error rendering metabox', array(
+					'post_id' => $post->ID,
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
 			}
-			?>
+			// Fallback: show basic error message con campi essenziali
+			echo '<div class="notice notice-error">';
+			echo '<p><strong>' . esc_html__( 'Errore nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			echo '</div>';
 			
-			<?php if ( ! empty( $checks ) ) : ?>
-				<div class="fp-seo-performance-summary">
-					<?php if ( $status_counts['fail'] > 0 ) : ?>
-						<span class="fp-seo-performance-summary__badge fp-seo-performance-summary__badge--fail">
-							❌ <?php echo esc_html( $status_counts['fail'] ); ?> <?php esc_html_e( 'Critico', 'fp-seo-performance' ); ?>
-						</span>
-					<?php endif; ?>
-					<?php if ( $status_counts['warn'] > 0 ) : ?>
-						<span class="fp-seo-performance-summary__badge fp-seo-performance-summary__badge--warn">
-							⚠️ <?php echo esc_html( $status_counts['warn'] ); ?> <?php esc_html_e( 'Attenzione', 'fp-seo-performance' ); ?>
-						</span>
-					<?php endif; ?>
-					<?php if ( $status_counts['pass'] > 0 ) : ?>
-						<span class="fp-seo-performance-summary__badge fp-seo-performance-summary__badge--pass">
-							✅ <?php echo esc_html( $status_counts['pass'] ); ?> <?php esc_html_e( 'Ottimo', 'fp-seo-performance' ); ?>
-						</span>
-					<?php endif; ?>
-				</div>
-			<?php endif; ?>
+			// Mostra almeno i campi essenziali per il salvataggio
+			$this->render_fallback_fields( $post );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Fatal error rendering metabox', array(
+					'post_id' => $post->ID,
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+			}
+			// Fallback: show basic error message con campi essenziali
+			echo '<div class="notice notice-error">';
+			echo '<p><strong>' . esc_html__( 'Errore critico nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			echo '</div>';
 			
-			<?php if ( empty( $checks ) ) : ?>
-				<div class="fp-seo-performance-metabox__analysis-list--empty">
-					✅ <?php esc_html_e( 'Ottimo! Tutti gli indicatori sono ottimali.', 'fp-seo-performance' ); ?>
-				</div>
-			<?php else : ?>
-				<ul class="fp-seo-performance-metabox__analysis-list" data-fp-seo-analysis>
-					<?php 
-					$delay = 0;
-					foreach ( $checks as $check ) : 
-						$delay += 0.05; // 50ms delay tra ogni elemento
-						$status = $check['status'] ?? 'pending';
-						$icon = '';
-						$status_text = '';
-						
-						switch ( $status ) {
-							case 'fail':
-								$icon = '🔴';
-								$status_text = __( 'Critico', 'fp-seo-performance' );
-								break;
-							case 'warn':
-								$icon = '🟡';
-								$status_text = __( 'Attenzione', 'fp-seo-performance' );
-								break;
-							case 'pass':
-								$icon = '🟢';
-								$status_text = __( 'Ottimo', 'fp-seo-performance' );
-								break;
-							default:
-								$icon = '⚪';
-								$status_text = __( 'In attesa', 'fp-seo-performance' );
-						}
-					?>
-						<li class="fp-seo-performance-analysis-item fp-seo-performance-analysis-item--<?php echo esc_attr( $status ); ?>" style="animation-delay: <?php echo esc_attr( $delay . 's' ); ?>" data-check-id="<?php echo esc_attr( $check['id'] ?? '' ); ?>">
-							<div class="fp-seo-performance-analysis-item__header">
-								<span class="fp-seo-performance-analysis-item__icon"><?php echo $icon; ?></span>
-								<span class="fp-seo-performance-analysis-item__title"><?php echo esc_html( $check['label'] ?? '' ); ?></span>
-								<span class="fp-seo-performance-analysis-item__status"><?php echo esc_html( $status_text ); ?></span>
-								<?php if ( $status !== 'pass' ) : ?>
-									<button type="button" class="fp-seo-help-toggle" title="<?php esc_attr_e( 'Mostra aiuto', 'fp-seo-performance' ); ?>" data-help-toggle>
-										<span class="dashicons dashicons-editor-help"></span>
-									</button>
-								<?php endif; ?>
-							</div>
-							<?php if ( ! empty( $check['hint'] ) ) : ?>
-								<div class="fp-seo-performance-analysis-item__description">
-									<?php echo esc_html( $check['hint'] ); ?>
-								</div>
-							<?php endif; ?>
-							
-							<?php if ( $status !== 'pass' ) : ?>
-								<div class="fp-seo-check-help" data-help-content style="display: none;">
-									<div class="fp-seo-check-help__section">
-										<h5 class="fp-seo-check-help__title">
-											<span class="dashicons dashicons-lightbulb"></span>
-											<?php esc_html_e( 'Perché è importante?', 'fp-seo-performance' ); ?>
-										</h5>
-										<p class="fp-seo-check-help__text">
-											<?php echo esc_html( $this->get_check_importance( $check['id'] ?? '' ) ); ?>
-										</p>
-									</div>
-									<div class="fp-seo-check-help__section">
-										<h5 class="fp-seo-check-help__title">
-											<span class="dashicons dashicons-admin-tools"></span>
-											<?php esc_html_e( 'Come migliorare', 'fp-seo-performance' ); ?>
-										</h5>
-										<p class="fp-seo-check-help__text">
-											<?php echo esc_html( $this->get_check_howto( $check['id'] ?? '' ) ); ?>
-										</p>
-									</div>
-									<?php 
-									$example = $this->get_check_example( $check['id'] ?? '' );
-									if ( $example ) : 
-									?>
-										<div class="fp-seo-check-help__example">
-											<strong><?php esc_html_e( '✅ Esempio:', 'fp-seo-performance' ); ?></strong>
-											<code><?php echo esc_html( $example ); ?></code>
-										</div>
-									<?php endif; ?>
-								</div>
-							<?php endif; ?>
-						</li>
-					<?php endforeach; ?>
-				</ul>
-		<?php endif; ?>
-	</div>
-		</div>
-	</div>
+			// Mostra almeno i campi essenziali per il salvataggio
+			$this->render_fallback_fields( $post );
+		}
+	}
+	
+	/**
+	 * Render fallback fields quando il renderer principale fallisce.
+	 *
+	 * @param WP_Post $post Current post instance.
+	 */
+	private function render_fallback_fields( WP_Post $post ): void {
+		// Clear cache before retrieving
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
+		$seo_title = get_post_meta( $post->ID, '_fp_seo_title', true );
+		$meta_desc = get_post_meta( $post->ID, '_fp_seo_meta_description', true );
 		
-		<?php 
-		// AI Generator now integrated per-field with individual buttons
-		// $this->render_ai_generator( $post ); 
-		$this->render_inline_ai_field_script( $post );
-		?>
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( empty( $seo_title ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_title' ) );
+			if ( $db_value !== null ) {
+				$seo_title = $db_value;
+			}
+		}
 		
-		<?php $this->render_gsc_metrics( $post ); ?>
-
-		<!-- Section 2: AI OPTIMIZATION (High Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #f59e0b;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">🤖</span>
-					<?php esc_html_e( 'Q&A Pairs per AI', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);">
-					<span style="font-size: 14px;">🚀</span>
-					<?php esc_html_e( 'Impact: +18%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-			<div class="fp-seo-performance-metabox__section-content">
-			<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b;">
-				<strong style="color: #d97706;">🤖 Alto impatto (+18%)</strong> - Le Q&A aiutano ChatGPT, Gemini e Perplexity a citare i tuoi contenuti. Essenziale per AI Overview di Google.
-			</p>
-					<?php
-					// Integra il contenuto Q&A Pairs
-					try {
-						$qa_metabox = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Admin\QAMetaBox::class );
-						if ( $qa_metabox ) {
-							$qa_metabox->render( $post );
-						}
-					} catch ( \Exception $e ) {
-						Logger::debug( 'QAMetaBox not available', array( 'error' => $e->getMessage() ) );
-					}
-					?>
-				</div>
-			</div>
-
-			<!-- GEO Claims - Integrated Section (solo se GEO abilitato) -->
-			<?php
-			// Verifica se GEO è abilitato prima di renderizzare
-			$geo_options = \FP\SEO\Utils\Options::get();
-			if ( ! empty( $geo_options['geo']['enabled'] ) ) :
-			?>
-			<div class="fp-seo-performance-metabox__section">
-				<h4 class="fp-seo-performance-metabox__section-heading">
-					<span class="fp-seo-section-icon">🗺️</span>
-					<?php esc_html_e( 'GEO Claims', 'fp-seo-performance' ); ?>
-				</h4>
-				<div class="fp-seo-performance-metabox__section-content">
-					<?php
-					try {
-						$geo_metabox = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Admin\GeoMetaBox::class );
-						if ( $geo_metabox ) {
-							$geo_metabox->render( $post );
-						}
-					} catch ( \Exception $e ) {
-						Logger::debug( 'GeoMetaBox not available', array( 'error' => $e->getMessage() ) );
-					}
-					?>
-				</div>
-			</div>
-			<?php endif; ?>
-
-			<!-- Freshness & Temporal Signals - Integrated Section -->
-			<div class="fp-seo-performance-metabox__section">
-				<h4 class="fp-seo-performance-metabox__section-heading">
-					<span class="fp-seo-section-icon">📅</span>
-					<?php esc_html_e( 'Freshness & Temporal Signals', 'fp-seo-performance' ); ?>
-				</h4>
-				<div class="fp-seo-performance-metabox__section-content">
-					<?php
-					try {
-						$freshness_metabox = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Admin\FreshnessMetaBox::class );
-						if ( $freshness_metabox ) {
-							$freshness_metabox->render( $post );
-						}
-					} catch ( \Exception $e ) {
-						Logger::debug( 'FreshnessMetaBox not available', array( 'error' => $e->getMessage() ) );
-					}
-					?>
-				</div>
-			</div>
-
-		<!-- Section 3: SOCIAL MEDIA (Medium Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #8b5cf6;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">📱</span>
-					<?php esc_html_e( 'Social Media Preview', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">
-					<span style="font-size: 14px;">📊</span>
-					<?php esc_html_e( 'Impact: +12%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-			<div class="fp-seo-performance-metabox__section-content">
-			<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #f5f3ff; border-radius: 6px; border-left: 3px solid #8b5cf6;">
-				<strong style="color: #7c3aed;">📱 Medio impatto (+12%)</strong> - Ottimizza title, description e immagini per Facebook, Twitter, LinkedIn e Pinterest. Aumenta condivisioni e traffico social.
-			</p>
-					<?php
-					try {
-						$social_metabox = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Social\ImprovedSocialMediaManager::class );
-						if ( $social_metabox && method_exists( $social_metabox, 'render_improved_social_metabox' ) ) {
-							$social_metabox->render_improved_social_metabox( $post );
-						}
-					} catch ( \Exception $e ) {
-						Logger::debug( 'Social metabox not available', array( 'error' => $e->getMessage() ) );
-					}
-					?>
-				</div>
-			</div>
-
-		<!-- Section 4: INTERNAL LINKS (Medium-Low Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #06b6d4;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">🔗</span>
-					<?php esc_html_e( 'Internal Link Suggestions', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(6, 182, 212, 0.2);">
-					<span style="font-size: 14px;">🔗</span>
-					<?php esc_html_e( 'Impact: +7%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-			<div class="fp-seo-performance-metabox__section-content">
-			<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #ecfeff; border-radius: 6px; border-left: 3px solid #06b6d4;">
-				<strong style="color: #0891b2;">🔗 Medio-Basso impatto (+7%)</strong> - Link interni distribuiscono il PageRank e migliorano la navigazione. Collega contenuti correlati per SEO on-site.
-			</p>
-					<?php
-					try {
-						$links_manager = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Links\InternalLinkManager::class );
-						if ( $links_manager && method_exists( $links_manager, 'render_links_metabox' ) ) {
-							$links_manager->render_links_metabox( $post );
-						}
-					} catch ( \Exception $e ) {
-						Logger::debug( 'Internal Links not available', array( 'error' => $e->getMessage() ) );
-					}
-				?>
-			</div>
-		</div>
-
-		<!-- Section 5: FAQ SCHEMA (Very High Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #f59e0b;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">❓</span>
-					<?php esc_html_e( 'FAQ Schema - AI Overview', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);">
-					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +20%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-			<div class="fp-seo-performance-metabox__section-content">
-				<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #fffbeb; border-radius: 6px; border-left: 3px solid #f59e0b;">
-					<strong style="color: #d97706;">⚡ Molto Alto impatto (+20%)</strong> - Le FAQ aumentano visibilità Google AI Overview del 50%. Essenziali per ChatGPT, Gemini e Perplexity.
-				</p>
-				<?php
-				// Integra il rendering FAQ
-				try {
-					$schema_metaboxes = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Editor\SchemaMetaboxes::class );
-					if ( $schema_metaboxes && method_exists( $schema_metaboxes, 'render_faq_metabox' ) ) {
-						$schema_metaboxes->render_faq_metabox( $post );
-					}
-				} catch ( \Exception $e ) {
-					Logger::debug( 'FAQ Schema not available', array( 'error' => $e->getMessage() ) );
-				}
-				?>
-			</div>
-		</div>
-
-		<!-- Section 6: HOWTO SCHEMA (High Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #3b82f6;">
-			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span class="fp-seo-section-icon">📖</span>
-					<?php esc_html_e( 'HowTo Schema - Guide', 'fp-seo-performance' ); ?>
-				</span>
-				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">
-					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +15%', 'fp-seo-performance' ); ?>
-				</span>
-			</h4>
-			<div class="fp-seo-performance-metabox__section-content">
-				<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #eff6ff; border-radius: 6px; border-left: 3px solid #3b82f6;">
-					<strong style="color: #2563eb;">⚡ Alto impatto (+15%)</strong> - Guide con HowTo Schema mostrano step nei risultati Google con rich snippets visuali. Ottimale per tutorial e guide.
-				</p>
-				<?php
-				// Integra il rendering HowTo
-				try {
-					$schema_metaboxes = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( \FP\SEO\Editor\SchemaMetaboxes::class );
-					if ( $schema_metaboxes && method_exists( $schema_metaboxes, 'render_howto_metabox' ) ) {
-						$schema_metaboxes->render_howto_metabox( $post );
-					}
-				} catch ( \Exception $e ) {
-					Logger::debug( 'HowTo Schema not available', array( 'error' => $e->getMessage() ) );
-				}
-				?>
-			</div>
-		</div>
-</div>
-	<?php
-}
+		if ( empty( $meta_desc ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_meta_description' ) );
+			if ( $db_value !== null ) {
+				$meta_desc = $db_value;
+			}
+		}
+		
+		echo '<div style="padding: 15px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; margin-top: 15px;">';
+		echo '<h4>' . esc_html__( 'Campi SEO Essenziali', 'fp-seo-performance' ) . '</h4>';
+		
+		echo '<p>';
+		echo '<label for="fp-seo-title-fallback" style="display: block; margin-bottom: 5px; font-weight: 600;">';
+		echo esc_html__( 'SEO Title:', 'fp-seo-performance' );
+		echo '</label>';
+		echo '<input type="text" id="fp-seo-title-fallback" name="fp_seo_title" value="' . esc_attr( $seo_title ) . '" style="width: 100%; padding: 8px;" />';
+		echo '<input type="hidden" name="fp_seo_title_sent" value="1" />';
+		echo '</p>';
+		
+		echo '<p>';
+		echo '<label for="fp-seo-meta-desc-fallback" style="display: block; margin-bottom: 5px; font-weight: 600;">';
+		echo esc_html__( 'Meta Description:', 'fp-seo-performance' );
+		echo '</label>';
+		echo '<textarea id="fp-seo-meta-desc-fallback" name="fp_seo_meta_description" rows="3" style="width: 100%; padding: 8px;">' . esc_textarea( $meta_desc ) . '</textarea>';
+		echo '<input type="hidden" name="fp_seo_meta_description_sent" value="1" />';
+		echo '</p>';
+		
+		echo '</div>';
+	}
 
 	/**
-	 * Handles persistence for metabox interactions.
+	 * Save SEO meta data for a post.
+	 * Called by save_post hook (receives: int $post_id, WP_Post $post, bool $update)
 	 *
-	 * @param int $post_id Post identifier.
+	 * @param int      $post_id Post ID.
+	 * @param WP_Post  $post    Post object (ignored).
+	 * @param bool     $update  Whether this is an update (ignored).
 	 */
-	public function save_meta( int $post_id ): void {
-		// Skip autosave
-		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
-			return;
-		}
-
-		// Skip revision
-		if ( wp_is_post_revision( $post_id ) ) {
-			return;
-		}
-
-		// Check user capability
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			return;
-		}
-
-		// Verify nonce (must be present for security)
-		if ( ! isset( $_POST[ self::NONCE_FIELD ] ) ) {
-			return;
-		}
-
-		$nonce = sanitize_text_field( wp_unslash( $_POST[ self::NONCE_FIELD ] ) );
-
-		if ( ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
-			return;
-		}
-
-		$exclude = isset( $_POST['fp_seo_performance_exclude'] ) && '1' === sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_performance_exclude'] ) );
-
-		if ( $exclude ) {
-			update_post_meta( $post_id, self::META_EXCLUDE, '1' );
-		} else {
-			delete_post_meta( $post_id, self::META_EXCLUDE );
-		}
-
-	// Save SEO Title
-	if ( isset( $_POST['fp_seo_title'] ) ) {
-		$seo_title = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_title'] ) );
-		if ( '' !== trim( $seo_title ) ) {
-			update_post_meta( $post_id, '_fp_seo_title', $seo_title );
-		} else {
-			delete_post_meta( $post_id, '_fp_seo_title' );
-		}
-	}
-
-	// Save Meta Description
-	if ( isset( $_POST['fp_seo_meta_description'] ) ) {
-		$meta_description = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_meta_description'] ) );
-		if ( '' !== trim( $meta_description ) ) {
-			update_post_meta( $post_id, '_fp_seo_meta_description', $meta_description );
-		} else {
-			delete_post_meta( $post_id, '_fp_seo_meta_description' );
-		}
-	}
-
-	// Save Slug (post_name)
-	if ( isset( $_POST['fp_seo_slug'] ) ) {
-		$slug = sanitize_title( wp_unslash( (string) $_POST['fp_seo_slug'] ) );
-		if ( '' !== trim( $slug ) && $slug !== get_post_field( 'post_name', $post_id ) ) {
-			// SECURITY: Remove save_post hook temporarily to prevent infinite loop
-			remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
-			
-			// Update post slug using wp_update_post
-			$updated = wp_update_post(
-				array(
-					'ID'        => $post_id,
-					'post_name' => $slug,
-				)
-			);
-			
-			// Re-add the hook with same priority and arguments
-			add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
-		}
-	}
-
-	// Save Excerpt (post_excerpt)
-	if ( isset( $_POST['fp_seo_excerpt'] ) ) {
-		$excerpt = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) );
-		$current_excerpt = get_post_field( 'post_excerpt', $post_id );
+	public function save_meta( int $post_id, $post = null, $update = null ): void {
+		// Always log - this helps debug if method is called
+		error_log( 'FP SEO: Metabox::save_meta called (save_post hook) - post_id: ' . $post_id . ', update: ' . ( $update ? 'yes' : 'no' ) . ', hook: ' . current_filter() . ', priority: ' . current_filter() );
 		
-		if ( $excerpt !== $current_excerpt ) {
-			// SECURITY: Remove save_post hook temporarily to prevent infinite loop
-			remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
-			
-			// Update post excerpt using wp_update_post
-			$updated = wp_update_post(
-				array(
-					'ID'           => $post_id,
-					'post_excerpt' => $excerpt,
-				)
-			);
-			
-			// Re-add the hook with same priority and arguments
-			add_action( 'save_post', array( $this, 'save_meta' ), 10, 1 );
+		// Prevent multiple calls - usa un array statico per tracciare
+		static $saved = array();
+		$hook_key = current_filter() . '_' . $post_id;
+		if ( isset( $saved[ $hook_key ] ) ) {
+			error_log( 'FP SEO: Metabox::save_meta already processed for hook: ' . current_filter() . ', post_id: ' . $post_id );
+			return;
 		}
-	}
-
-	// Save focus keyword
-	if ( isset( $_POST['fp_seo_focus_keyword'] ) ) {
-		$focus_keyword = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_focus_keyword'] ) );
-		if ( '' !== trim( $focus_keyword ) ) {
-			update_post_meta( $post_id, self::META_FOCUS_KEYWORD, $focus_keyword );
-		} else {
-			delete_post_meta( $post_id, self::META_FOCUS_KEYWORD );
+		$saved[ $hook_key ] = true;
+		
+		// Log POST data per debug
+		error_log( 'FP SEO: Metabox::save_meta - POST keys count: ' . ( isset( $_POST ) ? count( $_POST ) : 0 ) );
+		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) ) {
+			error_log( 'FP SEO: Metabox::save_meta - metabox present flag: ' . $_POST['fp_seo_performance_metabox_present'] );
 		}
-	}
+		if ( isset( $_POST['fp_seo_title'] ) ) {
+			error_log( 'FP SEO: Metabox::save_meta - title present: ' . substr( $_POST['fp_seo_title'], 0, 50 ) );
+		}
+		if ( isset( $_POST['fp_seo_focus_keyword'] ) ) {
+			error_log( 'FP SEO: Metabox::save_meta - focus keyword present: ' . $_POST['fp_seo_focus_keyword'] );
+		}
 
-	// Save secondary keywords
-	if ( isset( $_POST['fp_seo_secondary_keywords'] ) ) {
-		$secondary_raw = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_secondary_keywords'] ) );
-		$secondary_keywords = array_filter( 
-			array_map( 'trim', explode( ',', $secondary_raw ) ),
-			static function( $keyword ) {
-				return '' !== $keyword;
-			}
+		error_log( 'FP SEO: Metabox::save_meta processing - post_id: ' . $post_id . ', POST keys count: ' . ( isset( $_POST ) ? count( $_POST ) : 0 ) );
+		
+		// Log specific SEO fields to debug
+		$seo_fields = array(
+			'fp_seo_performance_metabox_present',
+			'fp_seo_title',
+			'fp_seo_title_sent',
+			'fp_seo_meta_description',
+			'fp_seo_meta_description_sent',
+			'fp_seo_focus_keyword',
+			'fp_seo_secondary_keywords',
 		);
 		
-		if ( ! empty( $secondary_keywords ) ) {
-			update_post_meta( $post_id, self::META_SECONDARY_KEYWORDS, $secondary_keywords );
-		} else {
-			delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
+		foreach ( $seo_fields as $field ) {
+			if ( isset( $_POST[ $field ] ) ) {
+				$value = $_POST[ $field ];
+				if ( is_string( $value ) && strlen( $value ) > 100 ) {
+					$value = substr( $value, 0, 100 ) . '...';
+				}
+				error_log( 'FP SEO: POST[' . $field . '] = ' . $value );
+			} else {
+				error_log( 'FP SEO: POST[' . $field . '] = NOT SET' );
+			}
 		}
+		
+		if ( isset( $_POST ) && ! empty( $_POST ) ) {
+			$post_keys = array_slice( array_keys( $_POST ), 0, 30 );
+			error_log( 'FP SEO: Metabox::save_meta POST keys (first 30): ' . implode( ', ', $post_keys ) );
+		} else {
+			error_log( 'FP SEO: Metabox::save_meta - $_POST is empty or not set!' );
+		}
+		
+		$saver = new \FP\SEO\Editor\MetaboxSaver();
+		$result = $saver->save_all_fields( $post_id );
+		error_log( 'FP SEO: Metabox::save_meta result: ' . ( $result ? 'true' : 'false' ) . ' - post_id: ' . $post_id );
+		$saved[ $post_id ] = true;
 	}
-}
 
 	/**
-	 * Handle analyzer AJAX requests.
+	 * Save SEO meta data for a post (edit_post hook).
+	 * Called by edit_post hook (receives: int $post_id, WP_Post $post)
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object (ignored).
+	 */
+	public function save_meta_edit_post( int $post_id, $post = null ): void {
+		// Always log - this helps debug if method is called
+		error_log( 'FP SEO: Metabox::save_meta_edit_post called (edit_post hook) - post_id: ' . $post_id );
+		
+		// Use the same save_meta method but prevent double processing
+		$this->save_meta( $post_id, $post, true );
+	}
+	
+	/**
+	 * Register SEO meta fields for REST API (Gutenberg support).
+	 */
+	public function register_rest_meta_fields(): void {
+		$post_types = $this->get_supported_post_types();
+		
+		foreach ( $post_types as $post_type ) {
+			// Registra _fp_seo_title
+			register_rest_field(
+				$post_type,
+				'fp_seo_title',
+				array(
+					'get_callback' => function( $post ) {
+						return get_post_meta( $post['id'], '_fp_seo_title', true );
+					},
+					'update_callback' => function( $value, $post ) {
+						if ( $value !== null ) {
+							update_post_meta( $post->ID, '_fp_seo_title', sanitize_text_field( $value ) );
+						} else {
+							delete_post_meta( $post->ID, '_fp_seo_title' );
+						}
+						return true;
+					},
+					'schema' => array(
+						'description' => __( 'SEO Title', 'fp-seo-performance' ),
+						'type' => 'string',
+						'context' => array( 'edit' ),
+					),
+				)
+			);
+			
+			// Registra _fp_seo_meta_description
+			register_rest_field(
+				$post_type,
+				'fp_seo_meta_description',
+				array(
+					'get_callback' => function( $post ) {
+						return get_post_meta( $post['id'], '_fp_seo_meta_description', true );
+					},
+					'update_callback' => function( $value, $post ) {
+						if ( $value !== null ) {
+							update_post_meta( $post->ID, '_fp_seo_meta_description', sanitize_textarea_field( $value ) );
+						} else {
+							delete_post_meta( $post->ID, '_fp_seo_meta_description' );
+						}
+						return true;
+					},
+					'schema' => array(
+						'description' => __( 'SEO Meta Description', 'fp-seo-performance' ),
+						'type' => 'string',
+						'context' => array( 'edit' ),
+					),
+				)
+			);
+		}
+	}
+	
+	/**
+	 * Save SEO meta data via REST API (Gutenberg).
+	 * Called by rest_after_insert_{post_type} hook
+	 *
+	 * @param WP_Post         $post     Post object.
+	 * @param WP_REST_Request $request  Request object.
+	 * @param bool            $creating Whether creating a new post.
+	 */
+	public function save_meta_rest( WP_Post $post, $request, bool $creating ): void {
+		// Log entry
+		error_log( 'FP SEO: Metabox::save_meta_rest called (REST API) - post_id: ' . $post->ID . ', creating: ' . ( $creating ? 'yes' : 'no' ) );
+		
+		// In Gutenberg, i dati vengono passati via REST API
+		// Verifica se ci sono dati SEO nella richiesta
+		if ( ! $request instanceof \WP_REST_Request ) {
+			return;
+		}
+		
+		$params = $request->get_params();
+		
+		// Cerca campi SEO nei parametri (possono essere in meta o direttamente)
+		$seo_title = $params['fp_seo_title'] ?? $params['meta']['_fp_seo_title'] ?? null;
+		$meta_desc = $params['fp_seo_meta_description'] ?? $params['meta']['_fp_seo_meta_description'] ?? null;
+		
+		// Se trovati, salva direttamente
+		if ( $seo_title !== null || $meta_desc !== null ) {
+			error_log( 'FP SEO: REST API - Found SEO fields in request - title: ' . ( $seo_title ? 'yes' : 'no' ) . ', desc: ' . ( $meta_desc ? 'yes' : 'no' ) );
+			
+			$saver = new \FP\SEO\Editor\MetaboxSaver();
+			
+			// Simula $_POST per il salvataggio
+			if ( $seo_title !== null ) {
+				$_POST['fp_seo_title'] = $seo_title;
+				$_POST['fp_seo_title_sent'] = '1';
+			}
+			if ( $meta_desc !== null ) {
+				$_POST['fp_seo_meta_description'] = $meta_desc;
+				$_POST['fp_seo_meta_description_sent'] = '1';
+			}
+			$_POST['fp_seo_performance_metabox_present'] = '1';
+			
+			$result = $saver->save_all_fields( $post->ID );
+			error_log( 'FP SEO: REST API save result: ' . ( $result ? 'success' : 'failed' ) );
+			
+			// Pulisci $_POST per evitare effetti collaterali
+			unset( $_POST['fp_seo_title'], $_POST['fp_seo_title_sent'] );
+			unset( $_POST['fp_seo_meta_description'], $_POST['fp_seo_meta_description_sent'] );
+			unset( $_POST['fp_seo_performance_metabox_present'] );
+		} else {
+			error_log( 'FP SEO: REST API - No SEO fields found in request params' );
+			// Prova a salvare comunque (potrebbero essere già stati salvati via register_rest_field)
+			// Non chiamare save_meta qui per evitare doppio salvataggio
+		}
+	}
+	
+	/**
+	 * Save SEO meta data before post update (pre_post_update filter).
+	 * Questo hook viene chiamato PRIMA di save_post e può intercettare i dati.
+	 *
+	 * @param int   $post_id Post ID.
+	 * @param array $data    Array of post data.
+	 * @return array Unchanged data.
+	 */
+	/**
+	 * Save SEO meta data for a post (wp_insert_post hook).
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param WP_Post  $post    Post object.
+	 * @param bool     $update  Whether this is an existing post being updated.
+	 */
+	public function save_meta_insert_post( int $post_id, $post, bool $update ): void {
+		error_log( 'FP SEO: Metabox::save_meta_insert_post called (wp_insert_post hook) - post_id: ' . $post_id . ', update: ' . ( $update ? 'yes' : 'no' ) );
+		
+		// Solo per update, non per nuovi post
+		if ( ! $update ) {
+			return;
+		}
+		
+		// Chiama save_meta ma senza il controllo di duplicati (usa hook diverso)
+		$saver = new \FP\SEO\Editor\MetaboxSaver();
+		$result = $saver->save_all_fields( $post_id );
+		error_log( 'FP SEO: Metabox::save_meta_insert_post result: ' . ( $result ? 'true' : 'false' ) . ' - post_id: ' . $post_id );
+	}
+
+	/**
+	 * Save SEO meta data before post is inserted (wp_insert_post_data hook).
+	 *
+	 * @param array $data    An array of slashed post data.
+	 * @param array $postarr An array of sanitized, but otherwise unmodified post data.
+	 * @param array $unsanitized_postarr An array of unsanitized post data.
+	 * @param bool  $update  Whether this is an existing post being updated.
+	 * @return array Modified post data.
+	 */
+	public function save_meta_pre_insert( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
+		$post_id = isset( $postarr['ID'] ) ? absint( $postarr['ID'] ) : 0;
+		if ( $post_id > 0 && $update ) {
+			error_log( 'FP SEO: Metabox::save_meta_pre_insert called (wp_insert_post_data hook) - post_id: ' . $post_id );
+			// Salva i meta prima che il post venga aggiornato
+			$saver = new \FP\SEO\Editor\MetaboxSaver();
+			$saver->save_all_fields( $post_id );
+		}
+		return $data;
+	}
+
+	public function save_meta_pre_update( int $post_id, array $data ): array {
+		// Log entry
+		error_log( 'FP SEO: Metabox::save_meta_pre_update called (pre_post_update) - post_id: ' . $post_id );
+		
+		// Salva i campi SEO se presenti
+		// Questo hook viene chiamato prima di save_post, quindi possiamo salvare qui
+		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) || 
+			 isset( $_POST['fp_seo_title_sent'] ) || 
+			 isset( $_POST['fp_seo_meta_description_sent'] ) ) {
+			$saver = new \FP\SEO\Editor\MetaboxSaver();
+			$saver->save_all_fields( $post_id );
+		}
+		
+		// Ritorna i dati invariati
+		return $data;
+	}
+
+	/**
+	 * Handles AJAX requests for analyzing SEO.
 	 */
 	public function handle_ajax(): void {
 		check_ajax_referer( self::AJAX_ACTION, 'nonce' );
 
-		$post_id = isset( $_POST['postId'] ) ? absint( $_POST['postId'] ) : 0;
+		// Support both postId (from JS) and post_id (standard)
+		$post_id = isset( $_POST['postId'] ) ? absint( $_POST['postId'] ) : ( isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0 );
 
-		if ( $post_id > 0 && ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
 		}
 
-		$options = Options::get();
-
-		if ( empty( $options['general']['enable_analyzer'] ) ) {
-			wp_send_json_error( array( 'message' => __( 'Analyzer disabled in settings.', 'fp-seo-performance' ) ), 400 );
-		}
-
-		if ( $post_id > 0 && $this->is_post_excluded( $post_id ) ) {
-			wp_send_json_success( array( 'excluded' => true ) );
-		}
-
-		$content           = isset( $_POST['content'] ) ? wp_kses_post( wp_unslash( (string) $_POST['content'] ) ) : '';
-		$title             = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['title'] ) ) : '';
-		$excerpt           = isset( $_POST['excerpt'] ) ? wp_kses_post( wp_unslash( (string) $_POST['excerpt'] ) ) : '';
-		$meta              = isset( $_POST['metaDescription'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['metaDescription'] ) ) : '';
-		$canonical         = isset( $_POST['canonical'] ) ? esc_url_raw( wp_unslash( (string) $_POST['canonical'] ) ) : null;
-		$robots            = isset( $_POST['robots'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['robots'] ) ) : null;
-		$focus_keyword     = isset( $_POST['focusKeyword'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['focusKeyword'] ) ) : '';
-		$secondary_raw     = isset( $_POST['secondaryKeywords'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['secondaryKeywords'] ) ) : '';
+		$post = get_post( $post_id );
 		
-		$secondary_keywords = array();
-		if ( '' !== $secondary_raw ) {
-			$secondary_keywords = array_filter(
-				array_map( 'trim', explode( ',', $secondary_raw ) ),
-				static function( $keyword ) {
-					return '' !== $keyword;
-				}
-			);
+		if ( ! $post ) {
+			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
 		}
-
-		if ( '' === $meta ) {
-			$meta = wp_strip_all_tags( $excerpt );
-		}
-
-		if ( '' === $canonical ) {
-			$canonical = null;
-		}
-
-		if ( '' === $robots ) {
-			$robots = null;
-		}
-
-		$context = new Context(
-			$post_id > 0 ? $post_id : null,
-			$content,
-			$title,
-			$meta,
-			$canonical,
-			$robots,
-			$focus_keyword,
-			array_values( $secondary_keywords )
-		);
-		$result  = $this->compile_analysis_payload( $context );
-
-		wp_send_json_success( $result );
+		
+		// Run analysis - this already returns the complete payload
+		$payload = $this->run_analysis_for_post( $post );
+		
+		wp_send_json_success( $payload );
 	}
 
 	/**
-	 * Returns post types eligible for the metabox.
+	 * Get supported post types for the metabox.
 	 *
-	 * @return string[]
+	 * @return array
 	 */
 	private function get_supported_post_types(): array {
 				return PostTypes::analyzable();
 	}
+
 	/**
-	 * Determine if a post is excluded from analysis.
+	 * Check if post is excluded from analysis.
 	 *
-	 * @param int $post_id Post identifier.
+	 * @param int $post_id Post ID.
+	 * @return bool
 	 */
 	private function is_post_excluded( int $post_id ): bool {
-		$value = get_post_meta( $post_id, self::META_EXCLUDE, true );
-
-		return '1' === $value;
+		// Clear cache before retrieving
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+		
+		$excluded = get_post_meta( $post_id, self::META_EXCLUDE, true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( '' === $excluded ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, self::META_EXCLUDE ) );
+			if ( $db_value !== null ) {
+				$excluded = $db_value;
+			}
+		}
+		
+		return '1' === $excluded;
 	}
 
 	/**
-	 * Run the analyzer for a post object.
+	 * Run analysis for a post.
 	 *
-	 * @param WP_Post $post Current post instance.
-	 *
-	 * @return array<string, mixed>
+	 * @param WP_Post $post Post object.
+	 * @return array
 	 */
 	private function run_analysis_for_post( WP_Post $post ): array {
+		// Check if required classes exist
+		if ( ! class_exists( '\FP\SEO\Analysis\Context' ) ) {
+			throw new \RuntimeException( 'Context class not found' );
+		}
+		if ( ! class_exists( '\FP\SEO\Analysis\Analyzer' ) ) {
+			throw new \RuntimeException( 'Analyzer class not found' );
+		}
+		if ( ! class_exists( '\FP\SEO\Scoring\ScoreEngine' ) ) {
+			throw new \RuntimeException( 'ScoreEngine class not found' );
+		}
+		
+		// Clear cache before retrieving (for AJAX calls)
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
+		// Get SEO metadata using MetadataResolver (same pattern as BulkAuditPage)
+		$meta_description = MetadataResolver::resolve_meta_description( $post );
+		$canonical = MetadataResolver::resolve_canonical_url( $post );
+		$robots = MetadataResolver::resolve_robots( $post );
 		$focus_keyword = get_post_meta( $post->ID, self::META_FOCUS_KEYWORD, true );
 		$secondary_keywords = get_post_meta( $post->ID, self::META_SECONDARY_KEYWORDS, true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto
+		if ( empty( $focus_keyword ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_FOCUS_KEYWORD ) );
+			if ( $db_value !== null ) {
+				$focus_keyword = $db_value;
+			}
+		}
+		
+		if ( empty( $secondary_keywords ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_SECONDARY_KEYWORDS ) );
+			if ( $db_value !== null ) {
+				$unserialized = maybe_unserialize( $db_value );
+				$secondary_keywords = is_array( $unserialized ) ? $unserialized : array();
+			}
+		}
 		
 		if ( ! is_array( $secondary_keywords ) ) {
 			$secondary_keywords = array();
 		}
 		
+		// Get SEO title, fallback to post title
+		$seo_title = MetadataResolver::resolve_seo_title( $post->ID );
+		if ( ! $seo_title ) {
+			$seo_title = $post->post_title;
+		}
+		
+		// Build context with proper parameters (same pattern as BulkAuditPage)
 		$context = new Context(
 			(int) $post->ID,
 			(string) $post->post_content,
-			(string) $post->post_title,
-			MetadataResolver::resolve_meta_description( $post ),
-			MetadataResolver::resolve_canonical_url( $post ),
-			MetadataResolver::resolve_robots( $post ),
+			(string) $seo_title,
+			(string) $meta_description,
+			$canonical,
+			$robots,
 			is_string( $focus_keyword ) ? $focus_keyword : '',
 			$secondary_keywords
 		);
 
-		return $this->compile_analysis_payload( $context );
+		$analyzer = new Analyzer();
+		$analysis = $analyzer->analyze( $context );
+		$score_engine = new ScoreEngine();
+		
+		// Analyzer::analyze() returns an array with 'checks' and 'summary' keys
+		// ScoreEngine::calculate() expects an array of checks indexed by check ID
+		$checks_array = $analysis['checks'] ?? array();
+		
+		// Debug: log checks structure
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO: run_analysis_for_post - checks_array count: ' . count( $checks_array ) );
+			if ( ! empty( $checks_array ) ) {
+				error_log( 'FP SEO: run_analysis_for_post - first check keys: ' . implode( ', ', array_keys( reset( $checks_array ) ) ) );
+			}
+		}
+		
+		$score = $score_engine->calculate( $checks_array );
+		
+		$formatted_checks = $this->format_checks_for_frontend( $checks_array );
+		
+		// Debug: log formatted checks
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO: run_analysis_for_post - formatted_checks count: ' . count( $formatted_checks ) );
+		}
+		
+		return array(
+			'score' => $score,
+			'checks' => $formatted_checks,
+		);
 	}
 
 	/**
-	 * Compile analyzer output with scoring and recommendations.
+	 * Compile analysis payload for frontend.
 	 *
-	 * @param Context $context Analyzer context.
-	 *
-	 * @return array<string, mixed>
+	 * @param Context $context Analysis context.
+	 * @return array
 	 */
 	private function compile_analysis_payload( Context $context ): array {
-		$analyzer   = new Analyzer();
-		$analysis   = $analyzer->analyze( $context );
-		$score      = ( new ScoreEngine() )->calculate( $analysis['checks'] ?? array() );
-		$checks     = $this->format_checks_for_frontend( $analysis['checks'] ?? array() );
-		$summary    = $analysis['summary'] ?? array();
-		$score_data = array(
-			'score'           => $score['score'] ?? 0,
-			'status'          => $score['status'] ?? 'pending',
-			'recommendations' => array_filter( (array) ( $score['recommendations'] ?? array() ) ),
-		);
-
-		// Trigger score history recording if post ID available
-		if ( $context->post_id() ) {
-			$full_score = array_merge( $score_data, array( 'summary' => $summary ) );
-			
-			/**
-			 * Fires after score calculation for history tracking
-			 *
-			 * @param int   $post_id Post ID.
-			 * @param array $score   Score data with summary.
-			 */
-			do_action( 'fpseo_after_score_calculation', $context->post_id(), $full_score );
-		}
+		$analyzer = new Analyzer();
+		$analysis = $analyzer->analyze( $context );
+		$score_engine = new ScoreEngine();
+		
+		// Analyzer::analyze() returns an array with 'checks' and 'summary' keys
+		// ScoreEngine::calculate() expects an array of checks indexed by check ID
+		$checks_array = $analysis['checks'] ?? array();
+		$score = $score_engine->calculate( $checks_array );
 
 		return array(
-			'score'   => $score_data,
-			'checks'  => $checks,
-			'summary' => $summary,
+			'score' => $score,
+			'checks' => $this->format_checks_for_frontend( $checks_array ),
 		);
 	}
 
 	/**
-	 * Normalize check output for front-end consumption.
+	 * Format checks for frontend display.
 	 *
-	 * @param array<string, array<string, mixed>> $checks Analyzer checks keyed by id.
-	 *
-	 * @return array<int, array<string, string>>
+	 * @param array $checks Raw checks from analyzer.
+	 * @return array
 	 */
 	private function format_checks_for_frontend( array $checks ): array {
-		return array_values(
-			array_map(
-				static function ( array $check ): array {
-					return array(
-						'id'     => isset( $check['id'] ) ? (string) $check['id'] : '',
-						'label'  => isset( $check['label'] ) ? (string) $check['label'] : '',
-						'status' => isset( $check['status'] ) ? (string) $check['status'] : '',
-						'hint'   => isset( $check['fix_hint'] ) ? (string) $check['fix_hint'] : '',
-					);
-				},
-				$checks
-			)
-		);
+		$formatted = array();
+		foreach ( $checks as $check_id => $check ) {
+			// Check can be an array (from Analyzer) or an object (from Result)
+			if ( is_array( $check ) ) {
+				// Analyzer returns: id, label, description, status, details, fix_hint, weight
+				$formatted[] = array(
+					'id' => $check['id'] ?? $check_id,
+					'label' => $check['label'] ?? '',
+					'status' => $check['status'] ?? 'pending',
+					'hint' => $check['fix_hint'] ?? $check['description'] ?? '',
+				);
+			} else {
+				// Handle object with methods
+				$formatted[] = array(
+					'id' => method_exists( $check, 'get_id' ) ? $check->get_id() : (string) $check_id,
+					'label' => method_exists( $check, 'get_label' ) ? $check->get_label() : '',
+					'status' => method_exists( $check, 'get_status' ) ? $check->get_status() : 'pending',
+					'hint' => method_exists( $check, 'get_hint' ) ? $check->get_hint() : '',
+				);
+			}
+		}
+		return $formatted;
 	}
 
 	/**
-	 * Render GSC metrics for post
+	 * Render GSC metrics section.
 	 *
 	 * @param \WP_Post $post Post object.
 	 */
@@ -2206,301 +2075,128 @@ class Metabox {
 	}
 
 	/**
-	 * Render inline script for AI field buttons
-	 *
-	 * @param \WP_Post $post Current post.
+	 * Handle AJAX request to save SEO Title and Meta Description fields.
+	 * This is a separate endpoint to ensure fields are saved reliably.
 	 */
-	private function render_inline_ai_field_script( \WP_Post $post ): void {
-		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
-		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
-
-		if ( ! $ai_enabled || empty( $api_key ) ) {
-			return;
+	public function handle_save_fields_ajax(): void {
+		// Verify nonce
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), self::AJAX_SAVE_FIELDS ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
 		}
-		?>
-		<script>
-		(function($) {
-			'use strict';
 
-			// Wait for DOM and jQuery to be ready
-			function initAiFieldGenerator() {
-				// Check if jQuery is available
-				if (typeof jQuery === 'undefined' || typeof $ === 'undefined') {
-					// Retry after a short delay
-					setTimeout(initAiFieldGenerator, 100);
-					return;
-				}
-				
-				// Use $ as jQuery
-				$ = jQuery;
-				
-				// Get ajaxurl from WordPress localized script or use default
-				var ajaxUrl = typeof ajaxurl !== 'undefined' ? ajaxurl : '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>';
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : ( isset( $_POST['postId'] ) ? absint( $_POST['postId'] ) : 0 );
 
-				// Helper function to get editor content (Classic or Gutenberg)
-				function getEditorContent() {
-					// Try Classic Editor first
-					if (typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor && !tinyMCE.activeEditor.isHidden()) {
-						return tinyMCE.activeEditor.getContent();
-					}
-					
-					// Try textarea (when in Text mode)
-					const $textarea = $('#content');
-					if ($textarea.length) {
-						return $textarea.val();
-					}
-					
-					// Try Gutenberg
-					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
-						const editor = wp.data.select('core/editor');
-						if (editor && typeof editor.getEditedPostContent === 'function') {
-							return editor.getEditedPostContent();
-						}
-					}
-					
-					return '';
-				}
+		if ( $post_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
+		}
 
-				// Helper function to get post title
-				function getPostTitle() {
-					// Try Classic Editor
-					const $title = $('#title');
-					if ($title.length) {
-						return $title.val();
-					}
-					
-					// Try Gutenberg
-					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
-						const editor = wp.data.select('core/editor');
-						if (editor && typeof editor.getEditedPostAttribute === 'function') {
-							return editor.getEditedPostAttribute('title');
-						}
-					}
-					
-					return '';
-				}
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+		}
 
-				// Helper function to show error near button
-				function showFieldError($btn, message) {
-					const $parent = $btn.closest('div[style*="flex"]');
-					if (!$parent.length) return;
-					
-					$parent.css('position', 'relative');
-					
-					const $error = $('<div class="fp-seo-ai-error" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; padding: 10px 14px; background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; font-size: 12px; color: #dc2626; z-index: 100; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.1);"></div>');
-					$error.html('<strong>⚠️ Errore:</strong> ' + message);
-					
-					// Remove any existing error
-					$parent.find('.fp-seo-ai-error').remove();
-					$parent.append($error);
-					
-					setTimeout(function() {
-						$error.fadeOut(function() {
-							$(this).remove();
-						});
-					}, 8000);
-				}
+		error_log( 'FP SEO: handle_save_fields_ajax - post_id: ' . $post_id );
+		error_log( 'FP SEO: AJAX POST keys: ' . implode( ', ', array_keys( $_POST ) ) );
 
-				// Check if buttons exist
-				const $buttons = $('.fp-seo-ai-generate-field-btn');
-				if ($buttons.length === 0) {
-					console.warn('FP SEO: AI buttons not found, retrying...');
-					setTimeout(initAiFieldGenerator, 200);
-					return;
-				}
-				
-				console.log('FP SEO: Found', $buttons.length, 'AI buttons');
-				
-				// Handle click on AI field generation buttons using event delegation
-				$(document).off('click', '.fp-seo-ai-generate-field-btn').on('click', '.fp-seo-ai-generate-field-btn', function(e) {
-					e.preventDefault();
-					e.stopPropagation();
-					
-					console.log('FP SEO: AI button clicked');
-					
-					const $btn = $(this);
-					const field = $btn.data('field');
-					const targetId = $btn.data('target-id');
-					const postId = $btn.data('post-id');
-					const nonce = $btn.data('nonce');
-					
-					console.log('FP SEO: Button data', { field, targetId, postId, nonce: nonce ? 'present' : 'missing' });
-					
-					// Validation
-					if (!field || !targetId || !postId || !nonce) {
-						alert('Configurazione non valida. Verifica che il plugin sia configurato correttamente.');
-						console.error('FP SEO: Invalid button configuration', { field, targetId, postId, nonce: !!nonce });
-						return;
-					}
+		// Get and sanitize values - supporta sia i nomi vecchi che quelli nuovi
+		$seo_title = '';
+		if ( isset( $_POST['fp_seo_title'] ) ) {
+			$seo_title = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_title'] ) );
+			$seo_title = trim( $seo_title );
+		} elseif ( isset( $_POST['seo_title'] ) ) {
+			$seo_title = sanitize_text_field( wp_unslash( (string) $_POST['seo_title'] ) );
+			$seo_title = trim( $seo_title );
+		}
 
-					// Get content and title
-					const content = getEditorContent();
-					const title = getPostTitle();
-					
-					if (!content || !title) {
-						alert('Contenuto o titolo mancante. Assicurati di aver scritto del contenuto prima di generare.');
-						return;
-					}
+		$meta_description = '';
+		if ( isset( $_POST['fp_seo_meta_description'] ) ) {
+			$meta_description = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_meta_description'] ) );
+			$meta_description = trim( $meta_description );
+		} elseif ( isset( $_POST['meta_description'] ) ) {
+			$meta_description = sanitize_textarea_field( wp_unslash( (string) $_POST['meta_description'] ) );
+			$meta_description = trim( $meta_description );
+		}
 
-					// Disable button and show loading
-					$btn.prop('disabled', true);
-					const originalHtml = $btn.html();
-					$btn.html('<span class="dashicons dashicons-update" style="animation: rotation 1s infinite linear; margin: 0;"></span>');
+		$focus_keyword = '';
+		if ( isset( $_POST['fp_seo_focus_keyword'] ) ) {
+			$focus_keyword = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_focus_keyword'] ) );
+			$focus_keyword = trim( $focus_keyword );
+		}
 
-					// Call AJAX
-					$.ajax({
-						url: ajaxUrl,
-						type: 'POST',
-						dataType: 'json',
-						data: {
-							action: 'fp_seo_generate_ai_content',
-							nonce: nonce,
-							post_id: postId,
-							content: content,
-							title: title,
-							focus_keyword: '',
-						},
-						success: function(response) {
-							if (response.success && response.data) {
-								// Fill the specific field
-								const $target = $('#' + targetId);
-								
-								if ($target.length) {
-									let value = '';
-									switch(field) {
-										case 'seo_title':
-											value = response.data.seo_title || '';
-											break;
-										case 'meta_description':
-											value = response.data.meta_description || '';
-											break;
-										case 'slug':
-											value = response.data.slug || '';
-											break;
-									}
-									
-									if (value) {
-										$target.val(value).trigger('input');
-										
-										// Highlight with animation
-										$target.css({
-											'background': '#f0fdf4',
-											'border-color': '#10b981',
-											'transition': 'all 0.3s ease'
-										});
-										
-										setTimeout(function() {
-											$target.css({
-												'background': '#fff',
-												'transition': 'all 0.5s ease'
-											});
-										}, 2000);
-										
-										// Show success checkmark
-										const $success = $('<span class="fp-seo-ai-success" style="margin-left: 8px; color: #10b981; font-size: 18px; animation: fadeIn 0.3s ease;">✓</span>');
-										$btn.after($success);
-										setTimeout(function() {
-											$success.fadeOut(function() { $(this).remove(); });
-										}, 3000);
-									}
-								}
-							} else {
-								const errorMsg = response.data?.message || 'Errore durante la generazione';
-								showFieldError($btn, errorMsg);
-							}
-						},
-						error: function(xhr, status, error) {
-							console.error('AI Field Generation Error:', error);
-							
-							let errorMessage = 'Errore di connessione. Riprova più tardi.';
-							
-							if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-								errorMessage = xhr.responseJSON.data.message;
-							} else if (xhr.statusText) {
-								errorMessage = 'Errore del server (' + xhr.status + '): ' + xhr.statusText;
-							}
-							
-							showFieldError($btn, errorMessage);
-						},
-						complete: function() {
-							// Restore button
-							$btn.prop('disabled', false);
-							$btn.html(originalHtml);
-						}
-					});
-				});
+		$secondary_keywords = '';
+		if ( isset( $_POST['fp_seo_secondary_keywords'] ) ) {
+			$secondary_keywords = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_secondary_keywords'] ) );
+			$secondary_keywords = trim( $secondary_keywords );
+		}
 
-				// Add rotation animation
-				if (!document.getElementById('fp-seo-ai-field-animations')) {
-					const style = document.createElement('style');
-					style.id = 'fp-seo-ai-field-animations';
-					style.textContent = `
-						@keyframes rotation {
-							from { transform: rotate(0deg); }
-							to { transform: rotate(360deg); }
-						}
-						@keyframes fadeIn {
-							from { opacity: 0; transform: scale(0.5); }
-							to { opacity: 1; transform: scale(1); }
-						}
-					`;
-					document.head.appendChild(style);
-				}
-				
-				console.log('FP SEO: AI Field Generator initialized successfully');
-				console.log('FP SEO: AJAX URL =', ajaxUrl);
-				
-				// Test if buttons are clickable
-				$('.fp-seo-ai-generate-field-btn').each(function() {
-					const $btn = $(this);
-					console.log('FP SEO: Button found', {
-						field: $btn.data('field'),
-						targetId: $btn.data('target-id'),
-						visible: $btn.is(':visible'),
-						enabled: !$btn.prop('disabled'),
-						clickable: $btn.css('pointer-events') !== 'none'
-					});
-				});
+		error_log( 'FP SEO: AJAX values - title: ' . ( $seo_title ? substr( $seo_title, 0, 50 ) . '...' : 'empty' ) . ', desc: ' . ( $meta_description ? substr( $meta_description, 0, 50 ) . '...' : 'empty' ) . ', keyword: ' . ( $focus_keyword ? $focus_keyword : 'empty' ) );
+
+		// Salva direttamente i campi senza usare MetaboxSaver per evitare conflitti
+		// Questo è più sicuro in contesto AJAX
+		try {
+			// Salva Title
+			if ( '' !== $seo_title ) {
+				update_post_meta( $post_id, '_fp_seo_title', $seo_title );
+			} else {
+				delete_post_meta( $post_id, '_fp_seo_title' );
 			}
 
-			// Initialize when DOM is ready (multiple ways for compatibility)
-			function startInitialization() {
-				// Wait for WordPress admin to be fully loaded
-				if (typeof jQuery !== 'undefined') {
-					jQuery(document).ready(function() {
-						// Wait a bit more to ensure metaboxes are rendered
-						setTimeout(function() {
-							initAiFieldGenerator();
-							// Also retry after longer delay in case metabox loads late
-							setTimeout(initAiFieldGenerator, 1000);
-						}, 300);
-					});
-				} else if (document.readyState === 'loading') {
-					document.addEventListener('DOMContentLoaded', function() {
-						setTimeout(function() {
-							initAiFieldGenerator();
-							setTimeout(initAiFieldGenerator, 1000);
-						}, 300);
-					});
-				} else {
-					// DOM already ready
-					setTimeout(function() {
-						initAiFieldGenerator();
-						setTimeout(initAiFieldGenerator, 1000);
-					}, 300);
-				}
+			// Salva Meta Description
+			if ( '' !== $meta_description ) {
+				update_post_meta( $post_id, '_fp_seo_meta_description', $meta_description );
+			} else {
+				delete_post_meta( $post_id, '_fp_seo_meta_description' );
 			}
-			
-			// Start initialization
-			startInitialization();
-			
-			// Debug log
-			console.log('FP SEO: AI Field Generator script loaded');
-		})(typeof jQuery !== 'undefined' ? jQuery : null);
-		</script>
-		<?php
+
+			// Salva Focus Keyword
+			if ( '' !== $focus_keyword ) {
+				update_post_meta( $post_id, self::META_FOCUS_KEYWORD, $focus_keyword );
+			} else {
+				delete_post_meta( $post_id, self::META_FOCUS_KEYWORD );
+			}
+
+			// Salva Secondary Keywords
+			if ( '' !== $secondary_keywords ) {
+				update_post_meta( $post_id, self::META_SECONDARY_KEYWORDS, $secondary_keywords );
+			} else {
+				delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
+			}
+
+			$result = true;
+			error_log( 'FP SEO: AJAX direct save successful for post_id: ' . $post_id );
+		} catch ( \Exception $e ) {
+			error_log( 'FP SEO: AJAX save error: ' . $e->getMessage() );
+			$result = false;
+		} catch ( \Error $e ) {
+			error_log( 'FP SEO: AJAX save fatal error: ' . $e->getMessage() );
+			$result = false;
+		}
+
+		// Force cache clear to ensure updated values are read on reload
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+		wp_cache_delete( $post_id, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post_id ) );
+		}
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::info( 'FP SEO: Fields saved via AJAX', array(
+				'post_id' => $post_id,
+				'title' => $seo_title,
+				'description' => substr( $meta_description, 0, 50 ) . ( strlen( $meta_description ) > 50 ? '...' : '' ),
+				'focus_keyword' => $focus_keyword,
+				'result' => $result,
+			) );
+		}
+
+		wp_send_json_success( array(
+			'message' => __( 'Fields saved successfully.', 'fp-seo-performance' ),
+			'saved' => $result,
+		) );
 	}
-
 
 	/**
 	 * Get check importance explanation

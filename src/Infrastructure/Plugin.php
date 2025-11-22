@@ -341,8 +341,33 @@ class Plugin {
 			$this->container->get( \FP\SEO\Admin\AiSettings::class )->register();
 			
 			// Editor metaboxes - must be registered early for add_meta_boxes hook
-			$this->container->singleton( Metabox::class );
-			$this->container->get( Metabox::class )->register();
+			// Gestione errori robusta per evitare fatal error
+			try {
+				// Crea istanza immediatamente per garantire che il costruttore venga chiamato
+				$this->container->singleton( Metabox::class );
+				$metabox = $this->container->get( Metabox::class );
+				
+				// Log per verificare che l'istanza sia stata creata
+				error_log( 'FP SEO: Metabox instance created - class: ' . get_class( $metabox ) );
+				
+				if ( $metabox && method_exists( $metabox, 'register' ) ) {
+					$metabox->register();
+					error_log( 'FP SEO: Metabox::register() called successfully' );
+				} else {
+					Logger::error( 'FP SEO: Metabox instance invalid or missing register method' );
+					error_log( 'FP SEO: ERROR - Metabox instance invalid or missing register method' );
+				}
+			} catch ( \Throwable $e ) {
+				// Log errore ma non bloccare il plugin
+				error_log( 'FP SEO: ERROR creating Metabox instance - ' . $e->getMessage() );
+				Logger::error( 'FP SEO: Failed to register Metabox', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+				// Non rilanciare l'eccezione per permettere al plugin di continuare
+			}
 
 			// Schema metaboxes (FAQ and HowTo)
 			$this->container->singleton( SchemaMetaboxes::class );
@@ -519,9 +544,15 @@ class Plugin {
 
 	/**
 	 * Runs activation routines.
+	 * 
+	 * IMPORTANTE: Questo metodo NON tocca le opzioni del plugin.
+	 * Le opzioni esistenti vengono preservate durante l'attivazione/aggiornamento.
+	 * Le opzioni vengono cancellate SOLO quando il plugin viene disinstallato (non disattivato).
 	 */
 	public function activate(): void {
 		// Create database tables
+		// NOTA: NON cancelliamo o resettiamo le opzioni qui!
+		// Le opzioni vengono preservate anche durante l'aggiornamento del plugin
 		if ( class_exists( '\FP\SEO\History\ScoreHistory' ) ) {
 			$score_history = new \FP\SEO\History\ScoreHistory();
 			$score_history->create_table();
@@ -530,8 +561,14 @@ class Plugin {
 
 	/**
 	 * Runs deactivation routines.
+	 * 
+	 * IMPORTANTE: Questo metodo NON cancella le opzioni del plugin.
+	 * Le opzioni vengono preservate durante la disattivazione.
+	 * Le opzioni vengono cancellate SOLO quando il plugin viene disinstallato (non disattivato).
 	 */
 	public function deactivate(): void {
-		// Placeholder for deactivation routines.
+		// NOTA: NON cancelliamo le opzioni qui!
+		// Le opzioni devono essere preservate durante la disattivazione
+		// per permettere la riattivazione senza perdere le configurazioni
 	}
 }

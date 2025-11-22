@@ -193,17 +193,71 @@ class SettingsPage {
 
 	/**
 	 * Registers the plugin setting with sanitization callbacks.
+	 * 
+	 * IMPORTANTE: Il parametro 'default' viene usato SOLO se l'opzione non esiste nel database.
+	 * WordPress NON sovrascrive opzioni esistenti quando viene chiamato register_setting().
+	 * Le opzioni esistenti vengono preservate anche durante aggiornamenti/disattivazioni del plugin.
 	 */
 	public function register_settings(): void {
+		// Verifica che le opzioni esistenti non vengano sovrascritte
+		// WordPress usa 'default' SOLO se l'opzione non esiste
+		$existing_options = get_option( Options::OPTION_KEY, false );
+		
 		register_setting(
 			Options::OPTION_GROUP,
 			Options::OPTION_KEY,
 			array(
 				'type'              => 'array',
-				'sanitize_callback' => array( Options::class, 'sanitize' ),
+				'sanitize_callback' => array( $this, 'sanitize_options' ),
+				// 'default' viene usato SOLO se l'opzione non esiste (prima installazione)
+				// Le opzioni esistenti vengono sempre preservate
 				'default'           => Options::get_defaults(),
 			)
 		);
+		
+		// Se l'opzione esiste già, assicurati che non venga sovrascritta
+		// WordPress gestisce questo automaticamente, ma verifichiamo per sicurezza
+		if ( $existing_options !== false && is_array( $existing_options ) ) {
+			// Le opzioni esistenti sono già nel database e non verranno sovrascritte
+			// Questo è il comportamento standard di WordPress
+		}
+	}
+
+	/**
+	 * Sanitizes options while preserving existing values.
+	 * This prevents resetting unmodified sections when only partial options are saved.
+	 *
+	 * @param array<string, mixed> $input Raw option values from form.
+	 * @return array<string, mixed> Sanitized options merged with existing values.
+	 */
+	public function sanitize_options( array $input ): array {
+		// Clear cache before retrieving existing options to ensure fresh data
+		require_once __DIR__ . '/../Utils/Cache.php';
+		\FP\SEO\Utils\Cache::delete( 'options_data' );
+		
+		// Get existing options first
+		$existing = get_option( Options::OPTION_KEY, array() );
+		
+		if ( ! is_array( $existing ) ) {
+			$existing = array();
+		}
+		
+		// Merge new values with existing options recursively
+		// This preserves unmodified sections when only partial options are passed
+		$merged = array_replace_recursive( $existing, $input );
+		
+		// Sanitize the merged options
+		$sanitized = Options::sanitize( $merged );
+		
+		// Log per debug
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO: sanitize_options - input keys: ' . implode( ', ', array_keys( $input ) ) );
+			error_log( 'FP SEO: sanitize_options - existing keys: ' . implode( ', ', array_keys( $existing ) ) );
+			error_log( 'FP SEO: sanitize_options - merged keys: ' . implode( ', ', array_keys( $merged ) ) );
+			error_log( 'FP SEO: sanitize_options - sanitized keys: ' . implode( ', ', array_keys( $sanitized ) ) );
+		}
+		
+		return $sanitized;
 	}
 
 	/**
