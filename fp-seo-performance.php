@@ -38,6 +38,32 @@ if ( is_readable( $autoload ) ) {
 	require_once $autoload;
 }
 
+// Autoloader di fallback per classi critiche se l'autoload PSR-4 non funziona
+spl_autoload_register(
+	function ( $class ) {
+		// Namespace del plugin
+		if ( strpos( $class, 'FP\\SEO\\' ) !== 0 ) {
+			return false;
+		}
+
+		// Rimuove il namespace base
+		$relative_class = substr( $class, strlen( 'FP\\SEO\\' ) );
+		
+		// Converte namespace in percorso file
+		$file = __DIR__ . '/src/' . str_replace( '\\', '/', $relative_class ) . '.php';
+
+		// Carica il file se esiste
+		if ( file_exists( $file ) ) {
+			require_once $file;
+			return true;
+		}
+
+		return false;
+	},
+	true, // Prepend per avere priorità
+	false // Non throw exception, ritorna false
+);
+
 // Carica Container prima di Plugin per evitare errori di autoload
 require_once __DIR__ . '/src/Infrastructure/Container.php';
 require_once __DIR__ . '/src/Infrastructure/Plugin.php';
