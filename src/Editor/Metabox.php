@@ -1260,7 +1260,7 @@ class Metabox {
 								type="text" 
 								id="fp-seo-title" 
 								name="fp_seo_title"
-								value="<?php echo esc_attr( get_post_meta( $post->ID, '_fp_seo_title', true ) ); ?>"
+								value="<?php echo esc_attr( wp_specialchars_decode( get_post_meta( $post->ID, '_fp_seo_title', true ), ENT_QUOTES ) ); ?>"
 								placeholder="<?php esc_attr_e( 'es: Guida Completa alla SEO WordPress 2025 | Nome Sito', 'fp-seo-performance' ); ?>"
 								maxlength="70"
 								aria-label="<?php esc_attr_e( 'SEO Title - Titolo ottimizzato per SERP', 'fp-seo-performance' ); ?>"
@@ -1308,7 +1308,7 @@ class Metabox {
 								aria-label="<?php esc_attr_e( 'Meta Description - Descrizione per SERP', 'fp-seo-performance' ); ?>"
 								style="flex: 1; padding: 10px 14px; font-size: 13px; border: 2px solid #10b981; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
 								data-fp-seo-meta-description
-							><?php echo esc_textarea( get_post_meta( $post->ID, '_fp_seo_meta_description', true ) ); ?></textarea>
+							><?php echo esc_textarea( wp_specialchars_decode( get_post_meta( $post->ID, '_fp_seo_meta_description', true ), ENT_QUOTES ) ); ?></textarea>
 							<button 
 								type="button" 
 								class="fp-seo-ai-generate-field-btn" 
@@ -1817,6 +1817,22 @@ class Metabox {
 	 * @param int $post_id Post identifier.
 	 */
 	public function save_meta( int $post_id ): void {
+		// Skip autosave
+		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+			return;
+		}
+
+		// Skip revision
+		if ( wp_is_post_revision( $post_id ) ) {
+			return;
+		}
+
+		// Check user capability
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+
+		// Verify nonce (must be present for security)
 		if ( ! isset( $_POST[ self::NONCE_FIELD ] ) ) {
 			return;
 		}
@@ -1824,14 +1840,6 @@ class Metabox {
 		$nonce = sanitize_text_field( wp_unslash( $_POST[ self::NONCE_FIELD ] ) );
 
 		if ( ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
-			return;
-		}
-
-		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
-			return;
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
 
@@ -2214,10 +2222,101 @@ class Metabox {
 		(function($) {
 			'use strict';
 
-			$(document).ready(function() {
-				// Handle click on AI field generation buttons
-				$(document).on('click', '.fp-seo-ai-generate-field-btn', function(e) {
+			// Wait for DOM and jQuery to be ready
+			function initAiFieldGenerator() {
+				// Check if jQuery is available
+				if (typeof jQuery === 'undefined' || typeof $ === 'undefined') {
+					// Retry after a short delay
+					setTimeout(initAiFieldGenerator, 100);
+					return;
+				}
+				
+				// Use $ as jQuery
+				$ = jQuery;
+				
+				// Get ajaxurl from WordPress localized script or use default
+				var ajaxUrl = typeof ajaxurl !== 'undefined' ? ajaxurl : '<?php echo esc_js( admin_url( 'admin-ajax.php' ) ); ?>';
+
+				// Helper function to get editor content (Classic or Gutenberg)
+				function getEditorContent() {
+					// Try Classic Editor first
+					if (typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor && !tinyMCE.activeEditor.isHidden()) {
+						return tinyMCE.activeEditor.getContent();
+					}
+					
+					// Try textarea (when in Text mode)
+					const $textarea = $('#content');
+					if ($textarea.length) {
+						return $textarea.val();
+					}
+					
+					// Try Gutenberg
+					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
+						const editor = wp.data.select('core/editor');
+						if (editor && typeof editor.getEditedPostContent === 'function') {
+							return editor.getEditedPostContent();
+						}
+					}
+					
+					return '';
+				}
+
+				// Helper function to get post title
+				function getPostTitle() {
+					// Try Classic Editor
+					const $title = $('#title');
+					if ($title.length) {
+						return $title.val();
+					}
+					
+					// Try Gutenberg
+					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
+						const editor = wp.data.select('core/editor');
+						if (editor && typeof editor.getEditedPostAttribute === 'function') {
+							return editor.getEditedPostAttribute('title');
+						}
+					}
+					
+					return '';
+				}
+
+				// Helper function to show error near button
+				function showFieldError($btn, message) {
+					const $parent = $btn.closest('div[style*="flex"]');
+					if (!$parent.length) return;
+					
+					$parent.css('position', 'relative');
+					
+					const $error = $('<div class="fp-seo-ai-error" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; padding: 10px 14px; background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; font-size: 12px; color: #dc2626; z-index: 100; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.1);"></div>');
+					$error.html('<strong>⚠️ Errore:</strong> ' + message);
+					
+					// Remove any existing error
+					$parent.find('.fp-seo-ai-error').remove();
+					$parent.append($error);
+					
+					setTimeout(function() {
+						$error.fadeOut(function() {
+							$(this).remove();
+						});
+					}, 8000);
+				}
+
+				// Check if buttons exist
+				const $buttons = $('.fp-seo-ai-generate-field-btn');
+				if ($buttons.length === 0) {
+					console.warn('FP SEO: AI buttons not found, retrying...');
+					setTimeout(initAiFieldGenerator, 200);
+					return;
+				}
+				
+				console.log('FP SEO: Found', $buttons.length, 'AI buttons');
+				
+				// Handle click on AI field generation buttons using event delegation
+				$(document).off('click', '.fp-seo-ai-generate-field-btn').on('click', '.fp-seo-ai-generate-field-btn', function(e) {
 					e.preventDefault();
+					e.stopPropagation();
+					
+					console.log('FP SEO: AI button clicked');
 					
 					const $btn = $(this);
 					const field = $btn.data('field');
@@ -2225,9 +2324,12 @@ class Metabox {
 					const postId = $btn.data('post-id');
 					const nonce = $btn.data('nonce');
 					
+					console.log('FP SEO: Button data', { field, targetId, postId, nonce: nonce ? 'present' : 'missing' });
+					
 					// Validation
 					if (!field || !targetId || !postId || !nonce) {
-						alert('Configurazione non valida');
+						alert('Configurazione non valida. Verifica che il plugin sia configurato correttamente.');
+						console.error('FP SEO: Invalid button configuration', { field, targetId, postId, nonce: !!nonce });
 						return;
 					}
 
@@ -2247,7 +2349,7 @@ class Metabox {
 
 					// Call AJAX
 					$.ajax({
-						url: ajaxurl,
+						url: ajaxUrl,
 						type: 'POST',
 						dataType: 'json',
 						data: {
@@ -2328,70 +2430,6 @@ class Metabox {
 					});
 				});
 
-				// Helper function to show error near button
-				function showFieldError($btn, message) {
-					const $parent = $btn.closest('div[style*="flex"]');
-					if (!$parent.length) return;
-					
-					$parent.css('position', 'relative');
-					
-					const $error = $('<div class="fp-seo-ai-error" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; padding: 10px 14px; background: #fee2e2; border: 2px solid #ef4444; border-radius: 8px; font-size: 12px; color: #dc2626; z-index: 100; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.1);"></div>');
-					$error.html('<strong>⚠️ Errore:</strong> ' + message);
-					
-					// Remove any existing error
-					$parent.find('.fp-seo-ai-error').remove();
-					$parent.append($error);
-					
-					setTimeout(function() {
-						$error.fadeOut(function() {
-							$(this).remove();
-						});
-					}, 8000);
-				}
-
-				// Get editor content (Classic or Gutenberg)
-				function getEditorContent() {
-					// Try Classic Editor first
-					if (typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor && !tinyMCE.activeEditor.isHidden()) {
-						return tinyMCE.activeEditor.getContent();
-					}
-					
-					// Try textarea (when in Text mode)
-					const $textarea = $('#content');
-					if ($textarea.length) {
-						return $textarea.val();
-					}
-					
-					// Try Gutenberg
-					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
-						const editor = wp.data.select('core/editor');
-						if (editor && typeof editor.getEditedPostContent === 'function') {
-							return editor.getEditedPostContent();
-						}
-					}
-					
-					return '';
-				}
-
-				// Get post title
-				function getPostTitle() {
-					// Try Classic Editor
-					const $title = $('#title');
-					if ($title.length) {
-						return $title.val();
-					}
-					
-					// Try Gutenberg
-					if (typeof wp !== 'undefined' && wp.data && wp.data.select) {
-						const editor = wp.data.select('core/editor');
-						if (editor && typeof editor.getEditedPostAttribute === 'function') {
-							return editor.getEditedPostAttribute('title');
-						}
-					}
-					
-					return '';
-				}
-
 				// Add rotation animation
 				if (!document.getElementById('fp-seo-ai-field-animations')) {
 					const style = document.createElement('style');
@@ -2409,172 +2447,60 @@ class Metabox {
 					document.head.appendChild(style);
 				}
 				
-				console.log('FP SEO: AI Field Generator initialized');
-			});
-		})(jQuery);
+				console.log('FP SEO: AI Field Generator initialized successfully');
+				console.log('FP SEO: AJAX URL =', ajaxUrl);
+				
+				// Test if buttons are clickable
+				$('.fp-seo-ai-generate-field-btn').each(function() {
+					const $btn = $(this);
+					console.log('FP SEO: Button found', {
+						field: $btn.data('field'),
+						targetId: $btn.data('target-id'),
+						visible: $btn.is(':visible'),
+						enabled: !$btn.prop('disabled'),
+						clickable: $btn.css('pointer-events') !== 'none'
+					});
+				});
+			}
+
+			// Initialize when DOM is ready (multiple ways for compatibility)
+			function startInitialization() {
+				// Wait for WordPress admin to be fully loaded
+				if (typeof jQuery !== 'undefined') {
+					jQuery(document).ready(function() {
+						// Wait a bit more to ensure metaboxes are rendered
+						setTimeout(function() {
+							initAiFieldGenerator();
+							// Also retry after longer delay in case metabox loads late
+							setTimeout(initAiFieldGenerator, 1000);
+						}, 300);
+					});
+				} else if (document.readyState === 'loading') {
+					document.addEventListener('DOMContentLoaded', function() {
+						setTimeout(function() {
+							initAiFieldGenerator();
+							setTimeout(initAiFieldGenerator, 1000);
+						}, 300);
+					});
+				} else {
+					// DOM already ready
+					setTimeout(function() {
+						initAiFieldGenerator();
+						setTimeout(initAiFieldGenerator, 1000);
+					}, 300);
+				}
+			}
+			
+			// Start initialization
+			startInitialization();
+			
+			// Debug log
+			console.log('FP SEO: AI Field Generator script loaded');
+		})(typeof jQuery !== 'undefined' ? jQuery : null);
 		</script>
 		<?php
 	}
 
-	/**
-	 * Render AI content generator section (DEPRECATED - now using per-field buttons)
-	 *
-	 * @param \WP_Post $post Current post.
-	 */
-	private function render_ai_generator( \WP_Post $post ): void {
-		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
-		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
-
-		if ( ! $ai_enabled || empty( $api_key ) ) {
-			return;
-		}
-
-		// Nonce for AI generation
-		$ai_nonce = wp_create_nonce( 'fp_seo_ai_generate' );
-
-		?>
-		<div class="fp-seo-ai-generator" style="margin-top: 20px; padding: 16px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 8px; border: 1px solid #0ea5e9;">
-			<h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #0c4a6e; display: flex; align-items: center; gap: 8px;">
-				<span style="font-size: 18px;">🤖</span>
-				<?php esc_html_e( 'Generazione AI - Contenuti SEO', 'fp-seo-performance' ); ?>
-			</h4>
-			
-			<p style="margin: 0 0 12px; font-size: 13px; color: #475569; line-height: 1.5;">
-				<?php esc_html_e( 'Genera automaticamente titolo SEO, meta description e slug ottimizzati con l\'intelligenza artificiale.', 'fp-seo-performance' ); ?>
-			</p>
-
-			<!-- Focus Keyword Input -->
-			<div style="margin-bottom: 12px;">
-				<label for="fp-seo-ai-focus-keyword-input" style="display: block; font-size: 12px; font-weight: 600; color: #0c4a6e; margin-bottom: 6px;">
-					🎯 <?php esc_html_e( 'Focus Keyword (Opzionale)', 'fp-seo-performance' ); ?>
-				</label>
-				<input 
-					type="text" 
-					id="fp-seo-ai-focus-keyword-input" 
-					placeholder="<?php esc_attr_e( 'es: SEO WordPress, marketing digitale, ...', 'fp-seo-performance' ); ?>"
-					style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #bae6fd; border-radius: 6px; background: #fff; transition: all 0.2s ease;"
-					onfocus="this.style.borderColor='#0ea5e9'; this.style.boxShadow='0 0 0 3px rgba(14,165,233,0.1)';"
-					onblur="this.style.borderColor='#bae6fd'; this.style.boxShadow='none';"
-				/>
-				<p style="margin: 6px 0 0; font-size: 11px; color: #64748b; font-style: italic;">
-					💡 <?php esc_html_e( 'Inserisci la parola chiave principale che vuoi ottimizzare. Se lasci vuoto, l\'AI la identificherà automaticamente dal contenuto.', 'fp-seo-performance' ); ?>
-				</p>
-			</div>
-
-			<button 
-				type="button" 
-				id="fp-seo-ai-generate-btn" 
-				class="button button-primary" 
-				data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-				data-nonce="<?php echo esc_attr( $ai_nonce ); ?>"
-				aria-label="<?php esc_attr_e( 'Genera contenuti SEO ottimizzati con intelligenza artificiale', 'fp-seo-performance' ); ?>"
-				aria-describedby="fp-seo-ai-description-text"
-				style="background: #0ea5e9; border-color: #0ea5e9; font-weight: 600; padding: 8px 16px; height: auto; display: flex; align-items: center; gap: 6px;"
-			>
-				<span class="dashicons dashicons-admin-generic" style="margin: 0;" aria-hidden="true"></span>
-				<span><?php esc_html_e( 'Genera con AI', 'fp-seo-performance' ); ?></span>
-			</button>
-			<span id="fp-seo-ai-description-text" class="screen-reader-text">
-				<?php esc_html_e( 'Genera automaticamente titolo SEO, meta description e slug ottimizzati usando intelligenza artificiale basata sul contenuto del post.', 'fp-seo-performance' ); ?>
-			</span>
-
-			<!-- Loading indicator -->
-			<div id="fp-seo-ai-loading" style="display: none; margin-top: 12px; padding: 12px; background: #fff; border-radius: 6px; border-left: 3px solid #0ea5e9;">
-				<div style="display: flex; align-items: center; gap: 10px;">
-					<span class="spinner is-active" style="float: none; margin: 0;"></span>
-					<span style="font-size: 13px; color: #475569;">
-						<?php esc_html_e( 'Generazione in corso... Attendere prego.', 'fp-seo-performance' ); ?>
-					</span>
-				</div>
-			</div>
-
-			<!-- Results container -->
-			<div id="fp-seo-ai-results" style="display: none; margin-top: 12px;">
-				<div style="background: #fff; padding: 14px; border-radius: 6px; border: 1px solid #e5e7eb;">
-					<h5 style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #059669;">
-						✓ <?php esc_html_e( 'Contenuti generati con successo!', 'fp-seo-performance' ); ?>
-					</h5>
-					
-					<div style="display: grid; gap: 10px;">
-						<div>
-							<label style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px;">
-								<span><?php esc_html_e( 'Titolo SEO:', 'fp-seo-performance' ); ?></span>
-								<span id="fp-seo-ai-title-count" style="font-size: 11px; font-weight: 500; color: #6b7280;">0/60</span>
-							</label>
-							<input 
-								type="text" 
-								id="fp-seo-ai-title" 
-								readonly 
-								style="width: 100%; padding: 6px 10px; font-size: 13px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 4px;"
-							/>
-						</div>
-
-						<div>
-							<label style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px;">
-								<span><?php esc_html_e( 'Meta Description:', 'fp-seo-performance' ); ?></span>
-								<span id="fp-seo-ai-description-count" style="font-size: 11px; font-weight: 500; color: #6b7280;">0/155</span>
-							</label>
-							<textarea 
-								id="fp-seo-ai-description" 
-								readonly 
-								rows="2"
-								style="width: 100%; padding: 6px 10px; font-size: 13px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 4px; resize: vertical;"
-							></textarea>
-						</div>
-
-						<div>
-							<label style="display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px;">
-								<?php esc_html_e( 'Slug:', 'fp-seo-performance' ); ?>
-							</label>
-							<input 
-								type="text" 
-								id="fp-seo-ai-slug" 
-								readonly 
-								style="width: 100%; padding: 6px 10px; font-size: 13px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 4px;"
-							/>
-						</div>
-
-						<div>
-							<label style="display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px;">
-								<?php esc_html_e( 'Focus Keyword:', 'fp-seo-performance' ); ?>
-							</label>
-							<input 
-								type="text" 
-								id="fp-seo-ai-keyword" 
-								readonly 
-								style="width: 100%; padding: 6px 10px; font-size: 13px; background: #f9fafb; border: 1px solid #d1d5db; border-radius: 4px;"
-							/>
-						</div>
-
-						<div style="margin-top: 8px;">
-							<button 
-								type="button" 
-								id="fp-seo-ai-apply-btn" 
-								class="button button-primary"
-								style="background: #059669; border-color: #059669; font-weight: 600;"
-							>
-								<?php esc_html_e( 'Applica questi suggerimenti', 'fp-seo-performance' ); ?>
-							</button>
-							<button 
-								type="button" 
-								id="fp-seo-ai-copy-btn" 
-								class="button"
-								style="margin-left: 8px;"
-							>
-								<?php esc_html_e( 'Copia negli appunti', 'fp-seo-performance' ); ?>
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Error message -->
-			<div id="fp-seo-ai-error" style="display: none; margin-top: 12px; padding: 12px; background: #fef2f2; border-left: 3px solid #dc2626; border-radius: 6px;">
-				<p style="margin: 0; font-size: 13px; color: #991b1b;" id="fp-seo-ai-error-message"></p>
-			</div>
-		</div>
-		<?php
-	}
 
 	/**
 	 * Get check importance explanation

@@ -12,12 +12,14 @@ declare(strict_types=1);
 namespace FP\SEO\Social;
 
 use FP\SEO\Utils\Cache;
+use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\PerformanceConfig;
 use function get_permalink;
 use function get_post;
 use function get_post_field;
 use function get_queried_object_id;
 use function get_the_excerpt;
+use function strip_shortcodes;
 use function get_the_post_thumbnail_url;
 use function get_the_title;
 use function is_singular;
@@ -201,11 +203,11 @@ class ImprovedSocialMediaManager {
 									<div class="fp-seo-social-preview-content">
 										<div class="fp-seo-social-preview-title" 
 											 id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-title-preview">
-											<?php echo esc_html( $preview_data['title'] ); ?>
+											<?php echo esc_html( wp_specialchars_decode( $preview_data['title'], ENT_QUOTES ) ); ?>
 										</div>
 										<div class="fp-seo-social-preview-description" 
 											 id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-description-preview">
-											<?php echo esc_html( $preview_data['description'] ); ?>
+											<?php echo esc_html( wp_specialchars_decode( $preview_data['description'], ENT_QUOTES ) ); ?>
 										</div>
 										<div class="fp-seo-social-preview-url">
 											<?php echo esc_url( $preview_data['url'] ); ?>
@@ -237,7 +239,7 @@ class ImprovedSocialMediaManager {
 										   id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-title" 
 										   name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_title" 
 										   class="fp-seo-form-control fp-seo-character-counter" 
-										   value="<?php echo esc_attr( $social_meta[ $platform_id . '_title' ] ?? '' ); ?>" 
+										   value="<?php echo esc_attr( wp_specialchars_decode( $social_meta[ $platform_id . '_title' ] ?? '', ENT_QUOTES ) ); ?>" 
 										   maxlength="<?php echo esc_attr( $platform_data['title_limit'] ); ?>"
 										   placeholder="<?php esc_attr_e( 'Enter title for social sharing', 'fp-seo-performance' ); ?>">
 									<div class="fp-seo-character-count">
@@ -268,7 +270,7 @@ class ImprovedSocialMediaManager {
 											  class="fp-seo-form-control fp-seo-character-counter" 
 											  maxlength="<?php echo esc_attr( $platform_data['description_limit'] ); ?>"
 											  rows="3"
-											  placeholder="<?php esc_attr_e( 'Enter description for social sharing', 'fp-seo-performance' ); ?>"><?php echo esc_textarea( $social_meta[ $platform_id . '_description' ] ?? '' ); ?></textarea>
+											  placeholder="<?php esc_attr_e( 'Enter description for social sharing', 'fp-seo-performance' ); ?>"><?php echo esc_textarea( wp_specialchars_decode( $social_meta[ $platform_id . '_description' ] ?? '', ENT_QUOTES ) ); ?></textarea>
 									<div class="fp-seo-character-count">
 										<span id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-description-count">0</span>
 										/<?php echo esc_attr( $platform_data['description_limit'] ); ?>
@@ -679,9 +681,21 @@ class ImprovedSocialMediaManager {
 	 * @return array<string, mixed>
 	 */
 	private function get_preview_data( $post ): array {
+		$social_meta = $this->get_social_meta( $post->ID );
+		
+		// Use social meta if available, otherwise use SEO title/description (which fallback to content)
+		$title = ! empty( $social_meta['facebook_title'] ) 
+			? wp_specialchars_decode( $social_meta['facebook_title'], ENT_QUOTES )
+			: MetadataResolver::resolve_seo_title( $post );
+			
+		// For description: use social meta, then SEO description (which uses content without shortcodes)
+		$description = ! empty( $social_meta['facebook_description'] )
+			? wp_specialchars_decode( $social_meta['facebook_description'], ENT_QUOTES )
+			: MetadataResolver::resolve_meta_description( $post );
+		
 		return array(
-			'title' => get_the_title( $post->ID ),
-			'description' => get_the_excerpt( $post->ID ) ?: wp_trim_words( $post->post_content, 20 ),
+			'title' => $title,
+			'description' => $description,
 			'url' => get_permalink( $post->ID ),
 			'image' => get_the_post_thumbnail_url( $post->ID, 'full' ) ?: get_option( 'fp_seo_social_default_image' ),
 		);
@@ -747,7 +761,9 @@ class ImprovedSocialMediaManager {
 		$permalink   = get_permalink( $post_id );
 
 		if ( '' === trim( (string) $post_excerpt ) ) {
-			$post_excerpt = wp_trim_words( wp_strip_all_tags( $post_content ), 30, '' );
+			// Use content without shortcodes as fallback
+			$content_without_shortcodes = strip_shortcodes( $post_content );
+			$post_excerpt = wp_trim_words( wp_strip_all_tags( $content_without_shortcodes ), 30, '' );
 		}
 
 		$defaults = array(
@@ -1055,7 +1071,9 @@ class ImprovedSocialMediaManager {
 	 */
 	private function optimize_social_with_ai( $post, string $platform ): array {
 		$title = get_the_title( $post->ID );
-		$content = wp_strip_all_tags( $post->post_content );
+		// Remove shortcodes before stripping tags
+		$content_without_shortcodes = strip_shortcodes( $post->post_content );
+		$content = wp_strip_all_tags( $content_without_shortcodes );
 		$excerpt = get_the_excerpt( $post->ID );
 
 		$optimized = array();

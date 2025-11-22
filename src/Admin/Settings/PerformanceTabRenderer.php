@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin\Settings;
 
+use FP\SEO\Utils\SiteKitIntegration;
 use function checked;
 use function esc_attr;
 use function esc_attr_e;
@@ -29,6 +30,24 @@ class PerformanceTabRenderer extends SettingsTabRenderer {
 	 */
 	public function render( array $options ): void {
 		$performance = $options['performance'];
+		
+		// Check if Site Kit is available and pre-fill PSI API key if not already configured
+		$sitekit_active = SiteKitIntegration::is_site_kit_active();
+		$sitekit_psi_connected = SiteKitIntegration::is_psi_connected();
+		$psi_api_key = $performance['psi_api_key'] ?? '';
+		
+		// If not configured, try to get from Site Kit
+		if ( empty( $psi_api_key ) && $sitekit_active && $sitekit_psi_connected ) {
+			$sitekit_psi_key = SiteKitIntegration::get_psi_api_key();
+			if ( ! empty( $sitekit_psi_key ) ) {
+				$psi_api_key = $sitekit_psi_key;
+			}
+		}
+		
+		// Use pre-filled or existing value
+		if ( ! empty( $psi_api_key ) && empty( $performance['psi_api_key'] ) ) {
+			$performance['psi_api_key'] = $psi_api_key;
+		}
 		?>
 		<table class="form-table" role="presentation">
 			<tbody>
@@ -40,7 +59,12 @@ class PerformanceTabRenderer extends SettingsTabRenderer {
 				<?php esc_html_e( 'Enable PSI-based performance hints.', 'fp-seo-performance' ); ?>
 			</label>
 			<p class="description"><?php esc_html_e( 'Requires a Google PageSpeed Insights API key to fetch Core Web Vitals signals.', 'fp-seo-performance' ); ?></p>
-			<input type="text" class="regular-text" name="<?php echo esc_attr( $this->get_option_key() ); ?>[performance][psi_api_key]" value="<?php echo esc_attr( $performance['psi_api_key'] ); ?>" placeholder="<?php esc_attr_e( 'Enter PSI API key', 'fp-seo-performance' ); ?>" />
+			<input type="text" class="regular-text" name="<?php echo esc_attr( $this->get_option_key() ); ?>[performance][psi_api_key]" value="<?php echo esc_attr( $psi_api_key ); ?>" placeholder="<?php esc_attr_e( 'Enter PSI API key', 'fp-seo-performance' ); ?>" />
+			<?php if ( $sitekit_active && $sitekit_psi_connected && ! empty( $psi_api_key ) && empty( $performance['psi_api_key'] ) ) : ?>
+				<p class="description" style="color: #2563eb; font-weight: 600;">
+					ℹ️ <?php esc_html_e( 'API key pre-filled from Google Site Kit configuration.', 'fp-seo-performance' ); ?>
+				</p>
+			<?php endif; ?>
 		</td>
 	</tr>
 	<tr>

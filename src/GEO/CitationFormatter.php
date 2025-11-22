@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\GEO;
 
+use FP\SEO\Utils\MetadataResolver;
 use WP_Post;
 
 /**
@@ -54,14 +55,10 @@ class CitationFormatter {
 	 * @return string Citation title.
 	 */
 	private function get_citation_title( WP_Post $post ): string {
-		// Try SEO title first
-		$seo_title = get_post_meta( $post->ID, '_fp_seo_title', true );
+		// Use MetadataResolver to get SEO title (falls back to content if not set)
+		$seo_title = \FP\SEO\Utils\MetadataResolver::resolve_seo_title( $post );
 
-		if ( ! empty( $seo_title ) ) {
-			return sanitize_text_field( $seo_title );
-		}
-
-		return sanitize_text_field( $post->post_title );
+		return sanitize_text_field( $seo_title );
 	}
 
 	/**

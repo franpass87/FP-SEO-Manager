@@ -13,6 +13,7 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Integrations\GscClient;
 use FP\SEO\Integrations\GscData;
+use FP\SEO\Utils\SiteKitIntegration;
 
 /**
  * Renders GSC settings tab
@@ -47,9 +48,27 @@ class GscSettings {
 		$options = get_option( 'fp_seo_performance', array() );
 		$gsc     = $options['gsc'] ?? array();
 
+		// Check if Site Kit is available and pre-fill if not already configured
+		$sitekit_active = SiteKitIntegration::is_site_kit_active();
+		$sitekit_gsc_connected = SiteKitIntegration::is_gsc_connected();
+		
 		$service_account_json = $gsc['service_account_json'] ?? '';
-		$site_url             = $gsc['site_url'] ?? home_url( '/' );
-		$is_configured        = ! empty( $service_account_json ) && ! empty( $site_url );
+		$site_url             = $gsc['site_url'] ?? '';
+		
+		// If not configured, try to get from Site Kit
+		if ( empty( $site_url ) && $sitekit_active && $sitekit_gsc_connected ) {
+			$sitekit_credentials = SiteKitIntegration::get_gsc_credentials();
+			if ( ! empty( $sitekit_credentials['site_url'] ) ) {
+				$site_url = $sitekit_credentials['site_url'];
+			}
+		}
+		
+		// Fallback to home URL if still empty
+		if ( empty( $site_url ) ) {
+			$site_url = home_url( '/' );
+		}
+		
+		$is_configured = ! empty( $service_account_json ) && ! empty( $site_url );
 
 		?>
 		<div class="fp-seo-settings-section">
@@ -66,9 +85,15 @@ class GscSettings {
 					</button>
 				</div>
 			<?php else : ?>
-				<div class="fp-seo-alert fp-seo-alert--warning">
-					⚠️ <?php esc_html_e( 'Google Search Console not configured. Follow the setup guide below.', 'fp-seo-performance' ); ?>
-				</div>
+				<?php if ( $sitekit_active && $sitekit_gsc_connected ) : ?>
+					<div class="fp-seo-alert fp-seo-alert--info" style="background: #dbeafe; border-left-color: #2563eb; color: #1e40af;">
+						ℹ️ <?php esc_html_e( 'Google Site Kit detected! Site URL pre-filled from Site Kit configuration. You still need to add Service Account JSON for full functionality.', 'fp-seo-performance' ); ?>
+					</div>
+				<?php else : ?>
+					<div class="fp-seo-alert fp-seo-alert--warning">
+						⚠️ <?php esc_html_e( 'Google Search Console not configured. Follow the setup guide below.', 'fp-seo-performance' ); ?>
+					</div>
+				<?php endif; ?>
 			<?php endif; ?>
 
 			<table class="form-table" role="presentation">
@@ -280,6 +305,11 @@ class GscSettings {
 			background: #fef3c7;
 			border-left-color: #f59e0b;
 			color: #92400e;
+		}
+		.fp-seo-alert--info {
+			background: #dbeafe;
+			border-left-color: #2563eb;
+			color: #1e40af;
 		}
 		</style>
 		<?php

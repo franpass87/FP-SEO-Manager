@@ -63,6 +63,11 @@ class AssetOptimizer {
 	 * Initialize asset optimization.
 	 */
 	public function init(): void {
+		// Skip entirely on frontend to prevent any conflicts with images/videos/rendering
+		if ( ! is_admin() ) {
+			return;
+		}
+		
 		// Verifica che le funzioni WordPress siano disponibili
 		if ( ! function_exists( 'wp_mkdir_p' ) ) {
 			throw new \RuntimeException( 'WordPress functions not available. Plugin must be loaded within WordPress context.' );
@@ -73,8 +78,7 @@ class AssetOptimizer {
 			wp_mkdir_p( $this->minified_dir );
 		}
 
-		// Add hooks for asset optimization
-		add_action( 'wp_enqueue_scripts', [ $this, 'optimize_frontend_assets' ], 1 );
+		// Add hooks for asset optimization - ONLY in admin
 		add_action( 'admin_enqueue_scripts', [ $this, 'optimize_admin_assets' ], 1 );
 		add_action( 'wp_head', [ $this, 'add_preload_hints' ], 1 );
 		add_action( 'wp_footer', [ $this, 'add_defer_scripts' ], 1 );
