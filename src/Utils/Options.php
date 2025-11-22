@@ -482,7 +482,10 @@ class Options {
 		
 		// Log per debug
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'FP SEO: Options::update - result: ' . ( $result ? 'true' : 'false' ) . ', keys: ' . implode( ', ', array_keys( $sanitized ) ) );
+			Logger::debug( 'Options::update', array(
+				'result' => $result ? 'success' : 'failed',
+				'keys' => array_keys( $sanitized ),
+			) );
 		}
 	}
 

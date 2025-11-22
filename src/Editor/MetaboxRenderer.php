@@ -127,19 +127,31 @@ class MetaboxRenderer {
 			update_post_meta_cache( array( $post->ID ) );
 		}
 		
-		// Log per debug - verifica diretta dal database
-		global $wpdb;
-		$db_title = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_title' ) );
-		$db_desc = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_meta_description' ) );
-		$db_keyword = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_focus_keyword' ) );
-		
-		$seo_title_debug = get_post_meta( $post->ID, '_fp_seo_title', true );
-		$meta_desc_debug = get_post_meta( $post->ID, '_fp_seo_meta_description', true );
-		$focus_keyword_debug = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
-		
-		error_log( 'FP SEO: MetaboxRenderer::render - post_id: ' . $post->ID );
-		error_log( 'FP SEO: DB direct - title: ' . ( $db_title ? substr( $db_title, 0, 50 ) : 'empty' ) . ', desc: ' . ( $db_desc ? substr( $db_desc, 0, 50 ) : 'empty' ) . ', keyword: ' . ( $db_keyword ? $db_keyword : 'empty' ) );
-		error_log( 'FP SEO: get_post_meta - title: ' . ( $seo_title_debug ? substr( $seo_title_debug, 0, 50 ) : 'empty' ) . ', desc: ' . ( $meta_desc_debug ? substr( $meta_desc_debug, 0, 50 ) : 'empty' ) . ', keyword: ' . ( $focus_keyword_debug ? $focus_keyword_debug : 'empty' ) );
+		// Log per debug - verifica diretta dal database (solo in debug mode)
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			global $wpdb;
+			$db_title = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_title' ) );
+			$db_desc = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_meta_description' ) );
+			$db_keyword = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_focus_keyword' ) );
+			
+			$seo_title_debug = get_post_meta( $post->ID, '_fp_seo_title', true );
+			$meta_desc_debug = get_post_meta( $post->ID, '_fp_seo_meta_description', true );
+			$focus_keyword_debug = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
+			
+			Logger::debug( 'MetaboxRenderer::render - metadata comparison', array(
+				'post_id' => $post->ID,
+				'db_direct' => array(
+					'title' => $db_title ? substr( $db_title, 0, 50 ) : 'empty',
+					'description' => $db_desc ? substr( $db_desc, 0, 50 ) : 'empty',
+					'keyword' => $db_keyword ?: 'empty',
+				),
+				'get_post_meta' => array(
+					'title' => $seo_title_debug ? substr( $seo_title_debug, 0, 50 ) : 'empty',
+					'description' => $meta_desc_debug ? substr( $meta_desc_debug, 0, 50 ) : 'empty',
+					'keyword' => $focus_keyword_debug ?: 'empty',
+				),
+			) );
+		}
 		
 		// Add hidden field to ensure metabox is always recognized in POST
 		// This helps WordPress identify that our metabox fields should be processed
@@ -215,9 +227,12 @@ class MetaboxRenderer {
 		$checks       = $analysis['checks'] ?? array();
 		
 		// Debug: log checks received in renderer
-		error_log( 'FP SEO: MetaboxRenderer::render - checks count: ' . count( $checks ) );
-		if ( ! empty( $checks ) ) {
-			error_log( 'FP SEO: MetaboxRenderer::render - first check: ' . wp_json_encode( reset( $checks ) ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'MetaboxRenderer::render - checks received', array(
+				'post_id' => $post->ID,
+				'checks_count' => count( $checks ),
+				'first_check' => ! empty( $checks ) ? reset( $checks ) : null,
+			) );
 		}
 		?>
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
@@ -362,11 +377,21 @@ class MetaboxRenderer {
 			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_title' ) );
 			if ( $db_value !== null ) {
 				$seo_title_value = $db_value;
-				error_log( 'FP SEO: render_seo_title_field - fallback DB query found value: ' . substr( $seo_title_value, 0, 50 ) );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'render_seo_title_field - fallback DB query found value', array(
+						'post_id' => $post->ID,
+						'value_preview' => substr( $seo_title_value, 0, 50 ),
+					) );
+				}
 			}
 		}
 		
-		error_log( 'FP SEO: render_seo_title_field - post_id: ' . $post->ID . ', final value: ' . ( $seo_title_value ? substr( $seo_title_value, 0, 50 ) : 'empty' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'render_seo_title_field - final value', array(
+				'post_id' => $post->ID,
+				'final_value' => $seo_title_value ? substr( $seo_title_value, 0, 50 ) : 'empty',
+			) );
+		}
 		?>
 		<!-- SEO Title -->
 		<div style="position: relative;">
@@ -442,11 +467,21 @@ class MetaboxRenderer {
 			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_meta_description' ) );
 			if ( $db_value !== null ) {
 				$meta_desc_value = $db_value;
-				error_log( 'FP SEO: render_meta_description_field - fallback DB query found value: ' . substr( $meta_desc_value, 0, 50 ) );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'render_meta_description_field - fallback DB query found value', array(
+						'post_id' => $post->ID,
+						'value_preview' => substr( $meta_desc_value, 0, 50 ),
+					) );
+				}
 			}
 		}
 		
-		error_log( 'FP SEO: render_meta_description_field - post_id: ' . $post->ID . ', final value: ' . ( $meta_desc_value ? substr( $meta_desc_value, 0, 50 ) : 'empty' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'render_meta_description_field - final value', array(
+				'post_id' => $post->ID,
+				'final_value' => $meta_desc_value ? substr( $meta_desc_value, 0, 50 ) : 'empty',
+			) );
+		}
 		?>
 		<!-- Meta Description -->
 		<div style="position: relative;">
@@ -607,7 +642,12 @@ class MetaboxRenderer {
 			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_FOCUS_KEYWORD ) );
 			if ( $db_value !== null ) {
 				$focus_keyword_value = $db_value;
-				error_log( 'FP SEO: render_keywords_section - fallback DB query found focus keyword: ' . $focus_keyword_value );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'render_keywords_section - fallback DB query found focus keyword', array(
+						'post_id' => $post->ID,
+						'focus_keyword' => $focus_keyword_value,
+					) );
+				}
 			}
 		}
 		
@@ -617,11 +657,21 @@ class MetaboxRenderer {
 			if ( $db_value !== null ) {
 				$unserialized = maybe_unserialize( $db_value );
 				$secondary_keywords_value = is_array( $unserialized ) ? $unserialized : $db_value;
-				error_log( 'FP SEO: render_keywords_section - fallback DB query found secondary keywords' );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'render_keywords_section - fallback DB query found secondary keywords', array(
+						'post_id' => $post->ID,
+					) );
+				}
 			}
 		}
 		
-		error_log( 'FP SEO: render_keywords_section - post_id: ' . $post->ID . ', focus: ' . ( $focus_keyword_value ? $focus_keyword_value : 'empty' ) . ', secondary: ' . ( is_array( $secondary_keywords_value ) ? implode( ', ', $secondary_keywords_value ) : ( $secondary_keywords_value ?: 'empty' ) ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'render_keywords_section - final values', array(
+				'post_id' => $post->ID,
+				'focus_keyword' => $focus_keyword_value ?: 'empty',
+				'secondary_keywords' => is_array( $secondary_keywords_value ) ? implode( ', ', $secondary_keywords_value ) : ( $secondary_keywords_value ?: 'empty' ),
+			) );
+		}
 		?>
 		<!-- Focus Keyword -->
 		<div style="position: relative;">

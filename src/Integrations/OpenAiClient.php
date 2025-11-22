@@ -11,7 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Integrations;
 
-use OpenAI;
+use OpenAI\Client as OpenAiClientClass;
+use OpenAI\OpenAI as OpenAiFactory;
 use FP\SEO\Utils\Options;
 use FP\SEO\Utils\Logger;
 
@@ -23,16 +24,16 @@ class OpenAiClient {
 	/**
 	 * OpenAI client instance.
 	 *
-	 * @var \OpenAI\Client|null
+	 * @var OpenAiClientClass|null
 	 */
-	private ?\OpenAI\Client $client = null;
+	private ?OpenAiClientClass $client = null;
 
 	/**
 	 * Initialize the OpenAI client.
 	 *
-	 * @return \OpenAI\Client|null
+	 * @return OpenAiClientClass|null
 	 */
-	private function get_client(): ?\OpenAI\Client {
+	private function get_client(): ?OpenAiClientClass {
 		if ( null !== $this->client ) {
 			return $this->client;
 		}
@@ -43,9 +44,31 @@ class OpenAiClient {
 			return null;
 		}
 
-		$this->client = OpenAI::client( $api_key );
+		// Verify OpenAI factory class exists
+		if ( ! class_exists( OpenAiFactory::class ) ) {
+			Logger::error( 'OpenAI library not loaded', array(
+				'openai_factory_class' => class_exists( OpenAiFactory::class ),
+				'client_class' => class_exists( OpenAiClientClass::class ),
+				'autoload_working' => spl_autoload_functions() !== false,
+			) );
+			return null;
+		}
 
-		return $this->client;
+		try {
+			// Use the OpenAI factory class to create client
+			$this->client = OpenAiFactory::client( $api_key );
+			
+			return $this->client;
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Failed to initialize OpenAI client', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'api_key_length' => strlen( $api_key ),
+			) );
+			return null;
+		}
 	}
 
 	/**
@@ -119,13 +142,44 @@ class OpenAiClient {
 			}
 
 			// Raccogli informazioni contestuali dal post
-			$context = $this->gather_post_context( $post_id );
+			try {
+				$context = $this->gather_post_context( $post_id );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'Error gathering post context', array(
+					'post_id' => $post_id,
+					'error' => $e->getMessage(),
+				) );
+				$context = array(); // Fallback to empty context
+			}
 
-		$prompt = $this->build_prompt( $title, $clean_content, $language, $focus_keyword, $context );
+			// Build prompt with error handling
+			try {
+				$prompt = $this->build_prompt( $title, $clean_content, $language, $focus_keyword, $context );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'Error building prompt', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				return array(
+					'success' => false,
+					'error'   => __( 'Errore nella costruzione del prompt: ', 'fp-seo-performance' ) . $e->getMessage(),
+				);
+			}
+
+		// Get model with error handling
+		try {
+			$model = $this->get_model();
+			if ( empty( $model ) ) {
+				$model = 'gpt-5-nano'; // Default fallback
+			}
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Error getting model', array( 'error' => $e->getMessage() ) );
+			$model = 'gpt-5-nano'; // Default fallback
+		}
 
 		// Build API request parameters with correct parameter names
 		$api_params = array(
-			'model'       => $this->get_model(),
+			'model'       => $model,
 			'messages'    => array(
 				array(
 					'role'    => 'system',
@@ -140,8 +194,8 @@ class OpenAiClient {
 		);
 
 		// GPT-5 Nano only supports temperature=1 (default), so omit it for that model
-		$model = strtolower( $this->get_model() );
-		if ( strpos( $model, 'gpt-5-nano' ) === false ) {
+		$model_lower = strtolower( $model );
+		if ( strpos( $model_lower, 'gpt-5-nano' ) === false ) {
 			$api_params['temperature'] = 0.7;
 		}
 
@@ -231,13 +285,24 @@ class OpenAiClient {
 
 			return $response_data;
 
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Fatal error in generate_seo_suggestions', array(
+				'message' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'post_id' => $post_id,
+			) );
 			return array(
 				'success' => false,
 				'error'   => sprintf(
 					/* translators: %s: error message */
 					__( 'Errore OpenAI: %s', 'fp-seo-performance' ),
 					$e->getMessage()
+				),
+				'debug' => array(
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
 				),
 			);
 		}

@@ -348,19 +348,21 @@ class Plugin {
 				$metabox = $this->container->get( Metabox::class );
 				
 				// Log per verificare che l'istanza sia stata creata
-				error_log( 'FP SEO: Metabox instance created - class: ' . get_class( $metabox ) );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Metabox instance created', array( 'class' => get_class( $metabox ) ) );
+				}
 				
 				if ( $metabox && method_exists( $metabox, 'register' ) ) {
 					$metabox->register();
-					error_log( 'FP SEO: Metabox::register() called successfully' );
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::debug( 'Metabox::register() called successfully' );
+					}
 				} else {
-					Logger::error( 'FP SEO: Metabox instance invalid or missing register method' );
-					error_log( 'FP SEO: ERROR - Metabox instance invalid or missing register method' );
+					Logger::error( 'Metabox instance invalid or missing register method' );
 				}
 			} catch ( \Throwable $e ) {
 				// Log errore ma non bloccare il plugin
-				error_log( 'FP SEO: ERROR creating Metabox instance - ' . $e->getMessage() );
-				Logger::error( 'FP SEO: Failed to register Metabox', array(
+				Logger::error( 'Failed to register Metabox', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
@@ -433,17 +435,17 @@ class Plugin {
 	 * Boot AI services only if API key is configured.
 	 */
 	private function boot_ai_services(): void {
-		$options    = \FP\SEO\Utils\Options::get();
-		$openai_key = $options['ai']['openai_api_key'] ?? '';
-
-		// Only load AI AJAX handlers if API key is configured
-		// (AiSettings è già registrato in boot_admin_services per permettere la configurazione)
-		if ( empty( $openai_key ) ) {
-			return;
+		// SEMPRE registra l'handler AJAX, anche senza chiave API
+		// Questo permette di restituire messaggi di errore chiari invece di 500
+		try {
+			$this->container->singleton( \FP\SEO\Admin\AiAjaxHandler::class );
+			$this->container->get( \FP\SEO\Admin\AiAjaxHandler::class )->register();
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Failed to register AiAjaxHandler', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+			) );
 		}
-
-		$this->container->singleton( \FP\SEO\Admin\AiAjaxHandler::class );
-		$this->container->get( \FP\SEO\Admin\AiAjaxHandler::class )->register();
 	}
 
 	/**

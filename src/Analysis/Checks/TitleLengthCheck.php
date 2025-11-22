@@ -56,6 +56,78 @@ class TitleLengthCheck implements CheckInterface {
 	}
 
 	/**
+	 * Check if keyword words are present in text (flexible matching).
+	 * 
+	 * @param string $text Text to search in.
+	 * @param string $keyword Keyword to search for.
+	 * @return bool True if all significant words from keyword are found in text.
+	 */
+	private function has_keyword_words( string $text, string $keyword ): bool {
+		if ( empty( $keyword ) ) {
+			return false;
+		}
+		
+		// First try exact match (case-insensitive)
+		if ( false !== mb_stripos( $text, $keyword ) ) {
+			return true;
+		}
+		
+		// If exact match fails, check if all significant words are present
+		// Words to ignore (common Italian/English stop words)
+		$stop_words = array( 'a', 'an', 'the', 'di', 'da', 'in', 'su', 'per', 'con', 'il', 'la', 'lo', 'gli', 'le', 'un', 'una', 'uno', 'e', 'o', 'ma', 'che', 'è', 'sono', 'del', 'della', 'dei', 'delle', 'al', 'alla', 'ai', 'alle' );
+		
+		// Normalize & to handle variations (B&B, B & B, B and B)
+		$keyword_normalized = preg_replace( '/\s*&\s*/u', '&', $keyword );
+		$text_normalized = preg_replace( '/\s*&\s*/u', '&', $text );
+		
+		// Try normalized match first
+		if ( false !== mb_stripos( $text_normalized, $keyword_normalized ) ) {
+			return true;
+		}
+		
+		// Split keyword into words (split on spaces, but preserve & as part of word)
+		// First split on spaces
+		$keyword_parts = preg_split( '/\s+/u', mb_strtolower( $keyword ), -1, PREG_SPLIT_NO_EMPTY );
+		$text_lower = mb_strtolower( $text );
+		
+		// Check if all significant words/parts are present
+		foreach ( $keyword_parts as $part ) {
+			$part = trim( $part );
+			if ( empty( $part ) ) {
+				continue;
+			}
+			
+			// If part contains &, check for it as-is (e.g., "b&b")
+			if ( false !== strpos( $part, '&' ) ) {
+				if ( false === mb_stripos( $text_lower, $part ) ) {
+					// If "b&b" not found, try splitting it
+					$sub_parts = explode( '&', $part );
+					foreach ( $sub_parts as $sub_part ) {
+						$sub_part = trim( $sub_part );
+						if ( ! empty( $sub_part ) && false === mb_stripos( $text_lower, $sub_part ) ) {
+							return false;
+						}
+					}
+				}
+				continue;
+			}
+			
+			// Skip stop words
+			if ( in_array( $part, $stop_words, true ) ) {
+				continue;
+			}
+			
+			// Check if word is present in text
+			if ( false === mb_stripos( $text_lower, $part ) ) {
+				return false;
+			}
+		}
+		
+		// All significant words found
+		return true;
+	}
+
+	/**
 	 * Execute the title length evaluation.
 	 *
 	 * @param Context $context Analyzer context payload.
@@ -66,7 +138,7 @@ class TitleLengthCheck implements CheckInterface {
 		$title         = trim( $context->title() );
 		$length        = mb_strlen( $title );
 		$focus_keyword = trim( $context->focus_keyword() );
-		$has_keyword   = $context->has_focus_keyword() && false !== mb_stripos( $title, $focus_keyword );
+		$has_keyword   = $context->has_focus_keyword() && $this->has_keyword_words( $title, $focus_keyword );
 
 		if ( 0 === $length ) {
 			$hint = sprintf(

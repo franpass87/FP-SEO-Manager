@@ -251,10 +251,12 @@ class SettingsPage {
 		
 		// Log per debug
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'FP SEO: sanitize_options - input keys: ' . implode( ', ', array_keys( $input ) ) );
-			error_log( 'FP SEO: sanitize_options - existing keys: ' . implode( ', ', array_keys( $existing ) ) );
-			error_log( 'FP SEO: sanitize_options - merged keys: ' . implode( ', ', array_keys( $merged ) ) );
-			error_log( 'FP SEO: sanitize_options - sanitized keys: ' . implode( ', ', array_keys( $sanitized ) ) );
+			Logger::debug( 'sanitize_options', array(
+				'input_keys' => array_keys( $input ),
+				'existing_keys' => array_keys( $existing ),
+				'merged_keys' => array_keys( $merged ),
+				'sanitized_keys' => array_keys( $sanitized ),
+			) );
 		}
 		
 		return $sanitized;

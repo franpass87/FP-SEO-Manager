@@ -68,9 +68,13 @@ class Metabox {
 	 */
 	public function __construct() {
 		// REGISTRA GLI HOOK IMMEDIATAMENTE nel costruttore per garantire che vengano sempre registrati
-		error_log( 'FP SEO: Metabox::__construct() called' );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::__construct() called' );
+		}
 		$this->register_hooks();
-		error_log( 'FP SEO: Metabox::__construct() completed - hooks should be registered' );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::__construct() completed - hooks should be registered' );
+		}
 	}
 
 	/**
@@ -93,8 +97,17 @@ class Metabox {
 		// Hook wp_insert_post_data per salvare prima che il post venga inserito
 		add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 10, 4 );
 		
-		// Log registrazione
-		error_log( 'FP SEO: Metabox hooks registered in register_hooks() - save_post (1,5,99), edit_post (1,99), wp_insert_post (10), wp_insert_post_data (10)' );
+		// Log registrazione solo in debug mode
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox hooks registered in register_hooks()', array(
+				'hooks' => array(
+					'save_post' => array( 1, 5, 99 ),
+					'edit_post' => array( 1, 99 ),
+					'wp_insert_post' => array( 10 ),
+					'wp_insert_post_data' => array( 10 ),
+				),
+			) );
+		}
 	}
 
 	/**
@@ -1514,65 +1527,62 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
-		// Always log - this helps debug if method is called
-		error_log( 'FP SEO: Metabox::save_meta called (save_post hook) - post_id: ' . $post_id . ', update: ' . ( $update ? 'yes' : 'no' ) . ', hook: ' . current_filter() . ', priority: ' . current_filter() );
-		
 		// Prevent multiple calls - usa un array statico per tracciare
 		static $saved = array();
 		$hook_key = current_filter() . '_' . $post_id;
 		if ( isset( $saved[ $hook_key ] ) ) {
-			error_log( 'FP SEO: Metabox::save_meta already processed for hook: ' . current_filter() . ', post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta already processed', array(
+					'hook' => current_filter(),
+					'post_id' => $post_id,
+				) );
+			}
 			return;
 		}
 		$saved[ $hook_key ] = true;
 		
-		// Log POST data per debug
-		error_log( 'FP SEO: Metabox::save_meta - POST keys count: ' . ( isset( $_POST ) ? count( $_POST ) : 0 ) );
-		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) ) {
-			error_log( 'FP SEO: Metabox::save_meta - metabox present flag: ' . $_POST['fp_seo_performance_metabox_present'] );
-		}
-		if ( isset( $_POST['fp_seo_title'] ) ) {
-			error_log( 'FP SEO: Metabox::save_meta - title present: ' . substr( $_POST['fp_seo_title'], 0, 50 ) );
-		}
-		if ( isset( $_POST['fp_seo_focus_keyword'] ) ) {
-			error_log( 'FP SEO: Metabox::save_meta - focus keyword present: ' . $_POST['fp_seo_focus_keyword'] );
-		}
-
-		error_log( 'FP SEO: Metabox::save_meta processing - post_id: ' . $post_id . ', POST keys count: ' . ( isset( $_POST ) ? count( $_POST ) : 0 ) );
-		
-		// Log specific SEO fields to debug
-		$seo_fields = array(
-			'fp_seo_performance_metabox_present',
-			'fp_seo_title',
-			'fp_seo_title_sent',
-			'fp_seo_meta_description',
-			'fp_seo_meta_description_sent',
-			'fp_seo_focus_keyword',
-			'fp_seo_secondary_keywords',
-		);
-		
-		foreach ( $seo_fields as $field ) {
-			if ( isset( $_POST[ $field ] ) ) {
-				$value = $_POST[ $field ];
-				if ( is_string( $value ) && strlen( $value ) > 100 ) {
-					$value = substr( $value, 0, 100 ) . '...';
+		// Log solo in debug mode
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$seo_fields_present = array();
+			$seo_fields = array(
+				'fp_seo_performance_metabox_present',
+				'fp_seo_title',
+				'fp_seo_title_sent',
+				'fp_seo_meta_description',
+				'fp_seo_meta_description_sent',
+				'fp_seo_focus_keyword',
+				'fp_seo_secondary_keywords',
+			);
+			
+			foreach ( $seo_fields as $field ) {
+				if ( isset( $_POST[ $field ] ) ) {
+					$value = $_POST[ $field ];
+					if ( is_string( $value ) && strlen( $value ) > 100 ) {
+						$value = substr( $value, 0, 100 ) . '...';
+					}
+					$seo_fields_present[ $field ] = $value;
 				}
-				error_log( 'FP SEO: POST[' . $field . '] = ' . $value );
-			} else {
-				error_log( 'FP SEO: POST[' . $field . '] = NOT SET' );
 			}
-		}
-		
-		if ( isset( $_POST ) && ! empty( $_POST ) ) {
-			$post_keys = array_slice( array_keys( $_POST ), 0, 30 );
-			error_log( 'FP SEO: Metabox::save_meta POST keys (first 30): ' . implode( ', ', $post_keys ) );
-		} else {
-			error_log( 'FP SEO: Metabox::save_meta - $_POST is empty or not set!' );
+			
+			Logger::debug( 'Metabox::save_meta called', array(
+				'post_id' => $post_id,
+				'update' => $update ? 'yes' : 'no',
+				'hook' => current_filter(),
+				'post_keys_count' => isset( $_POST ) ? count( $_POST ) : 0,
+				'seo_fields' => $seo_fields_present,
+			) );
 		}
 		
 		$saver = new \FP\SEO\Editor\MetaboxSaver();
 		$result = $saver->save_all_fields( $post_id );
-		error_log( 'FP SEO: Metabox::save_meta result: ' . ( $result ? 'true' : 'false' ) . ' - post_id: ' . $post_id );
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta completed', array(
+				'post_id' => $post_id,
+				'result' => $result ? 'success' : 'failed',
+			) );
+		}
+		
 		$saved[ $post_id ] = true;
 	}
 
@@ -1584,8 +1594,12 @@ class Metabox {
 	 * @param WP_Post $post    Post object (ignored).
 	 */
 	public function save_meta_edit_post( int $post_id, $post = null ): void {
-		// Always log - this helps debug if method is called
-		error_log( 'FP SEO: Metabox::save_meta_edit_post called (edit_post hook) - post_id: ' . $post_id );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta_edit_post called', array(
+				'post_id' => $post_id,
+				'hook' => 'edit_post',
+			) );
+		}
 		
 		// Use the same save_meta method but prevent double processing
 		$this->save_meta( $post_id, $post, true );
@@ -1657,8 +1671,13 @@ class Metabox {
 	 * @param bool            $creating Whether creating a new post.
 	 */
 	public function save_meta_rest( WP_Post $post, $request, bool $creating ): void {
-		// Log entry
-		error_log( 'FP SEO: Metabox::save_meta_rest called (REST API) - post_id: ' . $post->ID . ', creating: ' . ( $creating ? 'yes' : 'no' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta_rest called', array(
+				'post_id' => $post->ID,
+				'creating' => $creating ? 'yes' : 'no',
+				'hook' => 'REST API',
+			) );
+		}
 		
 		// In Gutenberg, i dati vengono passati via REST API
 		// Verifica se ci sono dati SEO nella richiesta
@@ -1674,7 +1693,13 @@ class Metabox {
 		
 		// Se trovati, salva direttamente
 		if ( $seo_title !== null || $meta_desc !== null ) {
-			error_log( 'FP SEO: REST API - Found SEO fields in request - title: ' . ( $seo_title ? 'yes' : 'no' ) . ', desc: ' . ( $meta_desc ? 'yes' : 'no' ) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'REST API - Found SEO fields in request', array(
+					'post_id' => $post->ID,
+					'has_title' => $seo_title !== null,
+					'has_description' => $meta_desc !== null,
+				) );
+			}
 			
 			$saver = new \FP\SEO\Editor\MetaboxSaver();
 			
@@ -1690,14 +1715,24 @@ class Metabox {
 			$_POST['fp_seo_performance_metabox_present'] = '1';
 			
 			$result = $saver->save_all_fields( $post->ID );
-			error_log( 'FP SEO: REST API save result: ' . ( $result ? 'success' : 'failed' ) );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'REST API save completed', array(
+					'post_id' => $post->ID,
+					'result' => $result ? 'success' : 'failed',
+				) );
+			}
 			
 			// Pulisci $_POST per evitare effetti collaterali
 			unset( $_POST['fp_seo_title'], $_POST['fp_seo_title_sent'] );
 			unset( $_POST['fp_seo_meta_description'], $_POST['fp_seo_meta_description_sent'] );
 			unset( $_POST['fp_seo_performance_metabox_present'] );
 		} else {
-			error_log( 'FP SEO: REST API - No SEO fields found in request params' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'REST API - No SEO fields found in request params', array(
+					'post_id' => $post->ID,
+				) );
+			}
 			// Prova a salvare comunque (potrebbero essere già stati salvati via register_rest_field)
 			// Non chiamare save_meta qui per evitare doppio salvataggio
 		}
@@ -1719,7 +1754,13 @@ class Metabox {
 	 * @param bool     $update  Whether this is an existing post being updated.
 	 */
 	public function save_meta_insert_post( int $post_id, $post, bool $update ): void {
-		error_log( 'FP SEO: Metabox::save_meta_insert_post called (wp_insert_post hook) - post_id: ' . $post_id . ', update: ' . ( $update ? 'yes' : 'no' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta_insert_post called', array(
+				'post_id' => $post_id,
+				'update' => $update ? 'yes' : 'no',
+				'hook' => 'wp_insert_post',
+			) );
+		}
 		
 		// Solo per update, non per nuovi post
 		if ( ! $update ) {
@@ -1729,7 +1770,13 @@ class Metabox {
 		// Chiama save_meta ma senza il controllo di duplicati (usa hook diverso)
 		$saver = new \FP\SEO\Editor\MetaboxSaver();
 		$result = $saver->save_all_fields( $post_id );
-		error_log( 'FP SEO: Metabox::save_meta_insert_post result: ' . ( $result ? 'true' : 'false' ) . ' - post_id: ' . $post_id );
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta_insert_post completed', array(
+				'post_id' => $post_id,
+				'result' => $result ? 'success' : 'failed',
+			) );
+		}
 	}
 
 	/**
@@ -1744,7 +1791,12 @@ class Metabox {
 	public function save_meta_pre_insert( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
 		$post_id = isset( $postarr['ID'] ) ? absint( $postarr['ID'] ) : 0;
 		if ( $post_id > 0 && $update ) {
-			error_log( 'FP SEO: Metabox::save_meta_pre_insert called (wp_insert_post_data hook) - post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta_pre_insert called', array(
+					'post_id' => $post_id,
+					'hook' => 'wp_insert_post_data',
+				) );
+			}
 			// Salva i meta prima che il post venga aggiornato
 			$saver = new \FP\SEO\Editor\MetaboxSaver();
 			$saver->save_all_fields( $post_id );
@@ -1753,8 +1805,12 @@ class Metabox {
 	}
 
 	public function save_meta_pre_update( int $post_id, array $data ): array {
-		// Log entry
-		error_log( 'FP SEO: Metabox::save_meta_pre_update called (pre_post_update) - post_id: ' . $post_id );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta_pre_update called', array(
+				'post_id' => $post_id,
+				'hook' => 'pre_post_update',
+			) );
+		}
 		
 		// Salva i campi SEO se presenti
 		// Questo hook viene chiamato prima di save_post, quindi possiamo salvare qui
@@ -1914,10 +1970,11 @@ class Metabox {
 		
 		// Debug: log checks structure
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'FP SEO: run_analysis_for_post - checks_array count: ' . count( $checks_array ) );
-			if ( ! empty( $checks_array ) ) {
-				error_log( 'FP SEO: run_analysis_for_post - first check keys: ' . implode( ', ', array_keys( reset( $checks_array ) ) ) );
-			}
+			Logger::debug( 'run_analysis_for_post - checks processed', array(
+				'post_id' => $post->ID,
+				'checks_count' => count( $checks_array ),
+				'first_check_keys' => ! empty( $checks_array ) ? array_keys( reset( $checks_array ) ) : array(),
+			) );
 		}
 		
 		$score = $score_engine->calculate( $checks_array );
@@ -1926,7 +1983,10 @@ class Metabox {
 		
 		// Debug: log formatted checks
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'FP SEO: run_analysis_for_post - formatted_checks count: ' . count( $formatted_checks ) );
+			Logger::debug( 'run_analysis_for_post - formatted checks', array(
+				'post_id' => $post->ID,
+				'formatted_checks_count' => count( $formatted_checks ),
+			) );
 		}
 		
 		return array(
@@ -2094,8 +2154,12 @@ class Metabox {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
 		}
 
-		error_log( 'FP SEO: handle_save_fields_ajax - post_id: ' . $post_id );
-		error_log( 'FP SEO: AJAX POST keys: ' . implode( ', ', array_keys( $_POST ) ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'handle_save_fields_ajax called', array(
+				'post_id' => $post_id,
+				'ajax_post_keys' => array_keys( $_POST ),
+			) );
+		}
 
 		// Get and sanitize values - supporta sia i nomi vecchi che quelli nuovi
 		$seo_title = '';
@@ -2128,7 +2192,14 @@ class Metabox {
 			$secondary_keywords = trim( $secondary_keywords );
 		}
 
-		error_log( 'FP SEO: AJAX values - title: ' . ( $seo_title ? substr( $seo_title, 0, 50 ) . '...' : 'empty' ) . ', desc: ' . ( $meta_description ? substr( $meta_description, 0, 50 ) . '...' : 'empty' ) . ', keyword: ' . ( $focus_keyword ? $focus_keyword : 'empty' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'AJAX save values', array(
+				'post_id' => $post_id,
+				'has_title' => ! empty( $seo_title ),
+				'has_description' => ! empty( $meta_description ),
+				'has_focus_keyword' => ! empty( $focus_keyword ),
+			) );
+		}
 
 		// Salva direttamente i campi senza usare MetaboxSaver per evitare conflitti
 		// Questo è più sicuro in contesto AJAX
@@ -2162,12 +2233,20 @@ class Metabox {
 			}
 
 			$result = true;
-			error_log( 'FP SEO: AJAX direct save successful for post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'AJAX direct save successful', array( 'post_id' => $post_id ) );
+			}
 		} catch ( \Exception $e ) {
-			error_log( 'FP SEO: AJAX save error: ' . $e->getMessage() );
+			Logger::error( 'AJAX save error', array(
+				'post_id' => $post_id,
+				'error' => $e->getMessage(),
+			) );
 			$result = false;
 		} catch ( \Error $e ) {
-			error_log( 'FP SEO: AJAX save fatal error: ' . $e->getMessage() );
+			Logger::error( 'AJAX save fatal error', array(
+				'post_id' => $post_id,
+				'error' => $e->getMessage(),
+			) );
 			$result = false;
 		}
 

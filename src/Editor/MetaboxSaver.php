@@ -81,37 +81,51 @@ class MetaboxSaver {
 	 * @return bool True if saved successfully, false otherwise.
 	 */
 	public function save_all_fields( int $post_id ): bool {
-		// Always log entry
-		error_log( 'FP SEO: MetaboxSaver::save_all_fields called - post_id: ' . $post_id . ', REQUEST_METHOD: ' . ( isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : 'unknown' ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'MetaboxSaver::save_all_fields called', array(
+				'post_id' => $post_id,
+				'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+			) );
+		}
 		
 		// Prevent multiple saves in the same request
 		if ( isset( self::$saved_posts[ $post_id ] ) ) {
-			error_log( 'FP SEO: save_all_fields already called for post_id: ' . $post_id . ', skipping' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'save_all_fields already called, skipping', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
 		// Basic validation
 		if ( ! $this->should_save( $post_id ) ) {
-			error_log( 'FP SEO: should_save returned false for post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'should_save returned false', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
 		// Check if metabox fields are present
 		$has_fields = $this->has_metabox_fields();
-		error_log( 'FP SEO: has_metabox_fields returned: ' . ( $has_fields ? 'true' : 'false' ) );
 		if ( ! $has_fields ) {
-			// Log POST keys for debugging
-			$post_keys = array_keys( $_POST ?? array() );
-			$fp_keys = array_filter( $post_keys, function( $key ) {
-				return strpos( $key, 'fp_seo' ) === 0;
-			} );
-			error_log( 'FP SEO: No metabox fields found. POST keys (first 30): ' . implode( ', ', array_slice( $post_keys, 0, 30 ) ) );
-			error_log( 'FP SEO: FP SEO keys in POST: ' . ( ! empty( $fp_keys ) ? implode( ', ', $fp_keys ) : 'none' ) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$post_keys = array_keys( $_POST ?? array() );
+				$fp_keys = array_filter( $post_keys, function( $key ) {
+					return strpos( $key, 'fp_seo' ) === 0;
+				} );
+				Logger::debug( 'No metabox fields found', array(
+					'post_id' => $post_id,
+					'post_keys_count' => count( $post_keys ),
+					'fp_seo_keys' => array_values( $fp_keys ),
+					'rest_request' => defined( 'REST_REQUEST' ) && REST_REQUEST,
+				) );
+			}
 			
 			// IMPORTANTE: In Gutenberg/REST API, i campi potrebbero non essere in $_POST
 			// Verifica se siamo in un contesto REST API
 			if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
-				error_log( 'FP SEO: REST API context detected - will try to save from meta fields' );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'REST API context detected - will try to save from meta fields', array( 'post_id' => $post_id ) );
+				}
 				// In REST API, i campi potrebbero essere già salvati o essere in meta
 				// Procedi comunque con il salvataggio se ci sono valori da salvare
 			} else {
@@ -126,7 +140,10 @@ class MetaboxSaver {
 		}
 
 		// Save all fields
-		error_log( 'FP SEO: Starting to save fields for post_id: ' . $post_id );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Starting to save fields', array( 'post_id' => $post_id ) );
+		}
+		
 		$this->save_title( $post_id );
 		$this->save_description( $post_id );
 		$this->save_slug( $post_id );
@@ -148,7 +165,10 @@ class MetaboxSaver {
 			wp_cache_flush_group( 'post_meta' );
 		}
 
-		error_log( 'FP SEO: Finished saving fields for post_id: ' . $post_id );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Finished saving fields', array( 'post_id' => $post_id ) );
+		}
+		
 		return true;
 	}
 
@@ -165,29 +185,40 @@ class MetaboxSaver {
 						  isset( $_POST['fp_seo_meta_description_sent'] );
 		
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE && ! $has_seo_fields ) {
-			error_log( 'FP SEO: should_save=false - DOING_AUTOSAVE (no SEO fields)' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'should_save=false - DOING_AUTOSAVE (no SEO fields)', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
 		// Skip revision
 		if ( wp_is_post_revision( $post_id ) ) {
-			error_log( 'FP SEO: should_save=false - is revision' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'should_save=false - is revision', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
 		// Skip AJAX heartbeat (ma solo se non ci sono campi SEO)
 		if ( defined( 'DOING_AJAX' ) && DOING_AJAX && isset( $_POST['action'] ) && 'heartbeat' === $_POST['action'] && ! $has_seo_fields ) {
-			error_log( 'FP SEO: should_save=false - heartbeat (no SEO fields)' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'should_save=false - heartbeat (no SEO fields)', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
 		// Check user capability
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			error_log( 'FP SEO: should_save=false - no capability' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'should_save=false - no capability', array( 'post_id' => $post_id ) );
+			}
 			return false;
 		}
 
-		error_log( 'FP SEO: should_save=true - all checks passed' );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'should_save=true - all checks passed', array( 'post_id' => $post_id ) );
+		}
+		
 		return true;
 	}
 
@@ -203,7 +234,9 @@ class MetaboxSaver {
 		
 		// Check if metabox is present via hidden field (most reliable)
 		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) && $_POST['fp_seo_performance_metabox_present'] === '1' ) {
-			error_log( 'FP SEO: Metabox present via hidden field' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox present via hidden field' );
+			}
 			return true;
 		}
 
@@ -219,26 +252,44 @@ class MetaboxSaver {
 		$has_any = $has_title || $has_desc || $has_slug || $has_excerpt || $has_focus || $has_secondary;
 		
 		if ( $has_any ) {
-			error_log( 'FP SEO: Metabox fields detected - title: ' . ( $has_title ? 'yes' : 'no' ) . ', desc: ' . ( $has_desc ? 'yes' : 'no' ) . ', slug: ' . ( $has_slug ? 'yes' : 'no' ) . ', excerpt: ' . ( $has_excerpt ? 'yes' : 'no' ) . ', focus: ' . ( $has_focus ? 'yes' : 'no' ) . ', secondary: ' . ( $has_secondary ? 'yes' : 'no' ) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox fields detected', array(
+					'has_title' => $has_title,
+					'has_desc' => $has_desc,
+					'has_slug' => $has_slug,
+					'has_excerpt' => $has_excerpt,
+					'has_focus' => $has_focus,
+					'has_secondary' => $has_secondary,
+				) );
+			}
 			return true;
 		}
 		
 		// NUOVO: Se siamo in un salvataggio post ma non abbiamo trovato campi, 
 		// potrebbe essere che i campi non sono stati inviati. Prova comunque se è un edit post.
 		if ( $is_post_save && ! defined( 'DOING_AUTOSAVE' ) ) {
-			error_log( 'FP SEO: Post save detected but no SEO fields found - will try to save anyway if metabox was rendered' );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Post save detected but no SEO fields found', array(
+					'is_post_save' => true,
+					'doing_autosave' => false,
+				) );
+			}
 			// Controlla se il metabox è stato renderizzato guardando se esiste almeno un campo visibile
 			// Questo è un fallback - meglio avere campi espliciti
 			return false; // Non salvare se non ci sono campi - ma logga per debug
 		}
 		
 		// Log dettagliato per debug se non trova campi
-		$post_keys = array_keys( $_POST ?? array() );
-		$fp_keys = array_filter( $post_keys, function( $key ) {
-			return strpos( $key, 'fp_seo' ) === 0;
-		} );
-		error_log( 'FP SEO: No metabox fields found. FP SEO keys in POST: ' . ( ! empty( $fp_keys ) ? implode( ', ', $fp_keys ) : 'none' ) );
-		error_log( 'FP SEO: POST keys (first 50): ' . implode( ', ', array_slice( $post_keys, 0, 50 ) ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$post_keys = array_keys( $_POST ?? array() );
+			$fp_keys = array_filter( $post_keys, function( $key ) {
+				return strpos( $key, 'fp_seo' ) === 0;
+			} );
+			Logger::debug( 'No metabox fields found', array(
+				'fp_seo_keys' => array_values( $fp_keys ),
+				'post_keys_count' => count( $post_keys ),
+			) );
+		}
 		
 		return $has_any;
 	}
@@ -255,7 +306,9 @@ class MetaboxSaver {
 		$metabox_present = isset( $_POST['fp_seo_performance_metabox_present'] ) && $_POST['fp_seo_performance_metabox_present'] === '1';
 		
 		if ( ! $field_sent && ! $metabox_present ) {
-			error_log( 'FP SEO: save_title skipped - field not sent and metabox not present - post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'save_title skipped - field not sent and metabox not present', array( 'post_id' => $post_id ) );
+			}
 			return;
 		}
 
@@ -269,7 +322,13 @@ class MetaboxSaver {
 
 		$title = trim( sanitize_text_field( wp_unslash( (string) $title_raw ) ) );
 
-		error_log( 'FP SEO: save_title processing - post_id: ' . $post_id . ', title_raw: "' . substr( (string) $title_raw, 0, 50 ) . '", title: "' . substr( $title, 0, 50 ) . '"' );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'save_title processing', array(
+				'post_id' => $post_id,
+				'title_length' => strlen( (string) $title_raw ),
+				'title_preview' => substr( $title, 0, 50 ),
+			) );
+		}
 
 		if ( '' !== $title ) {
 			// Use update_post_meta which handles both insert and update
@@ -295,9 +354,18 @@ class MetaboxSaver {
 			// Verify the save (with cache cleared)
 			$saved_value = get_post_meta( $post_id, self::META_SEO_TITLE, true );
 			if ( $saved_value === $title ) {
-				error_log( 'FP SEO: Title saved SUCCESSFULLY - post_id: ' . $post_id . ', title: "' . substr( $title, 0, 50 ) . '"' );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Title saved successfully', array(
+						'post_id' => $post_id,
+						'title_preview' => substr( $title, 0, 50 ),
+					) );
+				}
 			} else {
-				error_log( 'FP SEO: Title save MISMATCH - post_id: ' . $post_id . ', expected: "' . substr( $title, 0, 50 ) . '", got: "' . substr( $saved_value ?: '', 0, 50 ) . '"' );
+				Logger::warning( 'Title save mismatch - retrying', array(
+					'post_id' => $post_id,
+					'expected' => substr( $title, 0, 50 ),
+					'got' => substr( $saved_value ?: '', 0, 50 ),
+				) );
 				// Retry save
 				delete_post_meta( $post_id, self::META_SEO_TITLE );
 				add_post_meta( $post_id, self::META_SEO_TITLE, $title, true );
@@ -311,9 +379,13 @@ class MetaboxSaver {
 				delete_post_meta( $post_id, self::META_SEO_TITLE );
 				wp_cache_delete( $post_id, 'post_meta' );
 				clean_post_cache( $post_id );
-				error_log( 'FP SEO: Title deleted (explicitly empty) - post_id: ' . $post_id );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Title deleted (explicitly empty)', array( 'post_id' => $post_id ) );
+				}
 			} else {
-				error_log( 'FP SEO: Title not deleted (field not explicitly sent as empty) - post_id: ' . $post_id );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Title not deleted (field not explicitly sent as empty)', array( 'post_id' => $post_id ) );
+				}
 			}
 		}
 	}
@@ -329,7 +401,9 @@ class MetaboxSaver {
 		$metabox_present = isset( $_POST['fp_seo_performance_metabox_present'] ) && $_POST['fp_seo_performance_metabox_present'] === '1';
 		
 		if ( ! $field_sent && ! $metabox_present ) {
-			error_log( 'FP SEO: save_description skipped - field not sent and metabox not present - post_id: ' . $post_id );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'save_description skipped - field not sent and metabox not present', array( 'post_id' => $post_id ) );
+			}
 			return;
 		}
 
@@ -343,7 +417,13 @@ class MetaboxSaver {
 
 		$description = trim( sanitize_textarea_field( wp_unslash( (string) $desc_raw ) ) );
 
-		error_log( 'FP SEO: save_description processing - post_id: ' . $post_id . ', desc_raw: "' . substr( (string) $desc_raw, 0, 50 ) . '", description: "' . substr( $description, 0, 50 ) . '"' );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'save_description processing', array(
+				'post_id' => $post_id,
+				'description_length' => strlen( (string) $desc_raw ),
+				'description_preview' => substr( $description, 0, 50 ),
+			) );
+		}
 
 		if ( '' !== $description ) {
 			// Use update_post_meta which handles both insert and update
@@ -369,9 +449,18 @@ class MetaboxSaver {
 			// Verify the save (with cache cleared)
 			$saved_value = get_post_meta( $post_id, self::META_SEO_DESCRIPTION, true );
 			if ( $saved_value === $description ) {
-				error_log( 'FP SEO: Description saved SUCCESSFULLY - post_id: ' . $post_id . ', description: "' . substr( $description, 0, 50 ) . '"' );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Description saved successfully', array(
+						'post_id' => $post_id,
+						'description_preview' => substr( $description, 0, 50 ),
+					) );
+				}
 			} else {
-				error_log( 'FP SEO: Description save MISMATCH - post_id: ' . $post_id . ', expected: "' . substr( $description, 0, 50 ) . '", got: "' . substr( $saved_value ?: '', 0, 50 ) . '"' );
+				Logger::warning( 'Description save mismatch - retrying', array(
+					'post_id' => $post_id,
+					'expected' => substr( $description, 0, 50 ),
+					'got' => substr( $saved_value ?: '', 0, 50 ),
+				) );
 				// Retry save
 				delete_post_meta( $post_id, self::META_SEO_DESCRIPTION );
 				add_post_meta( $post_id, self::META_SEO_DESCRIPTION, $description, true );
@@ -384,9 +473,13 @@ class MetaboxSaver {
 				delete_post_meta( $post_id, self::META_SEO_DESCRIPTION );
 				wp_cache_delete( $post_id, 'post_meta' );
 				clean_post_cache( $post_id );
-				error_log( 'FP SEO: Description deleted (explicitly empty) - post_id: ' . $post_id );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Description deleted (explicitly empty)', array( 'post_id' => $post_id ) );
+				}
 			} else {
-				error_log( 'FP SEO: Description not deleted (field not explicitly sent as empty) - post_id: ' . $post_id );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Description not deleted (field not explicitly sent as empty)', array( 'post_id' => $post_id ) );
+				}
 			}
 		}
 	}
