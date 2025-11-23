@@ -56,8 +56,15 @@ class H1PresenceCheck implements CheckInterface {
 			return false;
 		}
 		
+		// Normalize text: decode HTML entities, normalize spaces, remove extra whitespace
+		$text_normalized = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$text_normalized = preg_replace( '/\s+/u', ' ', $text_normalized );
+		$text_normalized = trim( $text_normalized );
+		
+		$keyword_normalized = trim( $keyword );
+		
 		// First try exact match (case-insensitive)
-		if ( false !== mb_stripos( $text, $keyword ) ) {
+		if ( false !== mb_stripos( $text_normalized, $keyword_normalized ) ) {
 			return true;
 		}
 		
@@ -65,19 +72,29 @@ class H1PresenceCheck implements CheckInterface {
 		// Words to ignore (common Italian/English stop words)
 		$stop_words = array( 'a', 'an', 'the', 'di', 'da', 'in', 'su', 'per', 'con', 'il', 'la', 'lo', 'gli', 'le', 'un', 'una', 'uno', 'e', 'o', 'ma', 'che', 'è', 'sono', 'del', 'della', 'dei', 'delle', 'al', 'alla', 'ai', 'alle' );
 		
-		// Normalize & to handle variations (B&B, B & B, B and B)
-		$keyword_normalized = preg_replace( '/\s*&\s*/u', '&', $keyword );
-		$text_normalized = preg_replace( '/\s*&\s*/u', '&', $text );
+		// Normalize & to handle variations (B&B, B & B, B and B, &amp;)
+		// $text_normalized is already decoded, so we just need to decode keyword if needed
+		$keyword_decoded = html_entity_decode( $keyword_normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		
-		// Try normalized match first
-		if ( false !== mb_stripos( $text_normalized, $keyword_normalized ) ) {
+		// Normalize spaces around & (remove spaces before/after &)
+		$keyword_amp_normalized = preg_replace( '/\s*&\s*/u', '&', $keyword_decoded );
+		$text_amp_normalized = preg_replace( '/\s*&\s*/u', '&', $text_normalized );
+		
+		// Try normalized match with & normalization
+		if ( false !== mb_stripos( $text_amp_normalized, $keyword_amp_normalized ) ) {
+			return true;
+		}
+		
+		// Also try with HTML entity &amp;
+		$keyword_amp_entity = str_replace( '&', '&amp;', $keyword_amp_normalized );
+		if ( false !== mb_stripos( $text_normalized, $keyword_amp_entity ) ) {
 			return true;
 		}
 		
 		// Split keyword into words (split on spaces, but preserve & as part of word)
-		// First split on spaces
-		$keyword_parts = preg_split( '/\s+/u', mb_strtolower( $keyword ), -1, PREG_SPLIT_NO_EMPTY );
-		$text_lower = mb_strtolower( $text );
+		// Use the decoded and normalized keyword
+		$keyword_parts = preg_split( '/\s+/u', mb_strtolower( $keyword_decoded ), -1, PREG_SPLIT_NO_EMPTY );
+		$text_lower = mb_strtolower( $text_amp_normalized );
 		
 		// Check if all significant words/parts are present
 		foreach ( $keyword_parts as $part ) {
@@ -88,15 +105,29 @@ class H1PresenceCheck implements CheckInterface {
 			
 			// If part contains &, check for it as-is (e.g., "b&b")
 			if ( false !== strpos( $part, '&' ) ) {
-				if ( false === mb_stripos( $text_lower, $part ) ) {
-					// If "b&b" not found, try splitting it
-					$sub_parts = explode( '&', $part );
-					foreach ( $sub_parts as $sub_part ) {
-						$sub_part = trim( $sub_part );
-						if ( ! empty( $sub_part ) && false === mb_stripos( $text_lower, $sub_part ) ) {
-							return false;
-						}
+				// Try exact match first
+				if ( false !== mb_stripos( $text_lower, $part ) ) {
+					continue; // Found, move to next part
+				}
+				
+				// Try with HTML entity
+				$part_entity = str_replace( '&', '&amp;', $part );
+				if ( false !== mb_stripos( $text_lower, $part_entity ) ) {
+					continue; // Found, move to next part
+				}
+				
+				// If "b&b" not found, try splitting it
+				$sub_parts = explode( '&', $part );
+				$all_found = true;
+				foreach ( $sub_parts as $sub_part ) {
+					$sub_part = trim( $sub_part );
+					if ( ! empty( $sub_part ) && false === mb_stripos( $text_lower, $sub_part ) ) {
+						$all_found = false;
+						break;
 					}
+				}
+				if ( ! $all_found ) {
+					return false;
 				}
 				continue;
 			}
@@ -145,7 +176,13 @@ class H1PresenceCheck implements CheckInterface {
 		$has_keyword = false;
 
 		foreach ( $nodes as $node ) {
+			// Get text content and normalize it
 			$text = trim( (string) $node->{'textContent'} );
+			// Decode HTML entities to get clean text
+			$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			// Normalize whitespace
+			$text = preg_replace( '/\s+/u', ' ', $text );
+			$text = trim( $text );
 
 			if ( '' !== $text ) {
 				++$count;

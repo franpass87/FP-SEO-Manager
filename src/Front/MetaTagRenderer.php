@@ -39,6 +39,9 @@ class MetaTagRenderer {
 	 */
 	public function register(): void {
 		add_action( 'wp_head', array( $this, 'render_meta_tags' ), 0 );
+		// Filter document title to use SEO title if different from post title
+		add_filter( 'pre_get_document_title', array( $this, 'filter_document_title' ), 10, 1 );
+		add_filter( 'document_title_parts', array( $this, 'filter_document_title_parts' ), 10, 1 );
 	}
 
 	/**
@@ -110,6 +113,95 @@ class MetaTagRenderer {
 		}
 
 		return substr( $description, 0, 155 );
+	}
+
+	/**
+	 * Filter document title to use SEO title if available and different from post title.
+	 *
+	 * @param string $title Current document title.
+	 * @return string Filtered title.
+	 */
+	public function filter_document_title( string $title ): string {
+		if ( is_admin() || is_feed() || is_preview() || ! is_singular() ) {
+			return $title;
+		}
+
+		$post_id = get_queried_object_id();
+		if ( ! $post_id ) {
+			return $title;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return $title;
+		}
+
+		// Get SEO title
+		$seo_title = MetadataResolver::resolve_seo_title( $post );
+		
+		// If SEO title is empty or same as post title, return original
+		if ( empty( $seo_title ) || $seo_title === $post->post_title ) {
+			return $title;
+		}
+
+		// Use SEO title instead
+		$seo_title = wp_strip_all_tags( $seo_title );
+		$seo_title = trim( $seo_title );
+
+		// If SEO title is different from post title, use it
+		if ( $seo_title !== $post->post_title && ! empty( $seo_title ) ) {
+			// Get site name for context
+			$site_name = get_bloginfo( 'name', 'display' );
+			
+			// Build title with site name
+			$separator = apply_filters( 'document_title_separator', '-' );
+			$new_title = $seo_title . ' ' . $separator . ' ' . $site_name;
+			
+			return $new_title;
+		}
+
+		return $title;
+	}
+
+	/**
+	 * Filter document title parts to use SEO title.
+	 *
+	 * @param array<string, string> $title_parts Title parts.
+	 * @return array<string, string> Filtered title parts.
+	 */
+	public function filter_document_title_parts( array $title_parts ): array {
+		if ( is_admin() || is_feed() || is_preview() || ! is_singular() ) {
+			return $title_parts;
+		}
+
+		$post_id = get_queried_object_id();
+		if ( ! $post_id ) {
+			return $title_parts;
+		}
+
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			return $title_parts;
+		}
+
+		// Get SEO title
+		$seo_title = MetadataResolver::resolve_seo_title( $post );
+		
+		// If SEO title is empty or same as post title, return original
+		if ( empty( $seo_title ) || $seo_title === $post->post_title ) {
+			return $title_parts;
+		}
+
+		// Use SEO title instead of post title
+		$seo_title = wp_strip_all_tags( $seo_title );
+		$seo_title = trim( $seo_title );
+
+		if ( ! empty( $seo_title ) && $seo_title !== $post->post_title ) {
+			// Replace the title part with SEO title
+			$title_parts['title'] = $seo_title;
+		}
+
+		return $title_parts;
 	}
 }
 

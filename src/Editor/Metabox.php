@@ -54,6 +54,7 @@ class Metabox {
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
 	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
+	private const AJAX_SAVE_IMAGES = 'fp_seo_save_images_data';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
@@ -178,6 +179,7 @@ class Metabox {
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
+			add_action( 'wp_ajax_' . self::AJAX_SAVE_IMAGES, array( $this, 'handle_save_images_ajax' ) );
 			add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
 		} catch ( \Throwable $e ) {
 			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
@@ -540,7 +542,7 @@ class Metabox {
 			slugField.addEventListener('input', updateSlugCounter);
 		}
 		
-		// Excerpt counter
+		// Excerpt counter and Gutenberg sync
 		const excerptField = document.getElementById('fp-seo-excerpt');
 		const excerptCounter = document.getElementById('fp-seo-excerpt-counter');
 		
@@ -565,7 +567,27 @@ class Metabox {
 			updateExcerptCounter();
 			
 			// Update on input
-			excerptField.addEventListener('input', updateExcerptCounter);
+			excerptField.addEventListener('input', function() {
+				updateExcerptCounter();
+				
+				// Sync with Gutenberg if available
+				if (wp && wp.data && wp.data.dispatch('core/editor')) {
+					wp.data.dispatch('core/editor').editPost({
+						excerpt: excerptField.value
+					});
+				}
+			});
+			
+			// Sync from Gutenberg to our field
+			if (wp && wp.data && wp.data.select('core/editor')) {
+				wp.data.subscribe(function() {
+					const gutenbergExcerpt = wp.data.select('core/editor').getEditedPostAttribute('excerpt');
+					if (gutenbergExcerpt !== null && gutenbergExcerpt !== excerptField.value) {
+						excerptField.value = gutenbergExcerpt || '';
+						updateExcerptCounter();
+					}
+				});
+			}
 		}
 	});
 	</script>
@@ -1690,9 +1712,10 @@ class Metabox {
 		// Cerca campi SEO nei parametri (possono essere in meta o direttamente)
 		$seo_title = $params['fp_seo_title'] ?? $params['meta']['_fp_seo_title'] ?? null;
 		$meta_desc = $params['fp_seo_meta_description'] ?? $params['meta']['_fp_seo_meta_description'] ?? null;
+		$excerpt = $params['excerpt'] ?? $params['fp_seo_excerpt'] ?? null;
 		
 		// Se trovati, salva direttamente
-		if ( $seo_title !== null || $meta_desc !== null ) {
+		if ( $seo_title !== null || $meta_desc !== null || $excerpt !== null ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'REST API - Found SEO fields in request', array(
 					'post_id' => $post->ID,
@@ -1712,6 +1735,10 @@ class Metabox {
 				$_POST['fp_seo_meta_description'] = $meta_desc;
 				$_POST['fp_seo_meta_description_sent'] = '1';
 			}
+			if ( $excerpt !== null ) {
+				$_POST['fp_seo_excerpt'] = $excerpt;
+				$_POST['fp_seo_excerpt_sent'] = '1';
+			}
 			$_POST['fp_seo_performance_metabox_present'] = '1';
 			
 			$result = $saver->save_all_fields( $post->ID );
@@ -1726,6 +1753,7 @@ class Metabox {
 			// Pulisci $_POST per evitare effetti collaterali
 			unset( $_POST['fp_seo_title'], $_POST['fp_seo_title_sent'] );
 			unset( $_POST['fp_seo_meta_description'], $_POST['fp_seo_meta_description_sent'] );
+			unset( $_POST['fp_seo_excerpt'], $_POST['fp_seo_excerpt_sent'] );
 			unset( $_POST['fp_seo_performance_metabox_present'] );
 		} else {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -1790,6 +1818,27 @@ class Metabox {
 	 */
 	public function save_meta_pre_insert( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
 		$post_id = isset( $postarr['ID'] ) ? absint( $postarr['ID'] ) : 0;
+		
+		// Salva excerpt se presente (sia per nuovi post che per update)
+		if ( isset( $_POST['fp_seo_excerpt'] ) || isset( $postarr['fp_seo_excerpt'] ) ) {
+			$excerpt = isset( $_POST['fp_seo_excerpt'] ) 
+				? sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) )
+				: sanitize_textarea_field( (string) ( $postarr['fp_seo_excerpt'] ?? '' ) );
+			
+			$excerpt = trim( $excerpt );
+			
+			// Aggiorna direttamente nel data array per assicurarsi che venga salvato
+			$data['post_excerpt'] = $excerpt;
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta_pre_insert - Excerpt saved', array(
+					'post_id' => $post_id,
+					'excerpt_length' => strlen( $excerpt ),
+					'hook' => 'wp_insert_post_data',
+				) );
+			}
+		}
+		
 		if ( $post_id > 0 && $update ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'Metabox::save_meta_pre_insert called', array(
@@ -1816,7 +1865,9 @@ class Metabox {
 		// Questo hook viene chiamato prima di save_post, quindi possiamo salvare qui
 		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) || 
 			 isset( $_POST['fp_seo_title_sent'] ) || 
-			 isset( $_POST['fp_seo_meta_description_sent'] ) ) {
+			 isset( $_POST['fp_seo_meta_description_sent'] ) ||
+			 isset( $_POST['fp_seo_excerpt'] ) ||
+			 isset( $_POST['fp_seo_excerpt_sent'] ) ) {
 			$saver = new \FP\SEO\Editor\MetaboxSaver();
 			$saver->save_all_fields( $post_id );
 		}
@@ -2192,12 +2243,19 @@ class Metabox {
 			$secondary_keywords = trim( $secondary_keywords );
 		}
 
+		$excerpt = '';
+		if ( isset( $_POST['fp_seo_excerpt'] ) ) {
+			$excerpt = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) );
+			$excerpt = trim( $excerpt );
+		}
+
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'AJAX save values', array(
 				'post_id' => $post_id,
 				'has_title' => ! empty( $seo_title ),
 				'has_description' => ! empty( $meta_description ),
 				'has_focus_keyword' => ! empty( $focus_keyword ),
+				'has_excerpt' => ! empty( $excerpt ),
 			) );
 		}
 
@@ -2230,6 +2288,47 @@ class Metabox {
 				update_post_meta( $post_id, self::META_SECONDARY_KEYWORDS, $secondary_keywords );
 			} else {
 				delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
+			}
+
+			// Salva Excerpt
+			if ( '' !== $excerpt ) {
+				$excerpt_result = wp_update_post(
+					array(
+						'ID'           => $post_id,
+						'post_excerpt' => $excerpt,
+					),
+					true
+				);
+				
+				if ( is_wp_error( $excerpt_result ) ) {
+					// Fallback: direct database update
+					global $wpdb;
+					$wpdb->update(
+						$wpdb->posts,
+						array( 'post_excerpt' => $excerpt ),
+						array( 'ID' => $post_id ),
+						array( '%s' ),
+						array( '%d' )
+					);
+					clean_post_cache( $post_id );
+					wp_cache_delete( $post_id, 'posts' );
+				} else {
+					clean_post_cache( $post_id );
+					wp_cache_delete( $post_id, 'posts' );
+				}
+			} else {
+				// Se excerpt è vuoto, rimuovilo
+				$excerpt_result = wp_update_post(
+					array(
+						'ID'           => $post_id,
+						'post_excerpt' => '',
+					),
+					true
+				);
+				if ( ! is_wp_error( $excerpt_result ) ) {
+					clean_post_cache( $post_id );
+					wp_cache_delete( $post_id, 'posts' );
+				}
 			}
 
 			$result = true;
@@ -2339,6 +2438,210 @@ class Metabox {
 		);
 
 		return $example_map[ $check_id ] ?? null;
+	}
+
+	/**
+	 * Handle AJAX request to save images data.
+	 */
+	public function handle_save_images_ajax(): void {
+		// Verify nonce
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_images_nonce' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
+		}
+
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+
+		if ( $post_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+		}
+
+		// Get images data
+		$images_data = isset( $_POST['images'] ) && is_array( $_POST['images'] ) ? $_POST['images'] : array();
+
+		if ( empty( $images_data ) ) {
+			wp_send_json_error( array( 'message' => __( 'No images data provided.', 'fp-seo-performance' ) ), 400 );
+		}
+
+		// Sanitize images data
+		$sanitized_images = array();
+		foreach ( $images_data as $src => $data ) {
+			if ( ! is_array( $data ) ) {
+				continue;
+			}
+
+			$sanitized_images[ esc_url_raw( $src ) ] = array(
+				'alt'         => sanitize_text_field( $data['alt'] ?? '' ),
+				'title'       => sanitize_text_field( $data['title'] ?? '' ),
+				'description' => sanitize_textarea_field( $data['description'] ?? '' ),
+			);
+		}
+
+		// Save images data to post meta
+		update_post_meta( $post_id, '_fp_seo_images_data', $sanitized_images );
+
+		// Update post content with new alt and title attributes
+		$post = get_post( $post_id );
+		if ( $post ) {
+			$content = $post->post_content;
+			$updated_content = $this->update_images_in_content( $content, $sanitized_images );
+
+			if ( $updated_content !== $content ) {
+				// Update post content
+				wp_update_post( array(
+					'ID'           => $post_id,
+					'post_content' => $updated_content,
+				) );
+			}
+
+			// Also update attachment alt text if image is a WordPress attachment
+			foreach ( $sanitized_images as $src => $data ) {
+				$attachment_id = $this->get_attachment_id_from_url( $src );
+				if ( $attachment_id && ! empty( $data['alt'] ) ) {
+					update_post_meta( $attachment_id, '_wp_attachment_image_alt', $data['alt'] );
+				}
+			}
+		}
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Images data saved', array(
+				'post_id'      => $post_id,
+				'images_count' => count( $sanitized_images ),
+			) );
+		}
+
+		wp_send_json_success( array(
+			'message' => __( 'Images data saved successfully.', 'fp-seo-performance' ),
+			'count'   => count( $sanitized_images ),
+		) );
+	}
+
+	/**
+	 * Update images in post content with new alt and title attributes.
+	 *
+	 * @param string $content Post content.
+	 * @param array<string, array{alt: string, title: string, description: string}> $images_data Images data.
+	 * @return string Updated content.
+	 */
+	private function update_images_in_content( string $content, array $images_data ): string {
+		if ( empty( $content ) || empty( $images_data ) ) {
+			return $content;
+		}
+
+		// Use DOMDocument to parse and update HTML
+		$dom = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
+		libxml_clear_errors();
+
+		$img_tags = $dom->getElementsByTagName( 'img' );
+		$updated = false;
+
+		foreach ( $img_tags as $img ) {
+			$src = $img->getAttribute( 'src' );
+			
+			// Remove query strings for matching
+			$src_clean = strtok( $src, '?' );
+			
+			// Find matching image data
+			$image_data = null;
+			foreach ( $images_data as $data_src => $data ) {
+				$data_src_clean = strtok( $data_src, '?' );
+				if ( $src_clean === $data_src_clean || $src === $data_src ) {
+					$image_data = $data;
+					break;
+				}
+			}
+
+			if ( $image_data ) {
+				// Update alt attribute
+				if ( ! empty( $image_data['alt'] ) ) {
+					$img->setAttribute( 'alt', $image_data['alt'] );
+					$updated = true;
+				} elseif ( $img->hasAttribute( 'alt' ) && empty( $image_data['alt'] ) ) {
+					// Remove alt if it was cleared
+					$img->removeAttribute( 'alt' );
+					$updated = true;
+				}
+
+				// Update title attribute
+				if ( ! empty( $image_data['title'] ) ) {
+					$img->setAttribute( 'title', $image_data['title'] );
+					$updated = true;
+				} elseif ( $img->hasAttribute( 'title' ) && empty( $image_data['title'] ) ) {
+					// Remove title if it was cleared
+					$img->removeAttribute( 'title' );
+					$updated = true;
+				}
+			}
+		}
+
+		if ( ! $updated ) {
+			return $content;
+		}
+
+		// Get updated HTML
+		$updated_content = $dom->saveHTML();
+		
+		// Remove XML declaration and DOCTYPE if present
+		$updated_content = preg_replace( '/^<\?xml[^>]*\?>/i', '', $updated_content );
+		$updated_content = preg_replace( '/<!DOCTYPE[^>]*>/i', '', $updated_content );
+		$updated_content = trim( $updated_content );
+
+		return $updated_content;
+	}
+
+	/**
+	 * Get attachment ID from image URL.
+	 *
+	 * @param string $url Image URL.
+	 * @return int|null Attachment ID or null if not found.
+	 */
+	private function get_attachment_id_from_url( string $url ): ?int {
+		// Remove query strings
+		$url = strtok( $url, '?' );
+		
+		// Try to get attachment ID from URL
+		global $wpdb;
+		
+		// Try full URL match
+		$attachment_id = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
+			basename( $url )
+		) );
+		
+		if ( $attachment_id ) {
+			return (int) $attachment_id;
+		}
+		
+		// Try GUID match
+		$attachment_id = $wpdb->get_var( $wpdb->prepare(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND guid = %s LIMIT 1",
+			$url
+		) );
+		
+		if ( $attachment_id ) {
+			return (int) $attachment_id;
+		}
+		
+		// Try to extract from URL path
+		$upload_dir = wp_upload_dir();
+		if ( strpos( $url, $upload_dir['baseurl'] ) !== false ) {
+			$relative_path = str_replace( $upload_dir['baseurl'] . '/', '', $url );
+			$attachment_id = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
+				$relative_path
+			) );
+			
+			if ( $attachment_id ) {
+				return (int) $attachment_id;
+			}
+		}
+		
+		return null;
 	}
 
 }

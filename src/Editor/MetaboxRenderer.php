@@ -238,6 +238,7 @@ class MetaboxRenderer {
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
 			<?php $this->render_header( $excluded, $score_value, $score_status ); ?>
 			<?php $this->render_serp_optimization_section( $post ); ?>
+			<?php $this->render_images_section( $post ); ?>
 			<?php $this->render_analysis_section( $checks ); ?>
 			<?php $this->render_gsc_metrics( $post ); ?>
 			<?php $this->render_ai_section( $post ); ?>
@@ -305,7 +306,7 @@ class MetaboxRenderer {
 	private function render_serp_optimization_section( WP_Post $post ): void {
 		?>
 		<!-- Section 1: SERP OPTIMIZATION (Very High Impact) -->
-		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #10b981;">
+		<div class="fp-seo-performance-metabox__section fp-seo-serp-optimization-section" style="border-left: 4px solid #10b981;" data-section="serp-optimization">
 			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
 				<span style="display: flex; align-items: center; gap: 8px;">
 					<span class="fp-seo-section-icon">🎯</span>
@@ -1230,6 +1231,610 @@ class MetaboxRenderer {
 			</div>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render Images Management section.
+	 *
+	 * @param WP_Post $post Current post.
+	 */
+	private function render_images_section( WP_Post $post ): void {
+		$images = $this->extract_images_from_content( $post );
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'render_images_section called', array(
+				'post_id' => $post->ID,
+				'images_count' => count( $images ),
+				'has_content' => ! empty( $post->post_content ),
+			) );
+		}
+		
+		?>
+		<!-- Section: Images Optimization -->
+		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #8b5cf6;">
+			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
+				<span style="display: flex; align-items: center; gap: 8px;">
+					<span class="fp-seo-section-icon">🖼️</span>
+					<?php esc_html_e( 'Images Optimization', 'fp-seo-performance' ); ?>
+				</span>
+				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">
+					<span style="font-size: 14px;">⚡</span>
+					<?php esc_html_e( 'Impact: +15%', 'fp-seo-performance' ); ?>
+				</span>
+			</h4>
+			<div class="fp-seo-performance-metabox__section-content">
+				<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #faf5ff; border-radius: 6px; border-left: 3px solid #8b5cf6;">
+					<strong style="color: #7c3aed;">💡 Ottimizza le immagini per migliorare l'accessibilità e il SEO</strong><br>
+					Aggiungi alt text descrittivi, titoli e descrizioni per tutte le immagini presenti nel contenuto. Questo migliora l'accessibilità e aiuta Google a comprendere meglio le tue immagini.
+				</p>
+				
+				<?php if ( empty( $images ) ) : ?>
+					<div style="padding: 24px; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb;">
+						<p style="margin: 0; color: #6b7280; font-size: 14px;">
+							<?php esc_html_e( 'Nessuna immagine trovata nel contenuto.', 'fp-seo-performance' ); ?>
+						</p>
+						<p style="margin: 8px 0 0; color: #9ca3af; font-size: 12px;">
+							<?php esc_html_e( 'Aggiungi immagini al contenuto per ottimizzarle qui.', 'fp-seo-performance' ); ?>
+						</p>
+					</div>
+				<?php else : ?>
+					<div class="fp-seo-images-list" style="display: grid; gap: 16px;">
+						<?php foreach ( $images as $index => $image ) : ?>
+							<div class="fp-seo-image-item" 
+								 data-image-index="<?php echo esc_attr( $index ); ?>"
+								 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+								 style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; transition: all 0.2s ease;">
+								
+								<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
+									<!-- Image Preview -->
+									<div style="position: relative;">
+										<img src="<?php echo esc_url( $image['src'] ); ?>" 
+											 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px;">
+										<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+											#<?php echo esc_html( $index + 1 ); ?>
+										</div>
+									</div>
+									
+									<!-- Image Fields -->
+									<div style="display: grid; gap: 12px; flex: 1;">
+										<!-- Image URL (read-only) -->
+										<div>
+											<label style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+												<?php esc_html_e( 'URL Immagine', 'fp-seo-performance' ); ?>
+											</label>
+											<input type="text" 
+												   value="<?php echo esc_attr( $image['src'] ); ?>" 
+												   readonly
+												   style="width: 100%; padding: 6px 10px; font-size: 11px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; font-family: monospace;">
+										</div>
+										
+										<!-- Alt Text -->
+										<div>
+											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+												<?php esc_html_e( 'Alt Text', 'fp-seo-performance' ); ?>
+												<span style="color: #ef4444;">*</span>
+												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Testo alternativo per accessibilità e SEO. Descrivi l\'immagine in modo chiaro e conciso.', 'fp-seo-performance' ); ?>">ℹ️</span>
+											</label>
+											<input type="text" 
+												   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+												   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][alt]" 
+												   value="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+												   placeholder="<?php esc_attr_e( 'es: Foto del B&B Dimora Verde a Mentana', 'fp-seo-performance' ); ?>"
+												   maxlength="125"
+												   data-image-field="alt"
+												   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+												   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 6px; transition: all 0.2s ease;">
+											<div style="display: flex; justify-content: space-between; margin-top: 4px;">
+												<span style="font-size: 10px; color: #9ca3af;">
+													<?php esc_html_e( 'Raccomandato: 5-15 parole descrittive', 'fp-seo-performance' ); ?>
+												</span>
+												<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt-count" 
+													  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+													<?php echo esc_html( mb_strlen( $image['alt'] ?? '' ) ); ?>/125
+												</span>
+											</div>
+										</div>
+										
+										<!-- Title -->
+										<div>
+											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+												<?php esc_html_e( 'Title', 'fp-seo-performance' ); ?>
+												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Titolo dell\'immagine (attributo title). Appare al passaggio del mouse.', 'fp-seo-performance' ); ?>">ℹ️</span>
+											</label>
+											<input type="text" 
+												   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+												   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][title]" 
+												   value="<?php echo esc_attr( $image['title'] ?? '' ); ?>"
+												   placeholder="<?php esc_attr_e( 'es: Dimora Verde B&B - Vista esterna', 'fp-seo-performance' ); ?>"
+												   maxlength="200"
+												   data-image-field="title"
+												   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+												   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease;">
+										</div>
+										
+										<!-- Description -->
+										<div>
+											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+												<?php esc_html_e( 'Description', 'fp-seo-performance' ); ?>
+												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Descrizione estesa dell\'immagine. Utile per contesto aggiuntivo.', 'fp-seo-performance' ); ?>">ℹ️</span>
+											</label>
+											<textarea id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+													  name="fp_seo_images[<?php echo esc_attr( $index ); ?>][description]" 
+													  rows="2"
+													  maxlength="500"
+													  data-image-field="description"
+													  data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+													  placeholder="<?php esc_attr_e( 'es: Vista panoramica del B&B Dimora Verde situato a Mentana, vicino Roma. Struttura immersa nel verde con giardino e piscina.', 'fp-seo-performance' ); ?>"
+													  style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical; transition: all 0.2s ease; font-family: inherit;"><?php echo esc_textarea( $image['description'] ?? '' ); ?></textarea>
+											<div style="text-align: right; margin-top: 4px;">
+												<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description-count" 
+													  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+													<?php echo esc_html( mb_strlen( $image['description'] ?? '' ) ); ?>/500
+												</span>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						<?php endforeach; ?>
+					</div>
+					
+					<!-- Save Button -->
+					<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+						<button type="button" 
+								id="fp-seo-save-images" 
+								class="button button-primary"
+								style="padding: 10px 24px; font-weight: 600; border-radius: 6px;">
+							<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>
+						</button>
+						<span id="fp-seo-images-save-status" style="margin-left: 12px; font-size: 12px; color: #10b981; display: none;">
+							✅ <?php esc_html_e( 'Salvato!', 'fp-seo-performance' ); ?>
+						</span>
+					</div>
+				<?php endif; ?>
+			</div>
+		</div>
+		
+		<style>
+		.fp-seo-image-item:hover {
+			border-color: #8b5cf6 !important;
+			box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);
+		}
+		.fp-seo-image-item input:focus,
+		.fp-seo-image-item textarea:focus {
+			outline: none;
+			border-color: #8b5cf6 !important;
+			box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+		}
+		</style>
+		
+		<script>
+		jQuery(document).ready(function($) {
+			// Initialize character counters on page load
+			$('[id*="-alt"]').each(function() {
+				const $field = $(this);
+				const fieldId = $field.attr('id');
+				if (fieldId && fieldId.includes('-alt') && !fieldId.includes('-count')) {
+					const index = fieldId.replace('fp-seo-image-', '').replace('-alt', '');
+					const length = $field.val().length;
+					$('#fp-seo-image-' + index + '-alt-count').text(length + '/125');
+				}
+			});
+			
+			$('[id*="-description"]').each(function() {
+				const $field = $(this);
+				const fieldId = $field.attr('id');
+				if (fieldId && fieldId.includes('-description') && !fieldId.includes('-count')) {
+					const index = fieldId.replace('fp-seo-image-', '').replace('-description', '');
+					const length = $field.val().length;
+					$('#fp-seo-image-' + index + '-description-count').text(length + '/500');
+				}
+			});
+			
+			// Character counters on input
+			$('[id*="-alt"], [id*="-description"]').on('input', function() {
+				const $field = $(this);
+				const fieldId = $field.attr('id');
+				const value = $field.val();
+				const length = value.length;
+				
+				if (fieldId.includes('-alt') && !fieldId.includes('-count')) {
+					// Alt text counter
+					const index = fieldId.replace('fp-seo-image-', '').replace('-alt', '');
+					$('#fp-seo-image-' + index + '-alt-count').text(length + '/125');
+				} else if (fieldId.includes('-description') && !fieldId.includes('-count')) {
+					// Description counter
+					const index = fieldId.replace('fp-seo-image-', '').replace('-description', '');
+					$('#fp-seo-image-' + index + '-description-count').text(length + '/500');
+				}
+			});
+			
+			// Save images data
+			$('#fp-seo-save-images').on('click', function() {
+				const $btn = $(this);
+				const $status = $('#fp-seo-images-save-status');
+				const postId = <?php echo (int) $post->ID; ?>;
+				
+				// Collect all image data
+				const imagesData = {};
+				$('.fp-seo-image-item').each(function() {
+					const $item = $(this);
+					const index = $item.data('image-index');
+					const src = $item.data('image-src');
+					
+					imagesData[src] = {
+						alt: $item.find('[name*="[alt]"]').val() || '',
+						title: $item.find('[name*="[title]"]').val() || '',
+						description: $item.find('[name*="[description]"]').val() || '',
+					};
+				});
+				
+				// Show loading
+				$btn.prop('disabled', true).text('<?php esc_html_e( '⏳ Salvataggio...', 'fp-seo-performance' ); ?>');
+				$status.hide();
+				
+				// Save via AJAX
+				$.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					data: {
+						action: 'fp_seo_save_images_data',
+						post_id: postId,
+						images: imagesData,
+						nonce: '<?php echo wp_create_nonce( 'fp_seo_images_nonce' ); ?>'
+					},
+					success: function(response) {
+						if (response.success) {
+							$status.fadeIn().delay(2000).fadeOut();
+							$btn.prop('disabled', false).text('<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>');
+						} else {
+							alert('Errore: ' + (response.data || 'Errore sconosciuto'));
+							$btn.prop('disabled', false).text('<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>');
+						}
+					},
+					error: function() {
+						alert('<?php esc_html_e( 'Errore durante il salvataggio. Riprova.', 'fp-seo-performance' ); ?>');
+						$btn.prop('disabled', false).text('<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>');
+					}
+				});
+			});
+		});
+		</script>
+		<?php
+	}
+
+	/**
+	 * Extract all images from post content.
+	 *
+	 * @param WP_Post $post Current post.
+	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
+	 */
+	private function extract_images_from_content( WP_Post $post ): array {
+		$content = $post->post_content;
+		$images = array();
+		
+		if ( empty( $content ) ) {
+			return $images;
+		}
+		
+		$seen_srcs = array(); // Avoid duplicates
+		
+		// First, extract images from WPBakery shortcodes
+		$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
+		foreach ( $wpbakery_images as $image ) {
+			if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
+				$seen_srcs[ $image['src'] ] = true;
+				$images[] = $image;
+			}
+		}
+		
+		// Then, extract images from HTML img tags
+		$dom = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content );
+		libxml_clear_errors();
+		
+		$img_tags = $dom->getElementsByTagName( 'img' );
+		
+		foreach ( $img_tags as $index => $img ) {
+			$src = $img->getAttribute( 'src' );
+			
+			// Skip if empty or already seen
+			if ( empty( $src ) || isset( $seen_srcs[ $src ] ) ) {
+				continue;
+			}
+			
+			$seen_srcs[ $src ] = true;
+			
+			// Get attachment ID from URL if it's a WordPress attachment
+			$attachment_id = $this->get_attachment_id_from_url( $src );
+			
+			// Get existing alt, title
+			$alt = $img->getAttribute( 'alt' ) ?: '';
+			$title = $img->getAttribute( 'title' ) ?: '';
+			
+			// Get description from attachment if available
+			$description = '';
+			if ( $attachment_id ) {
+				$attachment = get_post( $attachment_id );
+				if ( $attachment ) {
+					// Use attachment description or content
+					$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+					
+					// If alt is empty, try to get from attachment
+					if ( empty( $alt ) ) {
+						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+					}
+				}
+			}
+			
+			// Get saved custom data from post meta
+			$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
+			if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
+				$saved = $saved_images[ $src ];
+				$alt = $saved['alt'] ?? $alt;
+				$title = $saved['title'] ?? $title;
+				$description = $saved['description'] ?? $description;
+			}
+			
+			$images[] = array(
+				'src'           => $src,
+				'alt'           => $alt,
+				'title'         => $title,
+				'description'   => $description,
+				'attachment_id' => $attachment_id,
+			);
+		}
+		
+		return $images;
+	}
+
+	/**
+	 * Extract images from WPBakery shortcodes.
+	 *
+	 * @param string $content Post content.
+	 * @param int    $post_id Post ID.
+	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
+	 */
+	private function extract_wpbakery_images( string $content, int $post_id ): array {
+		$images = array();
+		
+		if ( empty( $content ) || strpos( $content, '[vc_' ) === false ) {
+			return $images;
+		}
+		
+		// Extract vc_single_image shortcodes
+		// Pattern: [vc_single_image image="123" ...] or [vc_single_image image="123|full" ...]
+		if ( preg_match_all( '/\[vc_single_image[^\]]*image\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				$image_param = $match[1];
+				
+				// Extract attachment ID (format can be "123" or "123|full")
+				$attachment_id = (int) preg_replace( '/[^\d]/', '', $image_param );
+				
+				if ( $attachment_id > 0 ) {
+					$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+					if ( $image_url ) {
+						// Get alt text from attachment
+						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+						
+						// Get title from attachment
+						$attachment = get_post( $attachment_id );
+						$title = $attachment ? $attachment->post_title : '';
+						$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						
+						// Check for saved custom data
+						$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+						if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+							$saved = $saved_images[ $image_url ];
+							$alt = $saved['alt'] ?? $alt;
+							$title = $saved['title'] ?? $title;
+							$description = $saved['description'] ?? $description;
+						}
+						
+						$images[] = array(
+							'src'           => $image_url,
+							'alt'           => $alt,
+							'title'         => $title,
+							'description'   => $description,
+							'attachment_id' => $attachment_id,
+						);
+					}
+				}
+			}
+		}
+		
+		// Extract vc_gallery shortcodes
+		// Pattern: [vc_gallery images="123,456,789" ...]
+		if ( preg_match_all( '/\[vc_gallery[^\]]*images\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				$images_param = $match[1];
+				
+				// Split by comma and extract IDs
+				$image_ids = array_map( 'intval', array_filter( explode( ',', $images_param ), 'is_numeric' ) );
+				
+				foreach ( $image_ids as $attachment_id ) {
+					if ( $attachment_id > 0 ) {
+						$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+						if ( $image_url ) {
+							// Get alt text from attachment
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							
+							// Get title from attachment
+							$attachment = get_post( $attachment_id );
+							$title = $attachment ? $attachment->post_title : '';
+							$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+							
+							// Check for saved custom data
+							$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+							if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+								$saved = $saved_images[ $image_url ];
+								$alt = $saved['alt'] ?? $alt;
+								$title = $saved['title'] ?? $title;
+								$description = $saved['description'] ?? $description;
+							}
+							
+							$images[] = array(
+								'src'           => $image_url,
+								'alt'           => $alt,
+								'title'         => $title,
+								'description'   => $description,
+								'attachment_id' => $attachment_id,
+							);
+						}
+					}
+				}
+			}
+		}
+		
+		// Extract images from other WPBakery shortcodes with image attributes
+		// Pattern: [vc_row image_url="123" ...] or [vc_column image_1_url="123" image_2_url="456" ...]
+		$image_attr_patterns = array( 'image_url', 'image_1_url', 'image_2_url', 'image_3_url', 'images' );
+		foreach ( $image_attr_patterns as $attr ) {
+			if ( preg_match_all( '/\[vc_[^\]]*' . preg_quote( $attr, '/' ) . '\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
+				foreach ( $matches as $match ) {
+					$image_param = $match[1];
+					
+					// Check if it's an attachment ID (numeric) or URL
+					if ( is_numeric( $image_param ) ) {
+						$attachment_id = (int) $image_param;
+						if ( $attachment_id > 0 ) {
+							$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+							if ( $image_url ) {
+								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+								$attachment = get_post( $attachment_id );
+								$title = $attachment ? $attachment->post_title : '';
+								$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+								
+								$images[] = array(
+									'src'           => $image_url,
+									'alt'           => $alt,
+									'title'         => $title,
+									'description'   => $description,
+									'attachment_id' => $attachment_id,
+								);
+							}
+						}
+					} elseif ( filter_var( $image_param, FILTER_VALIDATE_URL ) ) {
+						// It's a URL, use it directly
+						$attachment_id = $this->get_attachment_id_from_url( $image_param );
+						$alt = '';
+						$title = '';
+						$description = '';
+						
+						if ( $attachment_id ) {
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							$attachment = get_post( $attachment_id );
+							$title = $attachment ? $attachment->post_title : '';
+							$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						}
+						
+						$images[] = array(
+							'src'           => $image_param,
+							'alt'           => $alt,
+							'title'         => $title,
+							'description'   => $description,
+							'attachment_id' => $attachment_id,
+						);
+					} else {
+						// Might be comma-separated IDs
+						$image_ids = array_map( 'intval', array_filter( explode( ',', $image_param ), 'is_numeric' ) );
+						foreach ( $image_ids as $attachment_id ) {
+							if ( $attachment_id > 0 ) {
+								$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+								if ( $image_url ) {
+									$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+									$attachment = get_post( $attachment_id );
+									$title = $attachment ? $attachment->post_title : '';
+									$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+									
+									$images[] = array(
+										'src'           => $image_url,
+										'alt'           => $alt,
+										'title'         => $title,
+										'description'   => $description,
+										'attachment_id' => $attachment_id,
+									);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Extract external images from vc_single_image with custom_src
+		// Pattern: [vc_single_image source="external_link" custom_src="https://..." ...]
+		if ( preg_match_all( '/\[vc_single_image[^\]]*source\s*=\s*["\']external_link["\'][^\]]*custom_src\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				$image_url = esc_url_raw( $match[1] );
+				if ( $image_url ) {
+					$images[] = array(
+						'src'           => $image_url,
+						'alt'           => '',
+						'title'         => '',
+						'description'   => '',
+						'attachment_id' => null,
+					);
+				}
+			}
+		}
+		
+		return $images;
+	}
+
+	/**
+	 * Get attachment ID from image URL.
+	 *
+	 * @param string $url Image URL.
+	 * @return int|null Attachment ID or null if not found.
+	 */
+	private function get_attachment_id_from_url( string $url ): ?int {
+		// Remove query strings
+		$url = strtok( $url, '?' );
+		
+		// Try to get attachment ID from URL
+		global $wpdb;
+		
+		// Try full URL match
+		$attachment_id = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
+			basename( $url )
+		) );
+		
+		if ( $attachment_id ) {
+			return (int) $attachment_id;
+		}
+		
+		// Try GUID match
+		$attachment_id = $wpdb->get_var( $wpdb->prepare(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND guid = %s LIMIT 1",
+			$url
+		) );
+		
+		if ( $attachment_id ) {
+			return (int) $attachment_id;
+		}
+		
+		// Try to extract from URL path
+		$upload_dir = wp_upload_dir();
+		if ( strpos( $url, $upload_dir['baseurl'] ) !== false ) {
+			$relative_path = str_replace( $upload_dir['baseurl'] . '/', '', $url );
+			$attachment_id = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
+				$relative_path
+			) );
+			
+			if ( $attachment_id ) {
+				return (int) $attachment_id;
+			}
+		}
+		
+		return null;
 	}
 }
 

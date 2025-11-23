@@ -85,17 +85,39 @@ class FaqSchemaCheck implements CheckInterface {
 		$has_faq = in_array( 'faqpage', $types, true );
 
 		// Nessun FAQ Schema trovato
+		// FAQ è opzionale - non penalizzare se manca, ma suggerisci se potrebbe essere utile
 		if ( ! $has_faq ) {
-			return new Result(
-				Result::STATUS_WARN,
-				array(
-					'has_faq' => false,
-					'questions' => 0,
-					'recommendation' => 'add_faq_schema',
-				),
-				I18n::translate( 'Considera di aggiungere FAQ Schema per migliorare la visibilità nelle AI Overview di Google. Le FAQ aumentano le probabilità di apparire come risposta diretta.' ),
-				0.10
-			);
+			// Verifica se il contenuto potrebbe beneficiare di FAQ
+			$content = strtolower( $context->plain_text() );
+			$might_benefit = $this->might_benefit_from_faq( $content );
+			
+			if ( $might_benefit ) {
+				// Contenuto potrebbe beneficiare di FAQ - warning soft
+				return new Result(
+					Result::STATUS_WARN,
+					array(
+						'has_faq' => false,
+						'questions' => 0,
+						'recommendation' => 'add_faq_schema',
+						'might_benefit' => true,
+					),
+					I18n::translate( 'Considera di aggiungere FAQ Schema per migliorare la visibilità nelle AI Overview di Google. Le FAQ aumentano le probabilità di apparire come risposta diretta.' ),
+					0.10
+				);
+			} else {
+				// Contenuto non sembra beneficiare di FAQ - passa senza penalizzazione
+				return new Result(
+					Result::STATUS_PASS,
+					array(
+						'has_faq' => false,
+						'questions' => 0,
+						'note' => 'not_applicable',
+						'might_benefit' => false,
+					),
+					I18n::translate( 'FAQ Schema non necessario per questo tipo di contenuto.' ),
+					0.10
+				);
+			}
 		}
 
 		// FAQ Schema presente - verifica qualità
@@ -161,5 +183,40 @@ class FaqSchemaCheck implements CheckInterface {
 				$this->collect_faq_data( $value, $types, $faq_data );
 			}
 		}
+	}
+
+	/**
+	 * Check if content might benefit from FAQ Schema.
+	 *
+	 * @param string $content Plain text content.
+	 * @return bool
+	 */
+	private function might_benefit_from_faq( string $content ): bool {
+		// FAQ indicators - content that might benefit from FAQ
+		$faq_indicators = array(
+			'domanda',
+			'risposta',
+			'frequently asked',
+			'domande frequenti',
+			'faq',
+			'chiedi',
+			'vuoi sapere',
+			'curiosità',
+			'dubbio',
+			'perché',
+			'come mai',
+			'quando',
+			'dove',
+			'chi',
+			'cosa',
+		);
+
+		foreach ( $faq_indicators as $indicator ) {
+			if ( strpos( $content, $indicator ) !== false ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

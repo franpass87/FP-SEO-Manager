@@ -126,7 +126,8 @@ class Context {
 		array $theme_hints = array()
 	) {
 		$this->post_id            = $post_id;
-		$this->html               = $html;
+		// Process HTML to extract WPBakery content if needed
+		$this->html               = $this->process_html_content( $html );
 		$this->title              = $title;
 		$this->meta_description   = $meta_description;
 		$this->canonical          = $canonical;
@@ -134,6 +135,27 @@ class Context {
 		$this->focus_keyword      = $focus_keyword;
 		$this->secondary_keywords = $secondary_keywords;
 		$this->theme_hints        = $theme_hints;
+	}
+
+	/**
+	 * Process HTML content to include rendered WPBakery shortcodes.
+	 *
+	 * @param string $html Raw HTML content.
+	 * @return string Processed HTML content.
+	 */
+	private function process_html_content( string $html ): string {
+		// If content contains WPBakery shortcodes, render them to HTML
+		if ( strpos( $html, '[vc_' ) !== false || strpos( $html, '[vc_row' ) !== false ) {
+			// Execute shortcodes to get rendered HTML
+			if ( function_exists( 'do_shortcode' ) ) {
+				$rendered = do_shortcode( $html );
+				// Combine original HTML with rendered content for better analysis
+				// This ensures both shortcode attributes and rendered content are available
+				return $html . "\n" . $rendered;
+			}
+		}
+
+		return $html;
 	}
 
 	/**
@@ -357,6 +379,18 @@ class Context {
 	 * @return array<int, array{level:int,text:string}>
 	 */
 	public function ordered_headings(): array {
+		// Check if content contains WPBakery shortcodes
+		if ( strpos( $this->html, '[vc_' ) !== false || strpos( $this->html, '[vc_row' ) !== false ) {
+			// Use WPBakery content extractor for headings
+			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
+				$wpbakery_headings = \FP\SEO\Utils\WPBakeryContentExtractor::extract_headings( $this->html );
+				if ( ! empty( $wpbakery_headings ) ) {
+					return $wpbakery_headings;
+				}
+			}
+		}
+
+		// Standard DOM extraction
 		$xpath = $this->xpath();
 
 		if ( null === $xpath ) {
@@ -470,6 +504,15 @@ class Context {
 	 * @return string
 	 */
 	public function plain_text(): string {
+		// Check if content contains WPBakery shortcodes
+		if ( strpos( $this->html, '[vc_' ) !== false || strpos( $this->html, '[vc_row' ) !== false ) {
+			// Use WPBakery content extractor
+			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
+				return \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $this->html );
+			}
+		}
+
+		// Standard processing for non-WPBakery content
 		if ( function_exists( 'wp_strip_all_tags' ) ) {
 			$stripped = wp_strip_all_tags( $this->html, false );
 		} else {

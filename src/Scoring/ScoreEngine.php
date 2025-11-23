@@ -83,9 +83,36 @@ class ScoreEngine {
 				continue;
 			}
 
+			// Check if this check is optional/not applicable
+			$details = is_array( $check['details'] ?? null ) ? $check['details'] : array();
+			$is_optional = $this->is_optional_check( $check_id, $details, $check );
+			$is_not_applicable = $this->is_not_applicable( $check_id, $details, $check );
+
 			$base_weight    = $this->extract_weight( $check );
 			$config_weight  = $this->extract_config_weight( $weights, $check_id );
 			$applied_weight = $base_weight * $config_weight;
+			
+			// If check is not applicable, exclude it completely from scoring
+			if ( $is_not_applicable ) {
+				// Don't add to max_total or score_sum - effectively exclude from calculation
+				$breakdown[ $check_id ] = array(
+					'id'           => $check_id,
+					'status'       => is_string( $check['status'] ?? null ) ? $check['status'] : Result::STATUS_WARN,
+					'weight'       => 0.0,
+					'multiplier'   => 0.0,
+					'contribution' => 0.0,
+					'optional'     => true,
+					'not_applicable' => true,
+				);
+				continue; // Skip this check entirely
+			}
+			
+			// If check is optional (but still applicable), reduce its weight
+			if ( $is_optional ) {
+				// Reduce weight to 30% for optional checks
+				$applied_weight = $applied_weight * 0.3;
+			}
+			
 			$max_total     += $applied_weight;
 
 			$status       = is_string( $check['status'] ?? null ) ? $check['status'] : Result::STATUS_WARN;
@@ -99,9 +126,11 @@ class ScoreEngine {
 					'weight'       => $applied_weight,
 					'multiplier'   => $multiplier,
 					'contribution' => $contribution,
+					'optional'     => $is_optional,
 				);
 
-			if ( in_array( $status, array( Result::STATUS_WARN, Result::STATUS_FAIL ), true ) ) {
+			// Only add recommendations for non-optional checks or optional checks that are applicable
+			if ( in_array( $status, array( Result::STATUS_WARN, Result::STATUS_FAIL ), true ) && ! $is_optional ) {
 				$notes[] = $this->build_recommendation( $check );
 			}
 		}
@@ -262,5 +291,68 @@ class ScoreEngine {
 		}
 
 			return self::STATUS_RED;
+	}
+
+	/**
+	 * Determine if a check is optional (but still applicable) based on context.
+	 *
+	 * @param string               $check_id Check identifier.
+	 * @param array<string, mixed> $details  Check details.
+	 * @param array<string, mixed> $check   Full check payload.
+	 * @return bool True if check is optional (but still applicable).
+	 */
+	private function is_optional_check( string $check_id, array $details, array $check ): bool {
+		// FAQ Schema: optional by nature but still applicable
+		if ( $check_id === 'faq_schema' ) {
+			return true; // FAQ is optional enhancement
+		}
+
+		// HowTo Schema: optional by nature but still applicable
+		if ( $check_id === 'howto_schema' ) {
+			return true; // HowTo is optional enhancement
+		}
+
+		// Social media checks are optional
+		if ( in_array( $check_id, array( 'og_cards', 'twitter_cards' ), true ) ) {
+			return true;
+		}
+
+		// AI optimization is optional
+		if ( $check_id === 'ai_optimized_content' ) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Determine if a check is not applicable (should be excluded from scoring).
+	 *
+	 * @param string               $check_id Check identifier.
+	 * @param array<string, mixed> $details  Check details.
+	 * @param array<string, mixed> $check   Full check payload.
+	 * @return bool True if check is not applicable and should be excluded.
+	 */
+	private function is_not_applicable( string $check_id, array $details, array $check ): bool {
+		// FAQ Schema: not applicable if explicitly marked
+		if ( $check_id === 'faq_schema' ) {
+			// If status is PASS and note says not_applicable, exclude it
+			if ( ( $check['status'] ?? '' ) === Result::STATUS_PASS && 
+				 isset( $details['note'] ) && $details['note'] === 'not_applicable' ) {
+				return true;
+			}
+		}
+
+		// HowTo Schema: not applicable if content is not a guide
+		if ( $check_id === 'howto_schema' ) {
+			// If status is PASS and note says not_applicable, exclude it
+			if ( ( $check['status'] ?? '' ) === Result::STATUS_PASS && 
+				 isset( $details['is_guide'] ) && $details['is_guide'] === false &&
+				 isset( $details['note'] ) && $details['note'] === 'not_applicable' ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

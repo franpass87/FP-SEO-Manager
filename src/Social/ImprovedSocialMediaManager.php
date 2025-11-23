@@ -14,12 +14,14 @@ namespace FP\SEO\Social;
 use FP\SEO\Utils\Cache;
 use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\PerformanceConfig;
+use FP\SEO\Utils\WPBakeryContentExtractor;
 use function get_permalink;
 use function get_post;
 use function get_post_field;
 use function get_queried_object_id;
 use function get_the_excerpt;
 use function strip_shortcodes;
+use function do_shortcode;
 use function get_the_post_thumbnail_url;
 use function get_the_title;
 use function is_singular;
@@ -203,11 +205,59 @@ class ImprovedSocialMediaManager {
 									<div class="fp-seo-social-preview-content">
 										<div class="fp-seo-social-preview-title" 
 											 id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-title-preview">
-											<?php echo esc_html( wp_specialchars_decode( $preview_data['title'], ENT_QUOTES ) ); ?>
+											<?php 
+											// Decode HTML entities for proper display (B&B instead of B&#038;B, – instead of &#8211;)
+											$title_decoded = $preview_data['title'];
+											// Decode numeric entities (&#038; -> &, &#8211; -> –) - handle UTF-8 properly
+											$title_decoded = preg_replace_callback('/&#(\d+);/', function($matches) {
+												$code = (int)$matches[1];
+												if (function_exists('mb_chr')) {
+													return mb_chr($code, 'UTF-8');
+												}
+												return html_entity_decode('&#' . $code . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+											}, $title_decoded);
+											// Decode hex entities (&#x26; -> &)
+											$title_decoded = preg_replace_callback('/&#x([0-9A-Fa-f]+);/i', function($matches) {
+												$code = hexdec($matches[1]);
+												if (function_exists('mb_chr')) {
+													return mb_chr($code, 'UTF-8');
+												}
+												return html_entity_decode('&#x' . $matches[1] . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+											}, $title_decoded);
+											// Decode named entities using html_entity_decode
+											$title_decoded = html_entity_decode( $title_decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+											// Final decode with wp_specialchars_decode for WordPress-specific entities
+											$title_decoded = wp_specialchars_decode( $title_decoded, ENT_QUOTES );
+											echo esc_html( $title_decoded ); 
+											?>
 										</div>
 										<div class="fp-seo-social-preview-description" 
 											 id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-description-preview">
-											<?php echo esc_html( wp_specialchars_decode( $preview_data['description'], ENT_QUOTES ) ); ?>
+											<?php 
+											// Decode HTML entities for proper display
+											$desc_decoded = $preview_data['description'];
+											// Decode numeric entities (&#038; -> &, &#8211; -> –) - handle UTF-8 properly
+											$desc_decoded = preg_replace_callback('/&#(\d+);/', function($matches) {
+												$code = (int)$matches[1];
+												if (function_exists('mb_chr')) {
+													return mb_chr($code, 'UTF-8');
+												}
+												return html_entity_decode('&#' . $code . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+											}, $desc_decoded);
+											// Decode hex entities (&#x26; -> &)
+											$desc_decoded = preg_replace_callback('/&#x([0-9A-Fa-f]+);/i', function($matches) {
+												$code = hexdec($matches[1]);
+												if (function_exists('mb_chr')) {
+													return mb_chr($code, 'UTF-8');
+												}
+												return html_entity_decode('&#x' . $matches[1] . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+											}, $desc_decoded);
+											// Decode named entities using html_entity_decode
+											$desc_decoded = html_entity_decode( $desc_decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+											// Final decode with wp_specialchars_decode for WordPress-specific entities
+											$desc_decoded = wp_specialchars_decode( $desc_decoded, ENT_QUOTES );
+											echo esc_html( $desc_decoded ); 
+											?>
 										</div>
 										<div class="fp-seo-social-preview-url">
 											<?php echo esc_url( $preview_data['url'] ); ?>
@@ -241,7 +291,8 @@ class ImprovedSocialMediaManager {
 										   class="fp-seo-form-control fp-seo-character-counter" 
 										   value="<?php echo esc_attr( wp_specialchars_decode( $social_meta[ $platform_id . '_title' ] ?? '', ENT_QUOTES ) ); ?>" 
 										   maxlength="<?php echo esc_attr( $platform_data['title_limit'] ); ?>"
-										   placeholder="<?php esc_attr_e( 'Enter title for social sharing', 'fp-seo-performance' ); ?>">
+										   placeholder="<?php echo esc_attr( $preview_data['title'] ?: __( 'Enter title for social sharing', 'fp-seo-performance' ) ); ?>"
+										   data-fallback-from="fp-seo-title">
 									<div class="fp-seo-character-count">
 										<span id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-title-count">0</span>
 										/<?php echo esc_attr( $platform_data['title_limit'] ); ?>
@@ -270,7 +321,8 @@ class ImprovedSocialMediaManager {
 											  class="fp-seo-form-control fp-seo-character-counter" 
 											  maxlength="<?php echo esc_attr( $platform_data['description_limit'] ); ?>"
 											  rows="3"
-											  placeholder="<?php esc_attr_e( 'Enter description for social sharing', 'fp-seo-performance' ); ?>"><?php echo esc_textarea( wp_specialchars_decode( $social_meta[ $platform_id . '_description' ] ?? '', ENT_QUOTES ) ); ?></textarea>
+											  placeholder="<?php echo esc_attr( $preview_data['description'] ?: __( 'Enter description for social sharing', 'fp-seo-performance' ) ); ?>"
+											  data-fallback-from="fp-seo-meta-description"><?php echo esc_textarea( wp_specialchars_decode( $social_meta[ $platform_id . '_description' ] ?? '', ENT_QUOTES ) ); ?></textarea>
 									<div class="fp-seo-character-count">
 										<span id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-description-count">0</span>
 										/<?php echo esc_attr( $platform_data['description_limit'] ); ?>
@@ -309,7 +361,8 @@ class ImprovedSocialMediaManager {
 											   name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_image" 
 											   class="fp-seo-form-control" 
 											   value="<?php echo esc_attr( $social_meta[ $platform_id . '_image' ] ?? '' ); ?>" 
-											   placeholder="https://example.com/image.jpg">
+											   placeholder="<?php echo esc_attr( $preview_data['image'] ?: 'https://example.com/image.jpg' ); ?>"
+											   data-fallback-from="post-thumbnail">
 										<button type="button" 
 												class="fp-seo-btn fp-seo-btn-secondary fp-seo-image-select" 
 												data-target="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image"
@@ -565,17 +618,203 @@ class ImprovedSocialMediaManager {
 				$tab.trigger('fp-seo-tab-changed', [tabId]);
 			});
 
-			// Real-time preview updates
+			// Real-time preview updates for social fields
 			$('.fp-seo-character-counter').on('input', function() {
 				const $field = $(this);
 				const fieldId = $field.attr('id');
 				const platform = fieldId.split('-')[2]; // Extract platform from ID
 				const fieldType = fieldId.split('-')[3]; // Extract field type
-				const value = $field.val();
+				let value = $field.val();
 				
-				// Update preview
+				// Decode HTML entities properly (&#038; -> &, &#8211; -> –, &amp; -> &)
+				// First decode numeric entities, then named entities
+				value = value.replace(/&#(\d+);/g, function(match, dec) {
+					return String.fromCharCode(dec);
+				});
+				value = value.replace(/&#x([0-9A-Fa-f]+);/g, function(match, hex) {
+					return String.fromCharCode(parseInt(hex, 16));
+				});
+				// Decode named entities using a temporary div
+				const $temp = $('<div>').html(value);
+				value = $temp.text();
+				
+				// Update preview with decoded value
 				$(`#fp-seo-${platform}-${fieldType}-preview`).text(value || '<?php echo esc_js( get_the_title() ); ?>');
 			});
+
+			// Helper function to decode HTML entities
+			function decodeHtmlEntities(str) {
+				if (!str) return '';
+				// Decode numeric entities (&#038; -> &, &#8211; -> –)
+				str = str.replace(/&#(\d+);/g, function(match, dec) {
+					return String.fromCharCode(dec);
+				});
+				// Decode hex entities (&#x26; -> &)
+				str = str.replace(/&#x([0-9A-Fa-f]+);/g, function(match, hex) {
+					return String.fromCharCode(parseInt(hex, 16));
+				});
+				// Decode named entities using a temporary div
+				const $temp = $('<div>').html(str);
+				return $temp.text();
+			}
+
+			// Auto-sync from SERP Optimization fields to Social Media fields
+			// When SERP fields change, update social previews if social fields are empty
+			function syncFromSerpToSocial() {
+				// Get SERP Optimization values
+				let seoTitle = $('#fp-seo-title').val() || '';
+				let seoDescription = $('#fp-seo-meta-description').val() || '';
+				
+				// Decode HTML entities from SERP fields
+				seoTitle = decodeHtmlEntities(seoTitle);
+				seoDescription = decodeHtmlEntities(seoDescription);
+				
+				// Get featured image URL - try multiple methods
+				let featuredImageUrl = '';
+				
+				// Method 1: Gutenberg editor
+				if (typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
+					const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
+					if (featuredImageId) {
+						const attachment = wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId);
+						if (attachment && attachment.source_url) {
+							featuredImageUrl = attachment.source_url;
+						}
+					}
+				}
+				
+				// Method 2: Classic editor thumbnail input
+				if (!featuredImageUrl) {
+					const thumbnailInput = $('input[name="_thumbnail_id"]');
+					if (thumbnailInput.length && thumbnailInput.val()) {
+						// Try to get from wp.media attachment
+						if (typeof wp !== 'undefined' && wp.media) {
+							const attachment = wp.media.attachment(thumbnailInput.val());
+							if (attachment && attachment.get('url')) {
+								featuredImageUrl = attachment.get('url');
+							}
+						}
+					}
+				}
+				
+				// Method 3: Direct PHP fallback (from initial page load)
+				if (!featuredImageUrl) {
+					featuredImageUrl = '<?php echo esc_js( get_the_post_thumbnail_url( $post->ID, 'full' ) ?: '' ); ?>';
+				}
+				
+				// Update all platform previews if their fields are empty
+				<?php foreach ( self::PLATFORMS as $platform_id => $platform_data ) : ?>
+				let <?php echo esc_js( $platform_id ); ?>Title = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title').val();
+				let <?php echo esc_js( $platform_id ); ?>Desc = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description').val();
+				const <?php echo esc_js( $platform_id ); ?>Image = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val();
+				
+				// Decode HTML entities from social media fields
+				<?php echo esc_js( $platform_id ); ?>Title = decodeHtmlEntities(<?php echo esc_js( $platform_id ); ?>Title);
+				<?php echo esc_js( $platform_id ); ?>Desc = decodeHtmlEntities(<?php echo esc_js( $platform_id ); ?>Desc);
+				
+				// Update title preview if field is empty (use SERP title)
+				if (!<?php echo esc_js( $platform_id ); ?>Title && seoTitle) {
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title-preview').text(seoTitle);
+				} else if (<?php echo esc_js( $platform_id ); ?>Title) {
+					// If field has value, use it (already decoded)
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title-preview').text(<?php echo esc_js( $platform_id ); ?>Title);
+				}
+				
+				// Update description preview if field is empty (use SERP description)
+				if (!<?php echo esc_js( $platform_id ); ?>Desc && seoDescription) {
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description-preview').text(seoDescription);
+				} else if (<?php echo esc_js( $platform_id ); ?>Desc) {
+					// If field has value, use it (already decoded)
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description-preview').text(<?php echo esc_js( $platform_id ); ?>Desc);
+				}
+				
+				// Update image preview if field is empty (use featured image)
+				if (!<?php echo esc_js( $platform_id ); ?>Image && featuredImageUrl) {
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', featuredImageUrl);
+				} else if (<?php echo esc_js( $platform_id ); ?>Image) {
+					// If field has value, use it
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', <?php echo esc_js( $platform_id ); ?>Image);
+				}
+				<?php endforeach; ?>
+			}
+
+			// Listen to SERP Optimization field changes
+			$('#fp-seo-title, #fp-seo-meta-description').on('input', function() {
+				syncFromSerpToSocial();
+			});
+
+			// Listen to featured image changes (Gutenberg and Classic Editor)
+			$(document).on('change', 'input[name="_thumbnail_id"]', function() {
+				syncFromSerpToSocial();
+			});
+
+			// Also listen for Gutenberg featured image updates
+			if (typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
+				let lastFeaturedImageId = null;
+				wp.data.subscribe(function() {
+					const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
+					if (featuredImageId !== lastFeaturedImageId) {
+						lastFeaturedImageId = featuredImageId;
+						if (featuredImageId) {
+							wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId).then(function(attachment) {
+								if (attachment && attachment.source_url) {
+									<?php foreach ( self::PLATFORMS as $platform_id => $platform_data ) : ?>
+									const <?php echo esc_js( $platform_id ); ?>Image = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val();
+									if (!<?php echo esc_js( $platform_id ); ?>Image) {
+										$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', attachment.source_url);
+									}
+									<?php endforeach; ?>
+								}
+							}).catch(function() {
+								// Attachment not found, try sync anyway
+								syncFromSerpToSocial();
+							});
+						} else {
+							// Featured image removed, sync to update previews
+							syncFromSerpToSocial();
+						}
+					}
+				});
+			}
+
+			// Listen to social field changes to update previews
+			$('.fp-seo-character-counter').on('input', function() {
+				const $field = $(this);
+				const fieldId = $field.attr('id');
+				if (fieldId && fieldId.includes('-title') || fieldId.includes('-description')) {
+					const platform = fieldId.split('-')[2];
+					const fieldType = fieldId.split('-')[3];
+					let value = $field.val();
+					
+					// Decode HTML entities
+					const $temp = $('<div>').html(value);
+					value = $temp.text();
+					
+					// Update preview
+					$(`#fp-seo-${platform}-${fieldType}-preview`).text(value || '');
+				}
+			});
+
+			// Listen to social image field changes
+			$('input[id*="-image"]').on('input', function() {
+				const $field = $(this);
+				const fieldId = $field.attr('id');
+				if (fieldId && fieldId.includes('-image')) {
+					const platform = fieldId.split('-')[2];
+					const value = $field.val();
+					if (value) {
+						$(`#fp-seo-${platform}-image-preview`).attr('src', value);
+					} else {
+						// If cleared, sync from featured image
+						syncFromSerpToSocial();
+					}
+				}
+			});
+
+			// Initial sync on page load
+			setTimeout(function() {
+				syncFromSerpToSocial();
+			}, 500); // Small delay to ensure all fields are loaded
 
 			// Image selection
 			$('.fp-seo-image-select').on('click', function() {
@@ -705,21 +944,37 @@ class ImprovedSocialMediaManager {
 	private function get_preview_data( $post ): array {
 		$social_meta = $this->get_social_meta( $post->ID );
 		
-		// Use social meta if available, otherwise use SEO title/description (which fallback to content)
+		// Use social meta if available, otherwise use SEO title/description from SERP Optimization
+		// This ensures social preview automatically uses SERP Optimization values as fallback
 		$title = ! empty( $social_meta['facebook_title'] ) 
 			? wp_specialchars_decode( $social_meta['facebook_title'], ENT_QUOTES )
 			: MetadataResolver::resolve_seo_title( $post );
 			
-		// For description: use social meta, then SEO description (which uses content without shortcodes)
+		// For description: use social meta, then SEO description from SERP Optimization
 		$description = ! empty( $social_meta['facebook_description'] )
 			? wp_specialchars_decode( $social_meta['facebook_description'], ENT_QUOTES )
 			: MetadataResolver::resolve_meta_description( $post );
+		
+		// For image: use social meta if available, then featured image, then default
+		$image = '';
+		if ( ! empty( $social_meta['facebook_image'] ) ) {
+			$image = esc_url_raw( $social_meta['facebook_image'] );
+		} else {
+			// Use featured image as fallback
+			$featured_image = get_the_post_thumbnail_url( $post->ID, 'full' );
+			if ( $featured_image ) {
+				$image = $featured_image;
+			} else {
+				// Final fallback to default social image
+				$image = get_option( 'fp_seo_social_default_image', '' );
+			}
+		}
 		
 		return array(
 			'title' => $title,
 			'description' => $description,
 			'url' => get_permalink( $post->ID ),
-			'image' => get_the_post_thumbnail_url( $post->ID, 'full' ) ?: get_option( 'fp_seo_social_default_image' ),
+			'image' => $image,
 		);
 	}
 
@@ -1093,9 +1348,10 @@ class ImprovedSocialMediaManager {
 	 */
 	private function optimize_social_with_ai( $post, string $platform ): array {
 		$title = get_the_title( $post->ID );
-		// Remove shortcodes before stripping tags
-		$content_without_shortcodes = strip_shortcodes( $post->post_content );
-		$content = wp_strip_all_tags( $content_without_shortcodes );
+		
+		// Extract clean content, handling WPBakery shortcodes properly
+		$content = $this->extract_clean_content( $post->post_content );
+		
 		$excerpt = get_the_excerpt( $post->ID );
 
 		$optimized = array();
@@ -1135,5 +1391,39 @@ class ImprovedSocialMediaManager {
 		$content = str_replace( array( '&nbsp;', '&amp;' ), array( ' ', '&' ), $content );
 		
 		return $content;
+	}
+
+	/**
+	 * Extract clean content from post, handling WPBakery shortcodes.
+	 *
+	 * @param string $post_content Raw post content.
+	 * @return string Clean text content.
+	 */
+	private function extract_clean_content( string $post_content ): string {
+		if ( empty( $post_content ) ) {
+			return '';
+		}
+
+		// Check if content contains WPBakery shortcodes
+		if ( strpos( $post_content, '[vc_' ) !== false || strpos( $post_content, '[vc_row' ) !== false ) {
+			// Use WPBakeryContentExtractor to get clean text (static method)
+			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
+				$text = \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $post_content );
+				
+				if ( ! empty( $text ) ) {
+					// Clean up the extracted text (already cleaned by extract_text, but normalize whitespace)
+					$text = preg_replace( '/\s+/', ' ', $text ); // Normalize whitespace
+					return trim( $text );
+				}
+			}
+		}
+
+		// Fallback: standard WordPress shortcode removal
+		// First render shortcodes, then strip tags
+		$rendered = do_shortcode( $post_content );
+		$content = wp_strip_all_tags( $rendered );
+		$content = preg_replace( '/\s+/', ' ', $content ); // Normalize whitespace
+		
+		return trim( $content );
 	}
 }

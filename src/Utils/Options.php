@@ -61,19 +61,74 @@ class Options {
 			);
 	}
 
-		/**
-		 * Provides default scoring weights keyed by analyzer check.
-		 *
-		 * @return array<string, float>
-		 */
+	/**
+	 * Provides default scoring weights keyed by analyzer check.
+	 *
+	 * Weights are normalized multipliers (0.0 to 10.0) where:
+	 * - 1.0 = standard weight
+	 * - > 1.0 = higher importance
+	 * - < 1.0 = lower importance
+	 * - 0.0 = disabled (not recommended)
+	 *
+	 * @return array<string, float>
+	 */
 	public static function default_scoring_weights(): array {
-			$weights = array();
+		// Core SEO elements (high impact, always applicable)
+		$core_weights = array(
+			'title_length'        => 1.5,  // SEO Title is critical - always applicable
+			'meta_description'    => 1.3,  // Meta description is very important - always applicable
+			'h1_presence'         => 1.2,  // H1 is important for structure - always applicable
+		);
 
+		// Content quality checks (medium-high impact)
+		$content_weights = array(
+			'headings_structure'  => 1.0,  // Heading structure is important
+			'image_alt'           => 0.9,  // Image alt text is important for accessibility
+		);
+
+		// Technical SEO (medium impact)
+		$technical_weights = array(
+			'canonical'           => 0.8,  // Canonical is important but not always needed
+			'robots'              => 0.7,  // Robots meta is situational
+			'internal_links'      => 0.9,  // Internal links are important
+		);
+
+		// Schema markup (optional/enhancement - lower impact, context-dependent)
+		$schema_weights = array(
+			'schema_presets'      => 0.7,  // Basic schema is good but not critical
+			'faq_schema'          => 0.3,  // FAQ is optional and context-dependent - not always applicable
+			'howto_schema'        => 0.3,  // HowTo is optional and context-dependent - not always applicable
+		);
+
+		// Social media (optional - lower impact)
+		$social_weights = array(
+			'og_cards'            => 0.5,  // OG tags are nice for social sharing
+			'twitter_cards'       => 0.4,  // Twitter cards are optional
+		);
+
+		// AI optimization (optional - lower impact, context-dependent)
+		$ai_weights = array(
+			'ai_optimized_content' => 0.4,  // AI optimization is nice to have but not critical
+		);
+
+		// Combine all weights
+		$weights = array_merge(
+			$core_weights,
+			$content_weights,
+			$technical_weights,
+			$schema_weights,
+			$social_weights,
+			$ai_weights
+		);
+
+		// Ensure all check keys have a weight (fallback to 0.5 for unknown checks)
 		foreach ( self::get_check_keys() as $key ) {
-				$weights[ $key ] = 1.0;
+			if ( ! isset( $weights[ $key ] ) ) {
+				$weights[ $key ] = 0.5; // Default moderate weight for unknown checks
+			}
 		}
 
-			return $weights;
+		return $weights;
 	}
 
 	/**
@@ -355,7 +410,15 @@ class Options {
 
 		// AI settings sanitization.
 		$ai                                          = is_array( $input['ai'] ?? null ) ? $input['ai'] : array();
-		$sanitized['ai']['openai_api_key']           = self::sanitize_text( $ai['openai_api_key'] ?? $defaults['ai']['openai_api_key'] );
+		// IMPORTANTE: Per le API key, preserviamo il valore originale senza sanitizzazione eccessiva
+		// sanitize_text_field può rimuovere caratteri validi nelle API key
+		$raw_api_key = $ai['openai_api_key'] ?? $defaults['ai']['openai_api_key'];
+		if ( is_string( $raw_api_key ) && ! empty( trim( $raw_api_key ) ) ) {
+			// Per API key, usiamo solo trim e strip_tags per sicurezza, preservando tutti i caratteri
+			$sanitized['ai']['openai_api_key'] = trim( strip_tags( $raw_api_key ) );
+		} else {
+			$sanitized['ai']['openai_api_key'] = '';
+		}
 		$sanitized['ai']['openai_model']             = self::sanitize_choice(
 			$ai['openai_model'] ?? $defaults['ai']['openai_model'],
 			array( 'gpt-5-nano', 'gpt-5-mini', 'gpt-5', 'gpt-5-pro', 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo' ),

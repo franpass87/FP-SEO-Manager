@@ -21,6 +21,7 @@ use WP_Admin_Bar;
 use function add_action;
 use function add_query_arg;
 use function admin_url;
+use function clean_post_cache;
 use function current_user_can;
 use function esc_attr;
 use function get_post;
@@ -29,7 +30,11 @@ use function get_post_type;
 use function get_permalink;
 use function is_admin;
 use function is_admin_bar_showing;
+use function maybe_unserialize;
 use function sanitize_html_class;
+use function update_post_meta_cache;
+use function wp_cache_delete;
+use function wp_cache_flush_group;
 use function wp_strip_all_tags;
 
 /**
@@ -79,23 +84,62 @@ class AdminBarBadge {
 			return;
 		}
 
-	$focus_keyword = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
-	$secondary_keywords = get_post_meta( $post->ID, '_fp_seo_secondary_keywords', true );
+		// Clear cache before retrieving (same as Metabox)
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		wp_cache_delete( $post->ID, 'posts' );
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( 'post_meta' );
+		}
+		if ( function_exists( 'update_post_meta_cache' ) ) {
+			update_post_meta_cache( array( $post->ID ) );
+		}
+
+		// Get SEO metadata using MetadataResolver (same pattern as Metabox)
+		$meta_description = MetadataResolver::resolve_meta_description( $post );
+		$canonical = MetadataResolver::resolve_canonical_url( $post );
+		$robots = MetadataResolver::resolve_robots( $post );
+		$focus_keyword = get_post_meta( $post->ID, '_fp_seo_focus_keyword', true );
+		$secondary_keywords = get_post_meta( $post->ID, '_fp_seo_secondary_keywords', true );
+		
+		// Fallback: query diretta al database se get_post_meta restituisce vuoto (same as Metabox)
+		if ( empty( $focus_keyword ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_focus_keyword' ) );
+			if ( $db_value !== null ) {
+				$focus_keyword = $db_value;
+			}
+		}
+		
+		if ( empty( $secondary_keywords ) ) {
+			global $wpdb;
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_secondary_keywords' ) );
+			if ( $db_value !== null ) {
+				$unserialized = maybe_unserialize( $db_value );
+				$secondary_keywords = is_array( $unserialized ) ? $unserialized : array();
+			}
+		}
+		
+		if ( ! is_array( $secondary_keywords ) ) {
+			$secondary_keywords = array();
+		}
+		
+		// Get SEO title, fallback to post title (same as Metabox)
+		$seo_title = MetadataResolver::resolve_seo_title( $post );
+		if ( ! $seo_title ) {
+			$seo_title = $post->post_title;
+		}
 	
-	if ( ! is_array( $secondary_keywords ) ) {
-		$secondary_keywords = array();
-	}
-	
-	$context = new Context(
-		(int) $post->ID,
-		(string) $post->post_content,
-		(string) $post->post_title,
-		MetadataResolver::resolve_meta_description( $post ),
-		function_exists( 'get_permalink' ) ? get_permalink( $post ) : null,
-		MetadataResolver::resolve_robots( $post ),
-		is_string( $focus_keyword ) ? $focus_keyword : '',
-		$secondary_keywords
-	);
+		$context = new Context(
+			(int) $post->ID,
+			(string) $post->post_content,
+			(string) $seo_title,
+			(string) $meta_description,
+			$canonical,
+			$robots,
+			is_string( $focus_keyword ) ? $focus_keyword : '',
+			$secondary_keywords
+		);
 
 		$analyzer     = new Analyzer();
 		$analysis     = $analyzer->analyze( $context );

@@ -72,6 +72,15 @@ class QAPairExtractor {
 		// Save to post meta
 		if ( ! empty( $qa_pairs ) ) {
 			update_post_meta( $post_id, self::META_QA_PAIRS, $qa_pairs );
+			
+			// Clear cache to ensure fresh data
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'post_meta' );
+		} else {
+			// If no Q&A pairs, delete the meta to avoid stale data
+			delete_post_meta( $post_id, self::META_QA_PAIRS );
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'post_meta' );
 		}
 
 		return $qa_pairs;

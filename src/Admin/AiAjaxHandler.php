@@ -116,14 +116,50 @@ class AiAjaxHandler {
 
 			// Check if OpenAI API key is configured.
 			$api_key = Options::get_option( 'ai.openai_api_key', '' );
+			
+			// Debug logging to help diagnose API key issues
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$all_options = Options::get();
+				Logger::debug( 'AI AJAX Handler - API key check', array(
+					'api_key_length' => strlen( $api_key ),
+					'api_key_empty' => empty( $api_key ),
+					'ai_section_exists' => isset( $all_options['ai'] ),
+					'ai_openai_api_key_exists' => isset( $all_options['ai']['openai_api_key'] ),
+					'ai_openai_api_key_length' => isset( $all_options['ai']['openai_api_key'] ) ? strlen( $all_options['ai']['openai_api_key'] ) : 0,
+					'option_key' => Options::OPTION_KEY,
+				) );
+			}
+			
 			if ( empty( $api_key ) ) {
-				wp_send_json_error(
-					array(
-						'message' => __( 'Chiave API OpenAI non configurata. Vai in Impostazioni > FP SEO Performance > AI per configurare la chiave API.', 'fp-seo-performance' ),
-					),
-					400
-				);
-				return;
+				// Try direct database check as fallback
+				$direct_check = get_option( Options::OPTION_KEY, array() );
+				$direct_api_key = $direct_check['ai']['openai_api_key'] ?? '';
+				
+				if ( ! empty( $direct_api_key ) ) {
+					// API key exists in DB but not being read correctly - clear cache
+					\FP\SEO\Utils\Cache::delete( 'options_data' );
+					wp_cache_delete( Options::OPTION_KEY, 'options' );
+					wp_cache_delete( 'alloptions', 'options' );
+					
+					// Retry after cache clear
+					$api_key = Options::get_option( 'ai.openai_api_key', '' );
+					
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::debug( 'API key found in direct check, cleared cache and retried', array(
+							'retry_api_key_length' => strlen( $api_key ),
+						) );
+					}
+				}
+				
+				if ( empty( $api_key ) ) {
+					wp_send_json_error(
+						array(
+							'message' => __( 'Chiave API OpenAI non configurata. Vai in Impostazioni > FP SEO Performance > AI per configurare la chiave API.', 'fp-seo-performance' ),
+						),
+						400
+					);
+					return;
+				}
 			}
 
 			// Check if AI is enabled.

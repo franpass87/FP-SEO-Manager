@@ -28,12 +28,30 @@ class SerpPreview {
 		}
 
 		setup() {
+			// Retry creating preview container if section not found immediately
 			this.createPreviewContainer();
-			this.bindEvents();
-			this.updatePreview();
+			
+			// If section not found, retry after a short delay
+			if (!this.previewElement) {
+				setTimeout(() => {
+					this.createPreviewContainer();
+					if (this.previewElement) {
+						this.bindEvents();
+						this.updatePreview();
+					}
+				}, 100);
+			} else {
+				this.bindEvents();
+				this.updatePreview();
+			}
 		}
 
 		createPreviewContainer() {
+			// Don't create if already exists
+			if (this.previewElement && document.contains(this.previewElement)) {
+				return;
+			}
+			
 			const metabox = document.querySelector('.fp-seo-performance-metabox');
 			if (!metabox) return;
 
@@ -58,19 +76,75 @@ class SerpPreview {
 				</div>
 			`;
 
-			// Insert before recommendations
-			const recommendations = metabox.querySelector('.fp-seo-performance-metabox__recommendations');
-			if (recommendations) {
-				metabox.insertBefore(container, recommendations);
+			// Insert right after SERP Optimization section
+			// Find the SERP Optimization section by data attribute or class
+			const serpOptimizationSection = metabox.querySelector('.fp-seo-serp-optimization-section, [data-section="serp-optimization"]');
+			
+			if (serpOptimizationSection) {
+				// Remove any existing preview to avoid duplicates
+				const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
+				if (existingPreview) {
+					existingPreview.remove();
+				}
+				
+				// Find the next element sibling (skip text nodes)
+				let nextElement = serpOptimizationSection.nextElementSibling;
+				
+				if (nextElement) {
+					// Insert before the next element
+					serpOptimizationSection.parentNode.insertBefore(container, nextElement);
+				} else {
+					// If it's the last child, insert after using insertAdjacentElement
+					serpOptimizationSection.insertAdjacentElement('afterend', container);
+				}
 			} else {
-				metabox.appendChild(container);
+				// Fallback: try to find by text content
+				const sections = metabox.querySelectorAll('.fp-seo-performance-metabox__section');
+				let foundSection = null;
+				
+				for (const section of sections) {
+					const heading = section.querySelector('.fp-seo-performance-metabox__section-heading');
+					if (heading && heading.textContent.includes('SERP Optimization')) {
+						foundSection = section;
+						break;
+					}
+				}
+				
+				if (foundSection) {
+					// Find the next element sibling (skip text nodes)
+					let nextElement = foundSection.nextElementSibling;
+					
+					if (nextElement) {
+						foundSection.parentNode.insertBefore(container, nextElement);
+					} else {
+						// Insert after using insertAdjacentElement
+						foundSection.insertAdjacentElement('afterend', container);
+					}
+				} else {
+					// Final fallback: insert before recommendations or at the end
+					const recommendations = metabox.querySelector('.fp-seo-performance-metabox__recommendations');
+					if (recommendations) {
+						metabox.insertBefore(container, recommendations);
+					} else {
+						metabox.appendChild(container);
+					}
+				}
 			}
 
 			this.previewElement = container.querySelector('.fp-seo-serp-preview__snippet');
+			return !!this.previewElement;
 		}
 
 	bindEvents() {
-		// Title
+		// SEO Title (priority) - use SEO title if available, otherwise post title
+		const seoTitleInput = document.querySelector('#fp-seo-title, [name="fp_seo_title"]');
+		if (seoTitleInput) {
+			const handler = () => this.updatePreview();
+			seoTitleInput.addEventListener('input', handler);
+			this.listeners.push({ element: seoTitleInput, event: 'input', handler });
+		}
+
+		// Post Title (fallback) - also listen to post title changes
 		const titleInput = document.querySelector('#title, [name="post_title"]');
 		if (titleInput) {
 			const handler = () => this.updatePreview();
@@ -90,8 +164,8 @@ class SerpPreview {
 			this.unsubscribeGutenberg = wp.data.subscribe(() => this.updatePreview());
 		}
 
-		// Meta description (if Yoast or similar)
-		const metaDesc = document.querySelector('#yoast_wpseo_metadesc, [name="fp_seo_meta_description"]');
+		// Meta description - prioritize FP SEO field
+		const metaDesc = document.querySelector('#fp-seo-meta-description, [name="fp_seo_meta_description"], #yoast_wpseo_metadesc');
 		if (metaDesc) {
 			const handler = () => this.updatePreview();
 			metaDesc.addEventListener('input', handler);
@@ -138,9 +212,32 @@ class SerpPreview {
 		}
 
 		collectData() {
-			// Get title
-			const titleInput = document.querySelector('#title, [name="post_title"]');
-			this.title = titleInput ? titleInput.value : '';
+			// Get title - prioritize SEO title over post title
+			let title = '';
+			
+			// First, try to get SEO title
+			const seoTitleInput = document.querySelector('#fp-seo-title, [name="fp_seo_title"]');
+			if (seoTitleInput && seoTitleInput.value) {
+				title = seoTitleInput.value.trim();
+			}
+			
+			// Fallback to post title if SEO title is empty
+			if (!title) {
+				const titleInput = document.querySelector('#title, [name="post_title"]');
+				if (titleInput) {
+					title = titleInput.value.trim();
+				}
+			}
+			
+			// Fallback to Gutenberg editor title
+			if (!title && wp && wp.data) {
+				const editor = wp.data.select('core/editor');
+				if (editor) {
+					title = editor.getEditedPostAttribute('title') || '';
+				}
+			}
+			
+			this.title = title;
 
 			// Get URL/slug
 			const slugInput = document.querySelector('#post_name, [name="post_name"]');
@@ -154,13 +251,21 @@ class SerpPreview {
 				this.url = window.location.origin + '/' + slug + '/';
 			}
 
-			// Get description
+			// Get description - prioritize FP SEO meta description
 			let description = '';
 			
-			// Try meta description field
-			const metaDesc = document.querySelector('#yoast_wpseo_metadesc, [name="fp_seo_meta_description"]');
-			if (metaDesc) {
-				description = metaDesc.value;
+			// Try FP SEO meta description field first
+			const metaDesc = document.querySelector('#fp-seo-meta-description, [name="fp_seo_meta_description"]');
+			if (metaDesc && metaDesc.value) {
+				description = metaDesc.value.trim();
+			}
+			
+			// Fallback to Yoast if FP SEO field is empty
+			if (!description) {
+				const yoastDesc = document.querySelector('#yoast_wpseo_metadesc');
+				if (yoastDesc && yoastDesc.value) {
+					description = yoastDesc.value.trim();
+				}
 			}
 
 			// Fallback to excerpt

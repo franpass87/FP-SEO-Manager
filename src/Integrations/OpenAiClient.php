@@ -77,7 +77,21 @@ class OpenAiClient {
 	 * @return string
 	 */
 	private function get_api_key(): string {
-		return Options::get_option( 'ai.openai_api_key', '' );
+		$api_key = Options::get_option( 'ai.openai_api_key', '' );
+		
+		// Debug logging to help diagnose API key issues
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$all_options = Options::get();
+			Logger::debug( 'OpenAI API key retrieval', array(
+				'api_key_length' => strlen( $api_key ),
+				'api_key_empty' => empty( $api_key ),
+				'ai_section_exists' => isset( $all_options['ai'] ),
+				'ai_openai_api_key_exists' => isset( $all_options['ai']['openai_api_key'] ),
+				'ai_openai_api_key_length' => isset( $all_options['ai']['openai_api_key'] ) ? strlen( $all_options['ai']['openai_api_key'] ) : 0,
+			) );
+		}
+		
+		return $api_key;
 	}
 
 	/**
