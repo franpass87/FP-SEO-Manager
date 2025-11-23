@@ -115,16 +115,42 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
+		// Ensure we have a valid post ID
+		if ( empty( $post->ID ) || $post->ID <= 0 ) {
+			// Try to get post ID from request
+			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
+			if ( $post_id > 0 ) {
+				$post = get_post( $post_id );
+				if ( ! $post instanceof WP_Post ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::error( 'FP SEO: Could not retrieve post in renderer', array(
+							'post_id' => $post_id,
+						) );
+					}
+					return;
+				}
+			} else {
+				// New post - that's OK, continue with empty fields
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'FP SEO: Rendering metabox for new post', array(
+						'post_type' => $post->post_type ?? 'unknown',
+					) );
+				}
+			}
+		}
+		
 		// IMPORTANTE: Pulisci la cache PRIMA di iniziare il rendering
 		// Questo assicura che tutti i valori vengano letti correttamente
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
+		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
+			clean_post_cache( $post->ID );
+			wp_cache_delete( $post->ID, 'post_meta' );
+			wp_cache_delete( $post->ID, 'posts' );
+			if ( function_exists( 'wp_cache_flush_group' ) ) {
+				wp_cache_flush_group( 'post_meta' );
+			}
+			if ( function_exists( 'update_post_meta_cache' ) ) {
+				update_post_meta_cache( array( $post->ID ) );
+			}
 		}
 		
 		// Log per debug - verifica diretta dal database (solo in debug mode)

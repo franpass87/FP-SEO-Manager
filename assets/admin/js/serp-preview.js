@@ -76,28 +76,44 @@ class SerpPreview {
 				</div>
 			`;
 
-			// Insert right after SERP Optimization section
-			// Find the SERP Optimization section by data attribute or class
-			const serpOptimizationSection = metabox.querySelector('.fp-seo-serp-optimization-section, [data-section="serp-optimization"]');
+			// Insert before Images Optimization section
+			// First, try to find Images Optimization section
+			const imagesSection = Array.from(metabox.querySelectorAll('.fp-seo-performance-metabox__section')).find(s => {
+				const heading = s.querySelector('.fp-seo-performance-metabox__section-heading');
+				return heading && heading.textContent.includes('Images');
+			});
 			
-			if (serpOptimizationSection) {
+			if (imagesSection) {
 				// Remove any existing preview to avoid duplicates
 				const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
 				if (existingPreview) {
 					existingPreview.remove();
 				}
 				
-				// Find the next element sibling (skip text nodes)
-				let nextElement = serpOptimizationSection.nextElementSibling;
-				
-				if (nextElement) {
-					// Insert before the next element
-					serpOptimizationSection.parentNode.insertBefore(container, nextElement);
-				} else {
-					// If it's the last child, insert after using insertAdjacentElement
-					serpOptimizationSection.insertAdjacentElement('afterend', container);
-				}
+				// Insert before Images Optimization section
+				imagesSection.parentNode.insertBefore(container, imagesSection);
 			} else {
+				// Fallback: try to find SERP Optimization section and insert after it
+				const serpOptimizationSection = metabox.querySelector('.fp-seo-serp-optimization-section, [data-section="serp-optimization"]');
+				
+				if (serpOptimizationSection) {
+					// Remove any existing preview to avoid duplicates
+					const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
+					if (existingPreview) {
+						existingPreview.remove();
+					}
+					
+					// Find the next element sibling (skip text nodes)
+					let nextElement = serpOptimizationSection.nextElementSibling;
+					
+					if (nextElement) {
+						// Insert before the next element
+						serpOptimizationSection.parentNode.insertBefore(container, nextElement);
+					} else {
+						// If it's the last child, insert after using insertAdjacentElement
+						serpOptimizationSection.insertAdjacentElement('afterend', container);
+					}
+				} else {
 				// Fallback: try to find by text content
 				const sections = metabox.querySelectorAll('.fp-seo-performance-metabox__section');
 				let foundSection = null;
