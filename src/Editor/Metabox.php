@@ -96,7 +96,11 @@ class Metabox {
 		add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
 		
 		// Hook wp_insert_post_data per salvare prima che il post venga inserito
-		add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 10, 4 );
+		// Priorità 1 per intervenire PRIMA di qualsiasi altro plugin che potrebbe modificare lo status
+		add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
+		
+		// Hook transition_post_status per intercettare cambiamenti di status (specialmente per homepage)
+		add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
 		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -1680,6 +1684,39 @@ class Metabox {
 		$saver = new \FP\SEO\Editor\MetaboxSaver();
 		$result = $saver->save_all_fields( $post_id );
 		
+		// Protezione per homepage: verifica e correggi lo status se necessario
+		// Questo viene eseguito DOPO il salvataggio per correggere eventuali modifiche fatte da altri plugin
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id > 0 && $post_id === $page_on_front_id ) {
+			$current_post = get_post( $post_id );
+			if ( $current_post instanceof WP_Post && $current_post->post_status === 'auto-draft' ) {
+				// Recupera lo status originale dal database (potrebbe essere stato modificato)
+				global $wpdb;
+				$original_status = $wpdb->get_var( $wpdb->prepare(
+					"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+					$post_id
+				) );
+				
+				// Se lo status è ancora auto-draft ma il post esiste da tempo, correggilo
+				if ( $original_status === 'auto-draft' && $current_post->post_date !== '0000-00-00 00:00:00' ) {
+					// Il post ha una data, quindi non dovrebbe essere auto-draft
+					// Imposta a 'publish' o 'draft' in base al contesto
+					$new_status = 'publish'; // Default per homepage
+					wp_update_post( array(
+						'ID' => $post_id,
+						'post_status' => $new_status,
+					) );
+					
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::warning( 'Metabox::save_meta - Corrected homepage status from auto-draft', array(
+							'post_id' => $post_id,
+							'new_status' => $new_status,
+						) );
+					}
+				}
+			}
+		}
+		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta completed', array(
 				'post_id' => $post_id,
@@ -1837,6 +1874,33 @@ class Metabox {
 			unset( $_POST['fp_seo_meta_description'], $_POST['fp_seo_meta_description_sent'] );
 			unset( $_POST['fp_seo_excerpt'], $_POST['fp_seo_excerpt_sent'] );
 			unset( $_POST['fp_seo_performance_metabox_present'] );
+			
+			// Protezione per homepage: verifica e correggi lo status se necessario
+			$page_on_front_id = (int) get_option( 'page_on_front' );
+			if ( $page_on_front_id > 0 && $post->ID === $page_on_front_id && ! $creating ) {
+				$current_post = get_post( $post->ID );
+				if ( $current_post instanceof WP_Post && $current_post->post_status === 'auto-draft' ) {
+					// Recupera lo status originale dal database
+					global $wpdb;
+					$original_status = $wpdb->get_var( $wpdb->prepare(
+						"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+						$post->ID
+					) );
+					
+					if ( $original_status === 'auto-draft' && $current_post->post_date !== '0000-00-00 00:00:00' ) {
+						// Il post ha una data, quindi non dovrebbe essere auto-draft
+						wp_update_post( array(
+							'ID' => $post->ID,
+							'post_status' => 'publish',
+						) );
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::warning( 'Metabox::save_meta_rest - Corrected homepage status from auto-draft', array(
+								'post_id' => $post->ID,
+							) );
+						}
+					}
+				}
+			}
 		} else {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'REST API - No SEO fields found in request params', array(
@@ -1905,23 +1969,37 @@ class Metabox {
 		// un post esistente come nuovo (auto-draft)
 		// Assicuriamoci che se è un update, lo status rimanga quello originale
 		// Questo è particolarmente importante per la homepage (page_on_front)
+		
+		// Verifica se questa è la homepage PRIMA di qualsiasi altro controllo
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
+		
+		// Se è un update di un post esistente (inclusa la homepage)
 		if ( $post_id > 0 && $update ) {
-			// Se stiamo aggiornando un post esistente, preserva lo status originale
-			$original_post = get_post( $post_id );
-			if ( $original_post instanceof WP_Post && ! empty( $original_post->post_status ) ) {
-				// Verifica se questa è la homepage
-				$is_homepage = (int) get_option( 'page_on_front' ) === $post_id;
-				
+			// Recupera lo status originale direttamente dal database per maggiore affidabilità
+			global $wpdb;
+			$original_status = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			// Se non trovato nel DB, prova con get_post come fallback
+			if ( empty( $original_status ) ) {
+				$original_post = get_post( $post_id );
+				$original_status = $original_post instanceof WP_Post ? $original_post->post_status : '';
+			}
+			
+			if ( ! empty( $original_status ) && $original_status !== 'auto-draft' ) {
 				// Se lo status nel data è 'auto-draft' ma il post originale ha uno status diverso,
-				// ripristina lo status originale
+				// ripristina lo status originale IMMEDIATAMENTE
 				// Questo è CRITICO per la homepage che potrebbe essere trattata in modo speciale
 				if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' && 
-				     $original_post->post_status !== 'auto-draft' ) {
-					$data['post_status'] = $original_post->post_status;
+				     $original_status !== 'auto-draft' ) {
+					$data['post_status'] = $original_status;
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 						Logger::debug( 'Metabox::save_meta_pre_insert - Restored original post status', array(
 							'post_id' => $post_id,
-							'original_status' => $original_post->post_status,
+							'original_status' => $original_status,
 							'was_status' => 'auto-draft',
 							'is_homepage' => $is_homepage,
 						) );
@@ -1929,17 +2007,46 @@ class Metabox {
 				}
 				
 				// Protezione aggiuntiva per la homepage: assicurati che lo status non venga mai cambiato
+				// anche se non è esattamente 'auto-draft' ma è diverso dall'originale
 				if ( $is_homepage && isset( $data['post_status'] ) && 
-				     $data['post_status'] !== $original_post->post_status &&
-				     $data['post_status'] === 'auto-draft' ) {
-					$data['post_status'] = $original_post->post_status;
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::warning( 'Metabox::save_meta_pre_insert - Prevented homepage status change to auto-draft', array(
-							'post_id' => $post_id,
-							'original_status' => $original_post->post_status,
-							'attempted_status' => 'auto-draft',
-						) );
+				     $data['post_status'] !== $original_status ) {
+					// Solo se il nuovo status è 'auto-draft' o 'draft', ripristina l'originale
+					if ( in_array( $data['post_status'], array( 'auto-draft', 'draft' ), true ) &&
+					     ! in_array( $original_status, array( 'auto-draft', 'draft' ), true ) ) {
+						$data['post_status'] = $original_status;
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::warning( 'Metabox::save_meta_pre_insert - Prevented homepage status change', array(
+								'post_id' => $post_id,
+								'original_status' => $original_status,
+								'attempted_status' => $data['post_status'],
+							) );
+						}
 					}
+				}
+			}
+		}
+		
+		// Protezione aggiuntiva: se non è un update ma abbiamo un post_id valido e siamo sulla homepage,
+		// potrebbe essere un errore - verifica e correggi
+		if ( $post_id > 0 && ! $update && $is_homepage ) {
+			// Recupera lo status originale direttamente dal database
+			global $wpdb;
+			$original_status_homepage = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			if ( ! empty( $original_status_homepage ) &&
+			     isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' &&
+			     $original_status_homepage !== 'auto-draft' ) {
+				// Forza l'update e ripristina lo status
+				$data['post_status'] = $original_status_homepage;
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'Metabox::save_meta_pre_insert - Homepage treated as new but exists, restored status', array(
+						'post_id' => $post_id,
+						'original_status' => $original_status_homepage,
+						'was_status' => 'auto-draft',
+					) );
 				}
 			}
 		}
@@ -1964,6 +2071,20 @@ class Metabox {
 			}
 		}
 		
+		// Gestisci slug direttamente nell'array $data (evita wp_update_post durante wp_insert_post_data)
+		if ( isset( $_POST['fp_seo_slug'] ) ) {
+			$slug = trim( sanitize_title( wp_unslash( (string) $_POST['fp_seo_slug'] ) ) );
+			if ( '' !== $slug ) {
+				$data['post_name'] = $slug;
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Metabox::save_meta_pre_insert - Slug updated in data array', array(
+						'post_id' => $post_id,
+						'slug' => $slug,
+					) );
+				}
+			}
+		}
+		
 		if ( $post_id > 0 && $update ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'Metabox::save_meta_pre_insert called', array(
@@ -1973,11 +2094,61 @@ class Metabox {
 					'hook' => 'wp_insert_post_data',
 				) );
 			}
-			// Salva i meta prima che il post venga aggiornato
-			$saver = new \FP\SEO\Editor\MetaboxSaver();
-			$saver->save_all_fields( $post_id );
+			
+			// IMPORTANTE: NON chiamare save_all_fields qui perché potrebbe chiamare wp_update_post
+			// (tramite save_slug e save_excerpt) che può causare problemi durante wp_insert_post_data,
+			// specialmente per la homepage. I meta fields verranno salvati tramite save_post hook invece.
+			// Slug ed excerpt sono già gestiti direttamente nell'array $data sopra.
 		}
 		return $data;
+	}
+	
+	/**
+	 * Prevents homepage from being set to auto-draft status.
+	 * Hook: transition_post_status
+	 *
+	 * @param string  $new_status New post status.
+	 * @param string  $old_status Old post status.
+	 * @param WP_Post $post       Post object.
+	 */
+	public function prevent_homepage_auto_draft( string $new_status, string $old_status, $post ): void {
+		// Verifica se è la homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 || ! $post instanceof WP_Post || $post->ID !== $page_on_front_id ) {
+			return;
+		}
+		
+		// Se lo status sta cambiando verso 'auto-draft' ma il post esiste già (non è nuovo)
+		if ( $new_status === 'auto-draft' && $old_status !== 'auto-draft' && $old_status !== '' ) {
+			// Usa un flag statico per evitare loop infiniti
+			static $correcting = array();
+			if ( isset( $correcting[ $post->ID ] ) ) {
+				return;
+			}
+			$correcting[ $post->ID ] = true;
+			
+			// Correggi immediatamente usando wp_update_post
+			// Rimuovi temporaneamente l'hook per evitare loop
+			remove_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1 );
+			
+			wp_update_post( array(
+				'ID' => $post->ID,
+				'post_status' => $old_status,
+			) );
+			
+			// Ripristina l'hook
+			add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
+			
+			unset( $correcting[ $post->ID ] );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'Metabox::prevent_homepage_auto_draft - Prevented homepage status change to auto-draft', array(
+					'post_id' => $post->ID,
+					'old_status' => $old_status,
+					'attempted_status' => 'auto-draft',
+				) );
+			}
+		}
 	}
 
 	public function save_meta_pre_update( int $post_id, array $data ): array {
