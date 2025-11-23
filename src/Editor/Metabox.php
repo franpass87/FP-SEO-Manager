@@ -1393,13 +1393,28 @@ class Metabox {
 		// Use a local variable to avoid modifying the parameter
 		$current_post = $post;
 		
+		// Special handling for homepage: always try to get the real post if it's set as page_on_front
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$is_homepage_edit = $page_on_front_id > 0 && (
+			( isset( $_GET['post'] ) && absint( $_GET['post'] ) === $page_on_front_id ) ||
+			( isset( $_POST['post_ID'] ) && absint( $_POST['post_ID'] ) === $page_on_front_id ) ||
+			( ! empty( $current_post->ID ) && $current_post->ID === $page_on_front_id )
+		);
+		
 		// If post has auto-draft status but we're editing an existing post, try to get the real post
 		// This happens when WordPress creates a new post object instead of loading the existing one
+		// This is especially common with the homepage
 		if ( ( empty( $current_post->ID ) || $current_post->ID <= 0 ) || 
-		     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' ) ) {
+		     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' ) ||
+		     ( $is_homepage_edit && ( empty( $current_post->ID ) || $current_post->post_status === 'auto-draft' ) ) ) {
 			
 			// First, try to get post ID from request (most reliable for existing posts)
 			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
+			
+			// For homepage, also check page_on_front option
+			if ( $post_id <= 0 && $is_homepage_edit && $page_on_front_id > 0 ) {
+				$post_id = $page_on_front_id;
+			}
 			
 			if ( $post_id > 0 ) {
 				$retrieved_post = get_post( $post_id );
@@ -1411,6 +1426,7 @@ class Metabox {
 							'post_type' => $current_post->post_type,
 							'post_status' => $current_post->post_status,
 							'original_status' => $post->post_status ?? 'unknown',
+							'is_homepage' => $is_homepage_edit,
 						) );
 					}
 				} elseif ( $retrieved_post instanceof WP_Post ) {
@@ -1433,6 +1449,7 @@ class Metabox {
 							'post_id' => $current_post->ID,
 							'post_type' => $current_post->post_type,
 							'post_status' => $current_post->post_status,
+							'is_homepage' => $is_homepage_edit,
 						) );
 					}
 				}
@@ -1887,12 +1904,17 @@ class Metabox {
 		// IMPORTANTE: Non modificare lo status del post - questo potrebbe causare che WordPress tratti
 		// un post esistente come nuovo (auto-draft)
 		// Assicuriamoci che se è un update, lo status rimanga quello originale
+		// Questo è particolarmente importante per la homepage (page_on_front)
 		if ( $post_id > 0 && $update ) {
 			// Se stiamo aggiornando un post esistente, preserva lo status originale
 			$original_post = get_post( $post_id );
 			if ( $original_post instanceof WP_Post && ! empty( $original_post->post_status ) ) {
+				// Verifica se questa è la homepage
+				$is_homepage = (int) get_option( 'page_on_front' ) === $post_id;
+				
 				// Se lo status nel data è 'auto-draft' ma il post originale ha uno status diverso,
 				// ripristina lo status originale
+				// Questo è CRITICO per la homepage che potrebbe essere trattata in modo speciale
 				if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' && 
 				     $original_post->post_status !== 'auto-draft' ) {
 					$data['post_status'] = $original_post->post_status;
@@ -1901,6 +1923,21 @@ class Metabox {
 							'post_id' => $post_id,
 							'original_status' => $original_post->post_status,
 							'was_status' => 'auto-draft',
+							'is_homepage' => $is_homepage,
+						) );
+					}
+				}
+				
+				// Protezione aggiuntiva per la homepage: assicurati che lo status non venga mai cambiato
+				if ( $is_homepage && isset( $data['post_status'] ) && 
+				     $data['post_status'] !== $original_post->post_status &&
+				     $data['post_status'] === 'auto-draft' ) {
+					$data['post_status'] = $original_post->post_status;
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::warning( 'Metabox::save_meta_pre_insert - Prevented homepage status change to auto-draft', array(
+							'post_id' => $post_id,
+							'original_status' => $original_post->post_status,
+							'attempted_status' => 'auto-draft',
 						) );
 					}
 				}
