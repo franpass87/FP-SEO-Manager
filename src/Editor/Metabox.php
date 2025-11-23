@@ -1390,16 +1390,19 @@ class Metabox {
 			return;
 		}
 		
+		// Use a local variable to avoid modifying the parameter
+		$current_post = $post;
+		
 		// Ensure we have a valid post ID - if post is auto-draft or new, try to get from global
-		if ( empty( $post->ID ) || $post->ID <= 0 ) {
-			global $post;
-			$global_post = $post;
+		if ( empty( $current_post->ID ) || $current_post->ID <= 0 ) {
+			// Get global post without overwriting the parameter
+			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
 			if ( isset( $global_post ) && $global_post instanceof WP_Post && ! empty( $global_post->ID ) && $global_post->ID > 0 ) {
-				$post = $global_post;
+				$current_post = $global_post;
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::debug( 'FP SEO: Using global post object in render', array(
-						'post_id' => $post->ID,
-						'post_type' => $post->post_type,
+						'post_id' => $current_post->ID,
+						'post_type' => $current_post->post_type,
 					) );
 				}
 			} else {
@@ -1408,11 +1411,11 @@ class Metabox {
 				if ( $post_id > 0 ) {
 					$retrieved_post = get_post( $post_id );
 					if ( $retrieved_post instanceof WP_Post ) {
-						$post = $retrieved_post;
+						$current_post = $retrieved_post;
 						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 							Logger::debug( 'FP SEO: Retrieved post object from request', array(
-								'post_id' => $post->ID,
-								'post_type' => $post->post_type,
+								'post_id' => $current_post->ID,
+								'post_type' => $current_post->post_type,
 							) );
 						}
 					} else {
@@ -1427,8 +1430,8 @@ class Metabox {
 				} else {
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 						Logger::warning( 'FP SEO: Post ID is invalid and could not be retrieved', array(
-							'post_type' => gettype( $post ),
-							'has_id' => isset( $post->ID ),
+							'post_type' => gettype( $current_post ),
+							'has_id' => isset( $current_post->ID ),
 							'get_post' => isset( $_GET['post'] ) ? $_GET['post'] : 'not set',
 							'post_post_id' => isset( $_POST['post_ID'] ) ? $_POST['post_ID'] : 'not set',
 						) );
@@ -1437,6 +1440,9 @@ class Metabox {
 				}
 			}
 		}
+		
+		// Use current_post for the rest of the method - don't modify the original $post parameter
+		// to avoid interfering with WordPress's post object handling
 		
 		// Output sempre il nonce e il campo nascosto, anche se il rendering fallisce
 		try {
@@ -1468,16 +1474,16 @@ class Metabox {
 		// I dati per JS sono già stati preparati in enqueue_assets()
 		$options  = Options::get();
 		$enabled  = ! empty( $options['general']['enable_analyzer'] );
-		$excluded = $this->is_post_excluded( (int) $post->ID );
+		$excluded = $this->is_post_excluded( (int) $current_post->ID );
 		$analysis = array();
 
 		if ( $enabled && ! $excluded ) {
 			try {
-				$analysis = $this->run_analysis_for_post( $post );
+				$analysis = $this->run_analysis_for_post( $current_post );
 			} catch ( \Exception $e ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::error( 'FP SEO: Error running analysis', array(
-						'post_id' => $post->ID,
+						'post_id' => $current_post->ID,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 						'file' => $e->getFile(),
@@ -1488,7 +1494,7 @@ class Metabox {
 			} catch ( \Throwable $e ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::error( 'FP SEO: Fatal error running analysis', array(
-						'post_id' => $post->ID,
+						'post_id' => $current_post->ID,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 						'file' => $e->getFile(),
@@ -1500,8 +1506,9 @@ class Metabox {
 		}
 
 		// Use renderer to output HTML con gestione errori robusta
+		// Pass current_post instead of modifying the original $post parameter
 		try {
-			$this->renderer->render( $post, $analysis, $excluded );
+			$this->renderer->render( $current_post, $analysis, $excluded );
 		} catch ( \Exception $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::error( 'FP SEO: Error rendering metabox', array(
@@ -1519,11 +1526,11 @@ class Metabox {
 			echo '</div>';
 			
 			// Mostra almeno i campi essenziali per il salvataggio
-			$this->render_fallback_fields( $post );
+			$this->render_fallback_fields( $current_post );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::error( 'FP SEO: Fatal error rendering metabox', array(
-					'post_id' => $post->ID,
+					'post_id' => $current_post->ID,
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
