@@ -1393,50 +1393,48 @@ class Metabox {
 		// Use a local variable to avoid modifying the parameter
 		$current_post = $post;
 		
-		// Ensure we have a valid post ID - if post is auto-draft or new, try to get from global
-		if ( empty( $current_post->ID ) || $current_post->ID <= 0 ) {
-			// Get global post without overwriting the parameter
-			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
-			if ( isset( $global_post ) && $global_post instanceof WP_Post && ! empty( $global_post->ID ) && $global_post->ID > 0 ) {
-				$current_post = $global_post;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: Using global post object in render', array(
-						'post_id' => $current_post->ID,
-						'post_type' => $current_post->post_type,
-					) );
-				}
-			} else {
-				// Try to get post ID from request
-				$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
-				if ( $post_id > 0 ) {
-					$retrieved_post = get_post( $post_id );
-					if ( $retrieved_post instanceof WP_Post ) {
-						$current_post = $retrieved_post;
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::debug( 'FP SEO: Retrieved post object from request', array(
-								'post_id' => $current_post->ID,
-								'post_type' => $current_post->post_type,
-							) );
-						}
-					} else {
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::error( 'FP SEO: Could not retrieve post object', array(
-								'post_id' => $post_id,
-							) );
-						}
-						echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: impossibile recuperare il post.', 'fp-seo-performance' ) . '</p></div>';
-						return;
-					}
-				} else {
+		// If post has auto-draft status but we're editing an existing post, try to get the real post
+		// This happens when WordPress creates a new post object instead of loading the existing one
+		if ( ( empty( $current_post->ID ) || $current_post->ID <= 0 ) || 
+		     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' ) ) {
+			
+			// First, try to get post ID from request (most reliable for existing posts)
+			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
+			
+			if ( $post_id > 0 ) {
+				$retrieved_post = get_post( $post_id );
+				if ( $retrieved_post instanceof WP_Post && $retrieved_post->post_status !== 'auto-draft' ) {
+					$current_post = $retrieved_post;
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::warning( 'FP SEO: Post ID is invalid and could not be retrieved', array(
-							'post_type' => gettype( $current_post ),
-							'has_id' => isset( $current_post->ID ),
-							'get_post' => isset( $_GET['post'] ) ? $_GET['post'] : 'not set',
-							'post_post_id' => isset( $_POST['post_ID'] ) ? $_POST['post_ID'] : 'not set',
+						Logger::debug( 'FP SEO: Retrieved existing post from request (was auto-draft)', array(
+							'post_id' => $current_post->ID,
+							'post_type' => $current_post->post_type,
+							'post_status' => $current_post->post_status,
+							'original_status' => $post->post_status ?? 'unknown',
 						) );
 					}
-					// Don't return - show metabox anyway for new posts
+				} elseif ( $retrieved_post instanceof WP_Post ) {
+					// Post exists but is auto-draft - this is a new post, keep it
+					$current_post = $retrieved_post;
+				}
+			}
+			
+			// If still no valid post, try global
+			if ( ( empty( $current_post->ID ) || $current_post->ID <= 0 ) || 
+			     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' && $post_id <= 0 ) ) {
+				// Get global post without overwriting the parameter
+				$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+				if ( isset( $global_post ) && $global_post instanceof WP_Post && 
+				     ! empty( $global_post->ID ) && $global_post->ID > 0 &&
+				     $global_post->post_status !== 'auto-draft' ) {
+					$current_post = $global_post;
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::debug( 'FP SEO: Using global post object in render', array(
+							'post_id' => $current_post->ID,
+							'post_type' => $current_post->post_type,
+							'post_status' => $current_post->post_status,
+						) );
+					}
 				}
 			}
 		}
@@ -1886,6 +1884,29 @@ class Metabox {
 	public function save_meta_pre_insert( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
 		$post_id = isset( $postarr['ID'] ) ? absint( $postarr['ID'] ) : 0;
 		
+		// IMPORTANTE: Non modificare lo status del post - questo potrebbe causare che WordPress tratti
+		// un post esistente come nuovo (auto-draft)
+		// Assicuriamoci che se è un update, lo status rimanga quello originale
+		if ( $post_id > 0 && $update ) {
+			// Se stiamo aggiornando un post esistente, preserva lo status originale
+			$original_post = get_post( $post_id );
+			if ( $original_post instanceof WP_Post && ! empty( $original_post->post_status ) ) {
+				// Se lo status nel data è 'auto-draft' ma il post originale ha uno status diverso,
+				// ripristina lo status originale
+				if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' && 
+				     $original_post->post_status !== 'auto-draft' ) {
+					$data['post_status'] = $original_post->post_status;
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::debug( 'Metabox::save_meta_pre_insert - Restored original post status', array(
+							'post_id' => $post_id,
+							'original_status' => $original_post->post_status,
+							'was_status' => 'auto-draft',
+						) );
+					}
+				}
+			}
+		}
+		
 		// Salva excerpt se presente (sia per nuovi post che per update)
 		if ( isset( $_POST['fp_seo_excerpt'] ) || isset( $postarr['fp_seo_excerpt'] ) ) {
 			$excerpt = isset( $_POST['fp_seo_excerpt'] ) 
@@ -1910,6 +1931,8 @@ class Metabox {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'Metabox::save_meta_pre_insert called', array(
 					'post_id' => $post_id,
+					'update' => $update,
+					'post_status' => $data['post_status'] ?? 'not set',
 					'hook' => 'wp_insert_post_data',
 				) );
 			}
