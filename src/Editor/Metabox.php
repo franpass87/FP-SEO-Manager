@@ -209,6 +209,12 @@ class Metabox {
 				}
 				return;
 			}
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: Registering metabox for post types', array(
+					'post_types' => $post_types,
+				) );
+			}
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::error( 'FP SEO: Error getting supported post types', array(
@@ -237,6 +243,12 @@ class Metabox {
 				'normal', // Posizione: colonna principale (normal = prima della sidebar)
 				'high'    // Priorità: alta (appare tra i primi metabox)
 			);
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: Metabox registered for post type', array(
+					'post_type' => $post_type,
+				) );
+			}
 		}
 	}
 
@@ -1380,20 +1392,30 @@ class Metabox {
 		
 		// Ensure we have a valid post ID - if post is auto-draft or new, try to get from global
 		if ( empty( $post->ID ) || $post->ID <= 0 ) {
-			global $post as $global_post;
-			if ( isset( $global_post ) && $global_post instanceof WP_Post && ! empty( $global_post->ID ) ) {
+			global $post;
+			$global_post = $post;
+			if ( isset( $global_post ) && $global_post instanceof WP_Post && ! empty( $global_post->ID ) && $global_post->ID > 0 ) {
 				$post = $global_post;
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::debug( 'FP SEO: Using global post object in render', array(
 						'post_id' => $post->ID,
+						'post_type' => $post->post_type,
 					) );
 				}
 			} else {
 				// Try to get post ID from request
 				$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
 				if ( $post_id > 0 ) {
-					$post = get_post( $post_id );
-					if ( ! $post instanceof WP_Post ) {
+					$retrieved_post = get_post( $post_id );
+					if ( $retrieved_post instanceof WP_Post ) {
+						$post = $retrieved_post;
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::debug( 'FP SEO: Retrieved post object from request', array(
+								'post_id' => $post->ID,
+								'post_type' => $post->post_type,
+							) );
+						}
+					} else {
 						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 							Logger::error( 'FP SEO: Could not retrieve post object', array(
 								'post_id' => $post_id,
@@ -1402,24 +1424,18 @@ class Metabox {
 						echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: impossibile recuperare il post.', 'fp-seo-performance' ) . '</p></div>';
 						return;
 					}
+				} else {
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::debug( 'FP SEO: Retrieved post object from ID', array(
-							'post_id' => $post->ID,
+						Logger::warning( 'FP SEO: Post ID is invalid and could not be retrieved', array(
+							'post_type' => gettype( $post ),
+							'has_id' => isset( $post->ID ),
+							'get_post' => isset( $_GET['post'] ) ? $_GET['post'] : 'not set',
+							'post_post_id' => isset( $_POST['post_ID'] ) ? $_POST['post_ID'] : 'not set',
 						) );
 					}
+					// Don't return - show metabox anyway for new posts
 				}
 			}
-		}
-		
-		// Final check - if still no valid post, show error
-		if ( empty( $post->ID ) || $post->ID <= 0 ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'FP SEO: Post ID is still invalid after fallback attempts', array(
-					'post_type' => gettype( $post ),
-					'has_id' => isset( $post->ID ),
-				) );
-			}
-			// Don't return - show metabox anyway for new posts
 		}
 		
 		// Output sempre il nonce e il campo nascosto, anche se il rendering fallisce
