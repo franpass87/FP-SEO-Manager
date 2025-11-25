@@ -313,26 +313,63 @@
         },
 
         /**
-         * Show loading overlay
+         * Show loading overlay or button loading state
          */
         showLoading: function($element, text = 'Loading...') {
-            const $overlay = $(`
-                <div class="fp-seo-loading-overlay">
-                    <div class="fp-seo-loading-content">
-                        <div class="fp-seo-loading fp-seo-loading-lg"></div>
-                        <div class="fp-seo-loading-text">${text}</div>
-                    </div>
-                </div>
-            `);
+            // Ensure text is a string, not an object
+            const loadingText = typeof text === 'string' ? text : 'Loading...';
             
-            $element.css('position', 'relative').append($overlay);
+            // Check if element is a button
+            if ($element.is('button') || $element.hasClass('button')) {
+                // Store original content
+                const originalHtml = $element.html();
+                $element.data('original-html', originalHtml);
+                
+                // Disable button
+                $element.prop('disabled', true);
+                
+                // Create loading spinner
+                const $spinner = $('<span class="fp-seo-loading-spinner"></span>');
+                const $textSpan = $('<span></span>').text(loadingText);
+                
+                // Replace button content
+                $element.empty().append($spinner).append(' ').append($textSpan);
+                $element.addClass('fp-seo-loading');
+            } else {
+                // For non-button elements, use overlay
+                const $overlay = $(`
+                    <div class="fp-seo-loading-overlay">
+                        <div class="fp-seo-loading-content">
+                            <div class="fp-seo-loading fp-seo-loading-lg"></div>
+                            <div class="fp-seo-loading-text">${loadingText}</div>
+                        </div>
+                    </div>
+                `);
+                
+                $element.css('position', 'relative').append($overlay);
+            }
         },
 
         /**
-         * Hide loading overlay
+         * Hide loading overlay or restore button state
          */
         hideLoading: function($element) {
-            $element.find('.fp-seo-loading-overlay').remove();
+            // Check if element is a button with loading state
+            if ($element.is('button') || $element.hasClass('button')) {
+                // Restore original content
+                const originalHtml = $element.data('original-html');
+                if (originalHtml) {
+                    $element.html(originalHtml);
+                    $element.removeData('original-html');
+                }
+                
+                // Re-enable button
+                $element.prop('disabled', false);
+                $element.removeClass('fp-seo-loading');
+            } else {
+                // Remove overlay for non-button elements
+                $element.find('.fp-seo-loading-overlay').remove();
+            }
         },
 
         /**

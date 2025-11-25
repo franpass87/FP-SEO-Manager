@@ -1996,6 +1996,184 @@
 	filter: brightness(0) invert(1);
 }
 
+/* ===========================
+   ALL METABOX BUTTONS - UNIFORMED STYLE
+   =========================== */
+
+/* Stile uniforme per TUTTI i bottoni nel metabox (non solo AI) */
+#poststuff .fp-seo-performance-metabox button,
+#poststuff .fp-seo-performance-metabox .button,
+.fp-seo-performance-metabox button,
+.fp-seo-performance-metabox .button {
+	padding: 10px 16px !important;
+	border-radius: 8px !important;
+	font-size: 12px !important;
+	font-weight: 600 !important;
+	white-space: nowrap !important;
+	transition: all 0.2s ease !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 6px !important;
+	min-height: 40px !important;
+	height: auto !important;
+	margin: 0 !important;
+	cursor: pointer !important;
+	text-decoration: none !important;
+	line-height: 1.5 !important;
+}
+
+/* Bottoni primari (Salva, etc.) */
+#poststuff .fp-seo-performance-metabox button.button-primary,
+#poststuff .fp-seo-performance-metabox .button.button-primary,
+.fp-seo-performance-metabox button.button-primary,
+.fp-seo-performance-metabox .button.button-primary,
+#fp-seo-save-images {
+	background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+	background-color: #10b981 !important;
+	color: #fff !important;
+	border: none !important;
+	box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2) !important;
+}
+
+#poststuff .fp-seo-performance-metabox button.button-primary:hover,
+#poststuff .fp-seo-performance-metabox .button.button-primary:hover,
+.fp-seo-performance-metabox button.button-primary:hover,
+.fp-seo-performance-metabox .button.button-primary:hover,
+#fp-seo-save-images:hover {
+	transform: translateY(-1px) !important;
+	box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3) !important;
+	background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+	background-color: #059669 !important;
+}
+
+/* Bottoni secondari (Aggiungi, etc.) */
+#poststuff .fp-seo-performance-metabox button.button-secondary,
+#poststuff .fp-seo-performance-metabox .button.button-secondary,
+.fp-seo-performance-metabox button.button-secondary,
+.fp-seo-performance-metabox .button.button-secondary,
+.fp-seo-add-faq,
+.fp-seo-add-step {
+	background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%) !important;
+	background-color: #6b7280 !important;
+	color: #fff !important;
+	border: none !important;
+	box-shadow: 0 2px 4px rgba(107, 114, 128, 0.2) !important;
+}
+
+#poststuff .fp-seo-performance-metabox button.button-secondary:hover,
+#poststuff .fp-seo-performance-metabox .button.button-secondary:hover,
+.fp-seo-performance-metabox button.button-secondary:hover,
+.fp-seo-performance-metabox .button.button-secondary:hover,
+.fp-seo-add-faq:hover,
+.fp-seo-add-step:hover {
+	transform: translateY(-1px) !important;
+	box-shadow: 0 4px 8px rgba(107, 114, 128, 0.3) !important;
+	background: linear-gradient(135deg, #4b5563 0%, #374151 100%) !important;
+	background-color: #4b5563 !important;
+}
+
+/* Bottoni di azione (Rimuovi, Sposta, etc.) */
+.fp-seo-remove-faq,
+.fp-seo-remove-step,
+.fp-seo-move-up,
+.fp-seo-move-down,
+.fp-seo-help-toggle,
+.fp-seo-metabox-help-banner__close {
+	padding: 8px 12px !important;
+	min-height: 36px !important;
+	background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+	background-color: #ef4444 !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 6px !important;
+	font-size: 11px !important;
+	box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2) !important;
+}
+
+.fp-seo-remove-faq:hover,
+.fp-seo-remove-step:hover,
+.fp-seo-move-up:hover,
+.fp-seo-move-down:hover,
+.fp-seo-help-toggle:hover {
+	transform: translateY(-1px) !important;
+	box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3) !important;
+	background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+	background-color: #dc2626 !important;
+}
+
+/* Bottoni toggle SERP (Desktop/Mobile) */
+.fp-seo-serp-device {
+	padding: 8px 14px !important;
+	min-height: 38px !important;
+	background: #f3f4f6 !important;
+	color: #374151 !important;
+	border: 2px solid #e5e7eb !important;
+	border-radius: 8px !important;
+	font-size: 12px !important;
+	font-weight: 600 !important;
+	transition: all 0.2s ease !important;
+}
+
+.fp-seo-serp-device.active,
+.fp-seo-serp-device:hover {
+	background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+	background-color: #6366f1 !important;
+	color: #fff !important;
+	border-color: #6366f1 !important;
+	box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* ===========================
+   AI BUTTONS - UNIFORMED STYLE (Override WordPress default)
+   =========================== */
+
+/* Forza override stili WordPress per bottoni AI */
+#poststuff button.fp-seo-ai-generate-field-btn,
+#poststuff button.fp-seo-ai-btn,
+#poststuff button.fp-seo-generate-faq-ai,
+#poststuff button.fp-seo-generate-howto-ai,
+#poststuff button#fp-seo-optimize-all-social,
+#poststuff button#fp-seo-optimize-keywords,
+.fp-seo-performance-metabox button.fp-seo-ai-generate-field-btn,
+.fp-seo-performance-metabox button.fp-seo-ai-btn,
+.fp-seo-performance-metabox button.fp-seo-generate-faq-ai,
+.fp-seo-performance-metabox button.fp-seo-generate-howto-ai {
+	padding: 10px 16px !important;
+	background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+	background-color: #0ea5e9 !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 8px !important;
+	cursor: pointer !important;
+	font-size: 12px !important;
+	font-weight: 600 !important;
+	white-space: nowrap !important;
+	transition: all 0.2s ease !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 6px !important;
+	box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2) !important;
+	text-decoration: none !important;
+	line-height: 1.5 !important;
+	min-height: 40px !important;
+	height: auto !important;
+	margin: 0 !important;
+}
+
+#poststuff button.fp-seo-ai-generate-field-btn:hover,
+#poststuff button.fp-seo-ai-btn:hover,
+#poststuff button.fp-seo-generate-faq-ai:hover,
+#poststuff button.fp-seo-generate-howto-ai:hover,
+#poststuff button#fp-seo-optimize-all-social:hover,
+#poststuff button#fp-seo-optimize-keywords:hover,
+.fp-seo-performance-metabox button.fp-seo-ai-generate-field-btn:hover,
+.fp-seo-performance-metabox button.fp-seo-ai-btn:hover {
+	transform: translateY(-1px) !important;
+	box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3) !important;
+	background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+	background-color: #0284c7 !important;
+}
+
 /* Submenu Active State */
 #adminmenu .wp-submenu a[href*="fp-seo-performance"]:hover {
 	color: var(--fp-seo-primary);

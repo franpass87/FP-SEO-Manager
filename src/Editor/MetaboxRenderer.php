@@ -51,60 +51,82 @@ class MetaboxRenderer {
 	 */
 	public function __construct() {
 		// Inizializza check_help_text con gestione errori robusta
-		$this->check_help_text = null;
-		
+		// Le classi sono nello stesso namespace, quindi l'autoloader PSR-4 dovrebbe caricarla automaticamente
 		try {
-			// Verifica che la classe esista
-			if ( ! class_exists( 'FP\SEO\Editor\CheckHelpText' ) ) {
-				throw new \RuntimeException( 'CheckHelpText class not found. Verifica che il file src/Editor/CheckHelpText.php esista.' );
-			}
+			// Prova a istanziare direttamente - l'autoloader dovrebbe caricarla
+			$this->check_help_text = new CheckHelpText();
 			
-			// Prova a istanziare
-			$this->check_help_text = new \FP\SEO\Editor\CheckHelpText();
-			
-			// Verifica che l'istanza sia valida
+			// Verifica che l'istanza sia valida e abbia i metodi necessari
 			if ( ! is_object( $this->check_help_text ) || ! method_exists( $this->check_help_text, 'get_importance' ) ) {
 				throw new \RuntimeException( 'CheckHelpText instance invalid or missing methods' );
 			}
-		} catch ( \Throwable $e ) {
-			// Log error ma continua - crea un oggetto fallback
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && class_exists( '\FP\SEO\Utils\Logger' ) ) {
-				\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize CheckHelpText', array(
+			
+			// Log successo in debug mode
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: CheckHelpText initialized successfully', array(
+					'class' => get_class( $this->check_help_text ),
+				) );
+			}
+		} catch ( \Error $e ) {
+			// Cattura errori fatali (class not found, etc.)
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Fatal error initializing CheckHelpText (Error)', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'class_exists' => class_exists( 'FP\\SEO\\Editor\\CheckHelpText' ),
+				) );
+			}
+			$this->check_help_text = $this->create_fallback_help_text();
+		} catch ( \Exception $e ) {
+			// Log errore ma continua - crea un oggetto fallback
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Failed to initialize CheckHelpText (Exception)', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
 					'line' => $e->getLine(),
 				) );
 			}
-			
-			// Create a dummy object to prevent null reference errors
-			$this->check_help_text = new class {
-				public function get_importance( string $check_id ): string {
-					return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
-				}
-				public function get_howto( string $check_id ): string {
-					return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
-				}
-				public function get_example( string $check_id ): string {
-					return '';
-				}
-			};
+			$this->check_help_text = $this->create_fallback_help_text();
+		} catch ( \Throwable $e ) {
+			// Catch-all per qualsiasi altro tipo di errore
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Unexpected error initializing CheckHelpText (Throwable)', array(
+					'error' => $e->getMessage(),
+					'type' => get_class( $e ),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+			}
+			$this->check_help_text = $this->create_fallback_help_text();
 		}
 		
 		// Assicurati che check_help_text non sia mai null
 		if ( ! $this->check_help_text ) {
-			$this->check_help_text = new class {
-				public function get_importance( string $check_id ): string {
-					return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
-				}
-				public function get_howto( string $check_id ): string {
-					return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
-				}
-				public function get_example( string $check_id ): string {
-					return '';
-				}
-			};
+			$this->check_help_text = $this->create_fallback_help_text();
 		}
+	}
+	
+	/**
+	 * Creates a fallback help text object.
+	 *
+	 * @return object Fallback help text object.
+	 */
+	private function create_fallback_help_text(): object {
+		return new class {
+			public function get_importance( string $check_id ): string {
+				return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
+			}
+			public function get_howto( string $check_id ): string {
+				return __( 'Informazioni non disponibili.', 'fp-seo-performance' );
+			}
+			public function get_example( string $check_id ): string {
+				return '';
+			}
+		};
 	}
 
 	/**
@@ -115,6 +137,17 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
+		// Log inizio rendering in debug mode
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'FP SEO: MetaboxRenderer::render() called', array(
+				'post_id' => isset( $post->ID ) ? $post->ID : 0,
+				'post_type' => isset( $post->post_type ) ? $post->post_type : 'unknown',
+				'excluded' => $excluded,
+				'analysis_count' => count( $analysis ),
+				'check_help_text_class' => get_class( $this->check_help_text ),
+			) );
+		}
+		
 		// Ensure we have a valid post ID
 		if ( empty( $post->ID ) || $post->ID <= 0 ) {
 			// Try to get post ID from request
@@ -264,8 +297,9 @@ class MetaboxRenderer {
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
 			<?php $this->render_header( $excluded, $score_value, $score_status ); ?>
 			<?php $this->render_serp_optimization_section( $post ); ?>
-			<?php $this->render_images_section( $post ); ?>
+			<?php $this->render_serp_preview_section( $post ); ?>
 			<?php $this->render_analysis_section( $checks ); ?>
+			<?php $this->render_images_section( $post ); ?>
 			<?php $this->render_gsc_metrics( $post ); ?>
 			<?php $this->render_ai_section( $post ); ?>
 			<?php $this->render_social_section( $post ); ?>
@@ -340,7 +374,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);">
 					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +40%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +40%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -374,6 +408,46 @@ class MetaboxRenderer {
 					// Manager non disponibile - campi base già mostrati sopra
 				}
 				?>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render SERP Preview section.
+	 *
+	 * @param WP_Post $post Current post.
+	 */
+	private function render_serp_preview_section( WP_Post $post ): void {
+		?>
+		<!-- Section: SERP PREVIEW -->
+		<div class="fp-seo-serp-preview fp-seo-performance-metabox__section" style="border-left: 4px solid #6366f1;">
+			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
+				<span style="display: flex; align-items: center; gap: 8px;">
+					<span class="fp-seo-section-icon">🔍</span>
+					<?php esc_html_e( 'SERP Preview', 'fp-seo-performance' ); ?>
+				</span>
+				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);">
+					<?php esc_html_e( 'Anteprima Live', 'fp-seo-performance' ); ?>
+				</span>
+			</h4>
+			<div class="fp-seo-performance-metabox__section-content">
+				<p style="margin: 0 0 16px; font-size: 12px; color: #64748b; line-height: 1.6; padding: 12px; background: #eef2ff; border-radius: 6px; border-left: 3px solid #6366f1;">
+					<strong style="color: #4f46e5;">🔍 Anteprima Live</strong> - Visualizza come apparirà il tuo contenuto nei risultati di ricerca Google. Aggiornamento in tempo reale.
+				</p>
+				<div class="fp-seo-serp-preview__container">
+					<div class="fp-seo-serp-preview__device-toggle">
+						<button type="button" class="fp-seo-serp-device active" data-device="desktop">💻 <?php esc_html_e( 'Desktop', 'fp-seo-performance' ); ?></button>
+						<button type="button" class="fp-seo-serp-device" data-device="mobile">📱 <?php esc_html_e( 'Mobile', 'fp-seo-performance' ); ?></button>
+					</div>
+					
+					<div class="fp-seo-serp-preview__snippet" data-device="desktop">
+						<div class="fp-seo-serp-preview__url"></div>
+						<div class="fp-seo-serp-preview__title"></div>
+						<div class="fp-seo-serp-preview__description"></div>
+						<div class="fp-seo-serp-preview__date"></div>
+					</div>
+				</div>
 			</div>
 		</div>
 		<?php
@@ -453,12 +527,9 @@ class MetaboxRenderer {
 					data-target-id="fp-seo-title"
 					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
 					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2);"
-					onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-					onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
 					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
 				>
-					<span style="font-size: 14px;">🤖</span>
+					<span>🤖</span>
 					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
 				</button>
 			</div>
@@ -541,12 +612,9 @@ class MetaboxRenderer {
 					data-target-id="fp-seo-meta-description"
 					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
 					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2); height: fit-content;"
-					onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-					onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
 					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
 				>
-					<span style="font-size: 14px;">🤖</span>
+					<span>🤖</span>
 					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
 				</button>
 			</div>
@@ -593,12 +661,9 @@ class MetaboxRenderer {
 					data-target-id="fp-seo-slug"
 					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
 					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					style="padding: 10px 16px; background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2);"
-					onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(14, 165, 233, 0.3)';"
-					onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(14, 165, 233, 0.2)';"
 					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
 				>
-					<span style="font-size: 14px;">🤖</span>
+					<span>🤖</span>
 					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
 				</button>
 			</div>
@@ -910,9 +975,16 @@ class MetaboxRenderer {
 		$gsc_data = new GscData();
 		$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
 
-		if ( ! $metrics ) {
+		if ( ! $metrics || ! is_array( $metrics ) ) {
 			return;
 		}
+
+		// Estrai valori con fallback sicuro per evitare undefined index
+		$clicks      = $metrics['clicks'] ?? 0;
+		$impressions = $metrics['impressions'] ?? 0;
+		$ctr         = $metrics['ctr'] ?? 0.0;
+		$position    = $metrics['position'] ?? 0.0;
+		$queries     = $metrics['queries'] ?? array();
 
 		?>
 		<div class="fp-seo-gsc-post-metrics" style="margin-top: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
@@ -926,7 +998,7 @@ class MetaboxRenderer {
 						<?php esc_html_e( 'Clicks', 'fp-seo-performance' ); ?>
 					</div>
 					<div style="font-size: 20px; font-weight: 700; color: #059669;">
-						<?php echo esc_html( number_format_i18n( $metrics['clicks'] ) ); ?>
+						<?php echo esc_html( number_format_i18n( $clicks ) ); ?>
 					</div>
 				</div>
 				
@@ -935,7 +1007,7 @@ class MetaboxRenderer {
 						<?php esc_html_e( 'Impressions', 'fp-seo-performance' ); ?>
 					</div>
 					<div style="font-size: 20px; font-weight: 700; color: #2563eb;">
-						<?php echo esc_html( number_format_i18n( $metrics['impressions'] ) ); ?>
+						<?php echo esc_html( number_format_i18n( $impressions ) ); ?>
 					</div>
 				</div>
 				
@@ -944,7 +1016,7 @@ class MetaboxRenderer {
 						<?php esc_html_e( 'CTR', 'fp-seo-performance' ); ?>
 					</div>
 					<div style="font-size: 20px; font-weight: 700; color: #111827;">
-						<?php echo esc_html( $metrics['ctr'] ); ?>%
+						<?php echo esc_html( number_format_i18n( $ctr, 2 ) ); ?>%
 					</div>
 				</div>
 				
@@ -953,23 +1025,34 @@ class MetaboxRenderer {
 						<?php esc_html_e( 'Position', 'fp-seo-performance' ); ?>
 					</div>
 					<div style="font-size: 20px; font-weight: 700; color: #111827;">
-						<?php echo esc_html( $metrics['position'] ); ?>
+						<?php echo esc_html( number_format_i18n( $position, 1 ) ); ?>
 					</div>
 				</div>
 			</div>
 
-			<?php if ( ! empty( $metrics['queries'] ) ) : ?>
+			<?php if ( ! empty( $queries ) && is_array( $queries ) ) : ?>
 				<details style="margin-top: 12px;">
 					<summary style="cursor: pointer; font-weight: 600; color: #374151;">
-						🔍 <?php esc_html_e( 'Top Queries', 'fp-seo-performance' ); ?> (<?php echo count( $metrics['queries'] ); ?>)
+						🔍 <?php esc_html_e( 'Top Queries', 'fp-seo-performance' ); ?> (<?php echo esc_html( count( $queries ) ); ?>)
 					</summary>
 					<ul style="margin: 8px 0 0; padding: 0; list-style: none;">
-						<?php foreach ( array_slice( $metrics['queries'], 0, 5 ) as $query_data ) : ?>
+						<?php foreach ( array_slice( $queries, 0, 5 ) as $query_data ) : ?>
+							<?php
+							if ( ! is_array( $query_data ) ) {
+								continue;
+							}
+							$query_text   = $query_data['query'] ?? '';
+							$query_clicks = $query_data['clicks'] ?? 0;
+							$query_pos    = $query_data['position'] ?? 0.0;
+							if ( empty( $query_text ) ) {
+								continue;
+							}
+							?>
 							<li style="padding: 6px 8px; background: #fff; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
-								<strong><?php echo esc_html( $query_data['query'] ); ?></strong>
+								<strong><?php echo esc_html( $query_text ); ?></strong>
 								<span style="color: #6b7280; margin-left: 10px;">
-									<?php echo esc_html( $query_data['clicks'] ); ?> clicks, 
-									pos <?php echo esc_html( $query_data['position'] ); ?>
+									<?php echo esc_html( number_format_i18n( $query_clicks ) ); ?> clicks, 
+									pos <?php echo esc_html( number_format_i18n( $query_pos, 1 ) ); ?>
 								</span>
 							</li>
 						<?php endforeach; ?>
@@ -996,7 +1079,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);">
 					<span style="font-size: 14px;">🚀</span>
-					<?php esc_html_e( 'Impact: +18%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +18%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1090,7 +1173,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">
 					<span style="font-size: 14px;">📊</span>
-					<?php esc_html_e( 'Impact: +12%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +12%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1138,7 +1221,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(6, 182, 212, 0.2);">
 					<span style="font-size: 14px;">🔗</span>
-					<?php esc_html_e( 'Impact: +7%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +7%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1186,7 +1269,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);">
 					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +20%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +20%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1226,7 +1309,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">
 					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +15%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +15%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1285,7 +1368,7 @@ class MetaboxRenderer {
 				</span>
 				<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);">
 					<span style="font-size: 14px;">⚡</span>
-					<?php esc_html_e( 'Impact: +15%', 'fp-seo-performance' ); ?>
+					<?php esc_html_e( 'Impatto: +15%', 'fp-seo-performance' ); ?>
 				</span>
 			</h4>
 			<div class="fp-seo-performance-metabox__section-content">
@@ -1413,8 +1496,7 @@ class MetaboxRenderer {
 					<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
 						<button type="button" 
 								id="fp-seo-save-images" 
-								class="button button-primary"
-								style="padding: 10px 24px; font-weight: 600; border-radius: 6px;">
+								class="button button-primary">
 							<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>
 						</button>
 						<span id="fp-seo-images-save-status" style="margin-left: 12px; font-size: 12px; color: #10b981; display: none;">
@@ -1540,17 +1622,36 @@ class MetaboxRenderer {
 	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
 	 */
 	private function extract_images_from_content( WP_Post $post ): array {
+		// Get content - try both raw and processed
 		$content = $post->post_content;
 		$images = array();
 		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'extract_images_from_content called', array(
+				'post_id' => $post->ID,
+				'content_length' => strlen( $content ),
+				'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
+				'has_img_tags' => strpos( $content, '<img' ) !== false,
+			) );
+		}
+		
 		if ( empty( $content ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'extract_images_from_content - Content is empty', array( 'post_id' => $post->ID ) );
+			}
 			return $images;
 		}
 		
 		$seen_srcs = array(); // Avoid duplicates
 		
-		// First, extract images from WPBakery shortcodes
+		// First, extract images from WPBakery shortcodes (from raw content)
 		$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'extract_images_from_content - WPBakery images found', array(
+				'post_id' => $post->ID,
+				'count' => count( $wpbakery_images ),
+			) );
+		}
 		foreach ( $wpbakery_images as $image ) {
 			if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
 				$seen_srcs[ $image['src'] ] = true;
@@ -1558,10 +1659,15 @@ class MetaboxRenderer {
 			}
 		}
 		
-		// Then, extract images from HTML img tags
+		// Process content with do_shortcode to get rendered HTML (for images that might be rendered)
+		$processed_content = do_shortcode( $content );
+		
+		// Then, extract images from HTML img tags (from both raw and processed content)
+		$content_to_parse = $processed_content . "\n" . $content; // Combine both to catch all images
+		
 		$dom = new \DOMDocument();
 		libxml_use_internal_errors( true );
-		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content );
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content_to_parse );
 		libxml_clear_errors();
 		
 		$img_tags = $dom->getElementsByTagName( 'img' );
@@ -1616,6 +1722,15 @@ class MetaboxRenderer {
 			);
 		}
 		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'extract_images_from_content - Final images count', array(
+				'post_id' => $post->ID,
+				'total_images' => count( $images ),
+				'wpbakery_images' => count( $wpbakery_images ),
+				'html_images' => count( $images ) - count( $wpbakery_images ),
+			) );
+		}
+		
 		return $images;
 	}
 
@@ -1629,47 +1744,97 @@ class MetaboxRenderer {
 	private function extract_wpbakery_images( string $content, int $post_id ): array {
 		$images = array();
 		
-		if ( empty( $content ) || strpos( $content, '[vc_' ) === false ) {
+		if ( empty( $content ) ) {
+			return $images;
+		}
+		
+		// Check for WPBakery shortcodes
+		$has_wpbakery = strpos( $content, '[vc_' ) !== false;
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'extract_wpbakery_images called', array(
+				'post_id' => $post_id,
+				'content_length' => strlen( $content ),
+				'has_wpbakery' => $has_wpbakery,
+			) );
+		}
+		
+		if ( ! $has_wpbakery ) {
 			return $images;
 		}
 		
 		// Extract vc_single_image shortcodes
 		// Pattern: [vc_single_image image="123" ...] or [vc_single_image image="123|full" ...]
-		if ( preg_match_all( '/\[vc_single_image[^\]]*image\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $match ) {
+		// Also try: [vc_single_image ... image="123" ...] (image can be anywhere in the shortcode)
+		$patterns = array(
+			'/\[vc_single_image[^\]]*image\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i',
+			'/\[vc_single_image[^\]]*\]/i', // Match entire shortcode, then extract attributes
+		);
+		
+		$matches = array();
+		foreach ( $patterns as $pattern ) {
+			if ( preg_match_all( $pattern, $content, $pattern_matches, PREG_SET_ORDER ) ) {
+				$matches = array_merge( $matches, $pattern_matches );
+			}
+		}
+		
+		if ( ! empty( $matches ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'extract_wpbakery_images - Found vc_single_image shortcodes', array(
+					'post_id' => $post_id,
+					'count' => count( $matches ),
+				) );
+			}
+		}
+		
+		foreach ( $matches as $match ) {
+			$shortcode_content = $match[0];
+			
+			// Extract image parameter - try multiple ways
+			$image_param = '';
+			if ( isset( $match[1] ) ) {
 				$image_param = $match[1];
-				
-				// Extract attachment ID (format can be "123" or "123|full")
-				$attachment_id = (int) preg_replace( '/[^\d]/', '', $image_param );
-				
-				if ( $attachment_id > 0 ) {
-					$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
-					if ( $image_url ) {
-						// Get alt text from attachment
-						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
-						
-						// Get title from attachment
-						$attachment = get_post( $attachment_id );
-						$title = $attachment ? $attachment->post_title : '';
-						$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
-						
-						// Check for saved custom data
-						$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
-						if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
-							$saved = $saved_images[ $image_url ];
-							$alt = $saved['alt'] ?? $alt;
-							$title = $saved['title'] ?? $title;
-							$description = $saved['description'] ?? $description;
-						}
-						
-						$images[] = array(
-							'src'           => $image_url,
-							'alt'           => $alt,
-							'title'         => $title,
-							'description'   => $description,
-							'attachment_id' => $attachment_id,
-						);
+			} else {
+				// Try to extract from shortcode attributes
+				if ( preg_match( '/image\s*=\s*["\']([^"\']+)["\']/i', $shortcode_content, $attr_match ) ) {
+					$image_param = $attr_match[1];
+				}
+			}
+			
+			if ( empty( $image_param ) ) {
+				continue;
+			}
+			
+			// Extract attachment ID (format can be "123" or "123|full")
+			$attachment_id = (int) preg_replace( '/[^\d]/', '', $image_param );
+			
+			if ( $attachment_id > 0 ) {
+				$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+				if ( $image_url ) {
+					// Get alt text from attachment
+					$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+					
+					// Get title from attachment
+					$attachment = get_post( $attachment_id );
+					$title = $attachment ? $attachment->post_title : '';
+					$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+					
+					// Check for saved custom data
+					$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+					if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+						$saved = $saved_images[ $image_url ];
+						$alt = $saved['alt'] ?? $alt;
+						$title = $saved['title'] ?? $title;
+						$description = $saved['description'] ?? $description;
 					}
+					
+					$images[] = array(
+						'src'           => $image_url,
+						'alt'           => $alt,
+						'title'         => $title,
+						'description'   => $description,
+						'attachment_id' => $attachment_id,
+					);
 				}
 			}
 		}

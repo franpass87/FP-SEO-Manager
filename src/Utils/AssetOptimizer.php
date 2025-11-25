@@ -290,6 +290,18 @@ class AssetOptimizer {
 	private function minify_css( string $input_file, string $output_file ): bool {
 		$this->monitor->start_timer( 'css_minification' );
 
+		// Validate input file path for security
+		if ( ! is_file( $input_file ) || ! is_readable( $input_file ) ) {
+			return false;
+		}
+
+		// Ensure input file is within assets directory to prevent path traversal
+		$real_input = realpath( $input_file );
+		$real_assets = realpath( $this->assets_dir );
+		if ( false === $real_input || false === $real_assets || strpos( $real_input, $real_assets ) !== 0 ) {
+			return false;
+		}
+
 		$css_content = file_get_contents( $input_file );
 		if ( $css_content === false ) {
 			return false;
@@ -320,6 +332,18 @@ class AssetOptimizer {
 	 */
 	private function minify_js( string $input_file, string $output_file ): bool {
 		$this->monitor->start_timer( 'js_minification' );
+
+		// Validate input file path for security
+		if ( ! is_file( $input_file ) || ! is_readable( $input_file ) ) {
+			return false;
+		}
+
+		// Ensure input file is within assets directory to prevent path traversal
+		$real_input = realpath( $input_file );
+		$real_assets = realpath( $this->assets_dir );
+		if ( false === $real_input || false === $real_assets || strpos( $real_input, $real_assets ) !== 0 ) {
+			return false;
+		}
 
 		$js_content = file_get_contents( $input_file );
 		if ( $js_content === false ) {

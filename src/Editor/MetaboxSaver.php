@@ -88,6 +88,36 @@ class MetaboxSaver {
 			) );
 		}
 		
+		// PROTEZIONE HOMEPAGE: Verifica e preserva lo status PRIMA di salvare i meta fields
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id > 0 && $post_id === $page_on_front_id ) {
+			global $wpdb;
+			$current_status = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			// Se lo status è 'auto-draft' ma il post esiste, correggilo immediatamente
+			if ( $current_status === 'auto-draft' ) {
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_status' => 'publish' ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				clean_post_cache( $post_id );
+				
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'MetaboxSaver::save_all_fields - Corrected homepage status before saving', array(
+						'post_id' => $post_id,
+						'old_status' => $current_status,
+						'new_status' => 'publish',
+					) );
+				}
+			}
+		}
+		
 		// Prevent multiple saves in the same request
 		if ( isset( self::$saved_posts[ $post_id ] ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {

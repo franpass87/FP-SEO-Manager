@@ -18,138 +18,214 @@ class SerpPreview {
 		this.init();
 	}
 
-		init() {
-			// Wait for DOM ready
-			if (document.readyState === 'loading') {
-				document.addEventListener('DOMContentLoaded', () => this.setup());
-			} else {
-				this.setup();
+	init() {
+		// Wait for DOM ready
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', () => {
+				// Also wait a bit for Gutenberg to initialize
+				setTimeout(() => this.setup(), 100);
+			});
+		} else {
+			// DOM already loaded, but wait a bit for Gutenberg
+			setTimeout(() => this.setup(), 100);
+		}
+		
+		// Also listen for Gutenberg editor ready (only if not already subscribed)
+		if (window.wp && window.wp.data && !this.unsubscribeGutenberg) {
+			let gutenbergCheckCount = 0;
+			const maxGutenbergChecks = 20; // Stop after 20 checks to avoid infinite loop
+			
+			const gutenbergUnsubscribe = window.wp.data.subscribe(() => {
+				// Check if metabox is now available
+				if (!this.previewElement && document.querySelector('.fp-seo-performance-metabox')) {
+					gutenbergCheckCount++;
+					if (gutenbergCheckCount <= maxGutenbergChecks) {
+						setTimeout(() => {
+							if (!this.previewElement) {
+								this.setup();
+							}
+						}, 200);
+					} else if (gutenbergCheckCount === maxGutenbergChecks + 1) {
+						// Stop checking after max attempts
+						if (typeof gutenbergUnsubscribe === 'function') {
+							gutenbergUnsubscribe();
+						}
+					}
+				}
+			});
+			
+			// Store unsubscribe for cleanup (only if we don't have one from bindEvents)
+			if (typeof gutenbergUnsubscribe === 'function' && !this.unsubscribeGutenberg) {
+				this.unsubscribeGutenberg = gutenbergUnsubscribe;
 			}
 		}
+	}
 
-		setup() {
-			// Retry creating preview container if section not found immediately
-			this.createPreviewContainer();
+	setup() {
+		// Retry creating preview container with multiple attempts
+		let attempts = 0;
+		const maxAttempts = 10;
+		
+		const tryCreate = () => {
+			attempts++;
+			const created = this.createPreviewContainer();
 			
-			// If section not found, retry after a short delay
-			if (!this.previewElement) {
-				setTimeout(() => {
-					this.createPreviewContainer();
+			if (created && this.previewElement) {
+				this.bindEvents();
+				this.updatePreview();
+			} else if (attempts < maxAttempts) {
+				// Retry after increasing delay
+				setTimeout(tryCreate, 100 * attempts);
+			} else {
+				// Final fallback: try to create at the end of metabox
+				console.warn('FP SEO: SERP Preview section not found, creating at end of metabox');
+				const metabox = document.querySelector('.fp-seo-performance-metabox');
+				if (metabox) {
+					const container = document.createElement('div');
+					container.className = 'fp-seo-serp-preview';
+					container.innerHTML = `
+						<h4 class="fp-seo-performance-metabox__section-heading">
+							🔍 SERP Preview
+						</h4>
+						<div class="fp-seo-serp-preview__container">
+							<div class="fp-seo-serp-preview__device-toggle">
+								<button type="button" class="fp-seo-serp-device active" data-device="desktop">💻 Desktop</button>
+								<button type="button" class="fp-seo-serp-device" data-device="mobile">📱 Mobile</button>
+							</div>
+							
+							<div class="fp-seo-serp-preview__snippet" data-device="desktop">
+								<div class="fp-seo-serp-preview__url"></div>
+								<div class="fp-seo-serp-preview__title"></div>
+								<div class="fp-seo-serp-preview__description"></div>
+								<div class="fp-seo-serp-preview__date"></div>
+							</div>
+						</div>
+					`;
+					
+					// Insert after SERP Optimization section if it exists, otherwise at the beginning
+					const serpSection = metabox.querySelector('.fp-seo-serp-optimization-section');
+					if (serpSection && serpSection.nextElementSibling) {
+						serpSection.parentNode.insertBefore(container, serpSection.nextElementSibling);
+					} else if (serpSection) {
+						serpSection.insertAdjacentElement('afterend', container);
+					} else {
+						// Insert after header if available
+						const header = metabox.querySelector('.fp-seo-performance-metabox__header');
+						if (header && header.nextElementSibling) {
+							header.parentNode.insertBefore(container, header.nextElementSibling);
+						} else {
+							metabox.insertBefore(container, metabox.firstChild);
+						}
+					}
+					
+					this.previewElement = container.querySelector('.fp-seo-serp-preview__snippet');
 					if (this.previewElement) {
 						this.bindEvents();
 						this.updatePreview();
 					}
-				}, 100);
-			} else {
-				this.bindEvents();
-				this.updatePreview();
+				}
 			}
+		};
+		
+		// Start trying immediately
+		tryCreate();
+	}
+
+	createPreviewContainer() {
+		// Don't create if already exists
+		if (this.previewElement && document.contains(this.previewElement)) {
+			return true;
+		}
+		
+		const metabox = document.querySelector('.fp-seo-performance-metabox');
+		if (!metabox) {
+			return false;
 		}
 
-		createPreviewContainer() {
-			// Don't create if already exists
-			if (this.previewElement && document.contains(this.previewElement)) {
-				return;
+		// Remove any existing preview to avoid duplicates
+		const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
+		if (existingPreview) {
+			existingPreview.remove();
+		}
+
+		const container = document.createElement('div');
+		container.className = 'fp-seo-serp-preview';
+		container.innerHTML = `
+			<h4 class="fp-seo-performance-metabox__section-heading">
+				🔍 SERP Preview
+			</h4>
+			<div class="fp-seo-serp-preview__container">
+				<div class="fp-seo-serp-preview__device-toggle">
+					<button type="button" class="fp-seo-serp-device active" data-device="desktop">💻 Desktop</button>
+					<button type="button" class="fp-seo-serp-device" data-device="mobile">📱 Mobile</button>
+				</div>
+				
+				<div class="fp-seo-serp-preview__snippet" data-device="desktop">
+					<div class="fp-seo-serp-preview__url"></div>
+					<div class="fp-seo-serp-preview__title"></div>
+					<div class="fp-seo-serp-preview__description"></div>
+					<div class="fp-seo-serp-preview__date"></div>
+				</div>
+			</div>
+		`;
+		
+		// First, try to find SERP Optimization section and insert after it
+		const serpOptimizationSection = metabox.querySelector('.fp-seo-serp-optimization-section, [data-section="serp-optimization"]');
+		
+		if (serpOptimizationSection) {
+			// Find the next element sibling (skip text nodes)
+			let nextElement = serpOptimizationSection.nextElementSibling;
+			
+			if (nextElement) {
+				// Insert before the next element
+				serpOptimizationSection.parentNode.insertBefore(container, nextElement);
+			} else {
+				// If it's the last child, insert after using insertAdjacentElement
+				serpOptimizationSection.insertAdjacentElement('afterend', container);
+			}
+		} else {
+			// Fallback: try to find by text content
+			const sections = metabox.querySelectorAll('.fp-seo-performance-metabox__section');
+			let foundSection = null;
+			
+			for (const section of sections) {
+				const heading = section.querySelector('.fp-seo-performance-metabox__section-heading');
+				if (heading && (heading.textContent.includes('SERP Optimization') || heading.textContent.includes('Ottimizzazione SERP'))) {
+					foundSection = section;
+					break;
+				}
 			}
 			
-			const metabox = document.querySelector('.fp-seo-performance-metabox');
-			if (!metabox) return;
-
-			const container = document.createElement('div');
-			container.className = 'fp-seo-serp-preview';
-			container.innerHTML = `
-				<h4 class="fp-seo-performance-metabox__section-heading">
-					🔍 SERP Preview
-				</h4>
-				<div class="fp-seo-serp-preview__container">
-					<div class="fp-seo-serp-preview__device-toggle">
-						<button type="button" class="fp-seo-serp-device active" data-device="desktop">💻 Desktop</button>
-						<button type="button" class="fp-seo-serp-device" data-device="mobile">📱 Mobile</button>
-					</div>
-					
-					<div class="fp-seo-serp-preview__snippet" data-device="desktop">
-						<div class="fp-seo-serp-preview__url"></div>
-						<div class="fp-seo-serp-preview__title"></div>
-						<div class="fp-seo-serp-preview__description"></div>
-						<div class="fp-seo-serp-preview__date"></div>
-					</div>
-				</div>
-			`;
-
-			// Insert before Images Optimization section
-			// First, try to find Images Optimization section
-			const imagesSection = Array.from(metabox.querySelectorAll('.fp-seo-performance-metabox__section')).find(s => {
-				const heading = s.querySelector('.fp-seo-performance-metabox__section-heading');
-				return heading && heading.textContent.includes('Images');
-			});
-			
-			if (imagesSection) {
-				// Remove any existing preview to avoid duplicates
-				const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
-				if (existingPreview) {
-					existingPreview.remove();
-				}
+			if (foundSection) {
+				// Find the next element sibling (skip text nodes)
+				let nextElement = foundSection.nextElementSibling;
 				
-				// Insert before Images Optimization section
-				imagesSection.parentNode.insertBefore(container, imagesSection);
+				if (nextElement) {
+					foundSection.parentNode.insertBefore(container, nextElement);
+				} else {
+					// Insert after using insertAdjacentElement
+					foundSection.insertAdjacentElement('afterend', container);
+				}
 			} else {
-				// Fallback: try to find SERP Optimization section and insert after it
-				const serpOptimizationSection = metabox.querySelector('.fp-seo-serp-optimization-section, [data-section="serp-optimization"]');
-				
-				if (serpOptimizationSection) {
-					// Remove any existing preview to avoid duplicates
-					const existingPreview = metabox.querySelector('.fp-seo-serp-preview');
-					if (existingPreview) {
-						existingPreview.remove();
-					}
-					
-					// Find the next element sibling (skip text nodes)
-					let nextElement = serpOptimizationSection.nextElementSibling;
-					
-					if (nextElement) {
-						// Insert before the next element
-						serpOptimizationSection.parentNode.insertBefore(container, nextElement);
-					} else {
-						// If it's the last child, insert after using insertAdjacentElement
-						serpOptimizationSection.insertAdjacentElement('afterend', container);
-					}
+				// Final fallback: insert after header or at the beginning
+				const header = metabox.querySelector('.fp-seo-performance-metabox__header');
+				if (header && header.nextElementSibling) {
+					header.parentNode.insertBefore(container, header.nextElementSibling);
 				} else {
-				// Fallback: try to find by text content
-				const sections = metabox.querySelectorAll('.fp-seo-performance-metabox__section');
-				let foundSection = null;
-				
-				for (const section of sections) {
-					const heading = section.querySelector('.fp-seo-performance-metabox__section-heading');
-					if (heading && heading.textContent.includes('SERP Optimization')) {
-						foundSection = section;
-						break;
-					}
-				}
-				
-				if (foundSection) {
-					// Find the next element sibling (skip text nodes)
-					let nextElement = foundSection.nextElementSibling;
-					
-					if (nextElement) {
-						foundSection.parentNode.insertBefore(container, nextElement);
-					} else {
-						// Insert after using insertAdjacentElement
-						foundSection.insertAdjacentElement('afterend', container);
-					}
-				} else {
-					// Final fallback: insert before recommendations or at the end
-					const recommendations = metabox.querySelector('.fp-seo-performance-metabox__recommendations');
-					if (recommendations) {
-						metabox.insertBefore(container, recommendations);
+					// Insert at the beginning of metabox content
+					const firstSection = metabox.querySelector('.fp-seo-performance-metabox__section');
+					if (firstSection) {
+						firstSection.parentNode.insertBefore(container, firstSection);
 					} else {
 						metabox.appendChild(container);
 					}
 				}
 			}
-
-			this.previewElement = container.querySelector('.fp-seo-serp-preview__snippet');
-			return !!this.previewElement;
 		}
+
+		this.previewElement = container.querySelector('.fp-seo-serp-preview__snippet');
+		return !!this.previewElement;
+	}
 
 	bindEvents() {
 		// SEO Title (priority) - use SEO title if available, otherwise post title
@@ -177,7 +253,10 @@ class SerpPreview {
 
 		// Block editor (Gutenberg) - Save unsubscribe function
 		if (wp && wp.data) {
-			this.unsubscribeGutenberg = wp.data.subscribe(() => this.updatePreview());
+			// Only subscribe if not already subscribed
+			if (!this.unsubscribeGutenberg) {
+				this.unsubscribeGutenberg = wp.data.subscribe(() => this.updatePreview());
+			}
 		}
 
 		// Meta description - prioritize FP SEO field

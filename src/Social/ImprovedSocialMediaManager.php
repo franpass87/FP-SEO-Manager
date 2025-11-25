@@ -183,11 +183,11 @@ class ImprovedSocialMediaManager {
 							<!-- Live Preview -->
 							<div class="fp-seo-social-preview-container">
 								<div class="fp-seo-social-preview-header">
-									<h4 class="fp-seo-heading-4"><?php esc_html_e( 'Live Preview', 'fp-seo-performance' ); ?></h4>
+									<h4 class="fp-seo-heading-4"><?php esc_html_e( 'Anteprima Live', 'fp-seo-performance' ); ?></h4>
 									<button type="button" class="fp-seo-btn fp-seo-btn-sm fp-seo-btn-secondary" 
 											id="fp-seo-refresh-preview-<?php echo esc_attr( $platform_id ); ?>">
-										<span class="fp-seo-loading-icon">🔄</span>
-										<?php esc_html_e( 'Refresh', 'fp-seo-performance' ); ?>
+										<span class="fp-seo-refresh-icon">🔄</span>
+										<?php esc_html_e( 'Aggiorna', 'fp-seo-performance' ); ?>
 									</button>
 								</div>
 								
@@ -198,7 +198,7 @@ class ImprovedSocialMediaManager {
 											 alt="<?php esc_attr_e( 'Social media preview image', 'fp-seo-performance' ); ?>">
 										<div class="fp-seo-social-preview-image-overlay">
 											<button type="button" class="fp-seo-btn fp-seo-btn-sm fp-seo-btn-primary">
-												<?php esc_html_e( 'Change Image', 'fp-seo-performance' ); ?>
+												<?php esc_html_e( 'Cambia Immagine', 'fp-seo-performance' ); ?>
 											</button>
 										</div>
 									</div>
@@ -338,10 +338,10 @@ class ImprovedSocialMediaManager {
 												name="fp_seo_twitter_card_type" 
 												class="fp-seo-form-control">
 											<option value="summary" <?php selected( $social_meta['twitter_card_type'] ?? '', 'summary' ); ?>>
-												<?php esc_html_e( 'Summary', 'fp-seo-performance' ); ?>
+												<?php esc_html_e( 'Riepilogo', 'fp-seo-performance' ); ?>
 											</option>
 											<option value="summary_large_image" <?php selected( $social_meta['twitter_card_type'] ?? '', 'summary_large_image' ); ?>>
-												<?php esc_html_e( 'Summary Large Image', 'fp-seo-performance' ); ?>
+												<?php esc_html_e( 'Riepilogo Immagine Grande', 'fp-seo-performance' ); ?>
 											</option>
 										</select>
 									</div>
@@ -356,18 +356,26 @@ class ImprovedSocialMediaManager {
 										); ?>
 									</label>
 									<div class="fp-seo-form-control-group">
-										<input type="url" 
-											   id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image" 
-											   name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_image" 
-											   class="fp-seo-form-control" 
-											   value="<?php echo esc_attr( $social_meta[ $platform_id . '_image' ] ?? '' ); ?>" 
-											   placeholder="<?php echo esc_attr( $preview_data['image'] ?: 'https://example.com/image.jpg' ); ?>"
+									<?php 
+									// Use featured image as default value if no social image is set
+									$image_value = $social_meta[ $platform_id . '_image' ] ?? '';
+									$featured_image_url = get_the_post_thumbnail_url( $post->ID, 'full' );
+									if ( empty( $image_value ) && $featured_image_url ) {
+										$image_value = $featured_image_url;
+									}
+									?>
+									<input type="url" 
+										   id="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image" 
+										   name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_image" 
+										   class="fp-seo-form-control" 
+										   value="<?php echo esc_attr( $image_value ); ?>" 
+										   placeholder="<?php echo esc_attr( $featured_image_url ?: 'https://example.com/image.jpg' ); ?>"
 											   data-fallback-from="post-thumbnail">
 										<button type="button" 
 												class="fp-seo-btn fp-seo-btn-secondary fp-seo-image-select" 
 												data-target="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image"
 												data-preview="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image-preview">
-											<?php esc_html_e( 'Select', 'fp-seo-performance' ); ?>
+											<?php esc_html_e( 'Seleziona', 'fp-seo-performance' ); ?>
 										</button>
 									</div>
 								</div>
@@ -387,15 +395,15 @@ class ImprovedSocialMediaManager {
 							<button type="button" 
 									class="fp-seo-btn fp-seo-btn-secondary" 
 									id="fp-seo-preview-all-social">
-								<?php esc_html_e( 'Preview All', 'fp-seo-performance' ); ?>
+								<?php esc_html_e( 'Anteprima Tutti', 'fp-seo-performance' ); ?>
 							</button>
 							<button type="button" 
-									class="fp-seo-btn fp-seo-btn-primary" 
+									class="fp-seo-ai-btn" 
 									id="fp-seo-optimize-all-social"
 									data-loading="true"
-									data-loading-text="<?php esc_attr_e( 'Optimizing...', 'fp-seo-performance' ); ?>">
-								<span class="fp-seo-btn-icon">🤖</span>
-								<?php esc_html_e( 'Optimize with AI', 'fp-seo-performance' ); ?>
+									data-loading-text="<?php esc_attr_e( 'Ottimizzazione...', 'fp-seo-performance' ); ?>">
+								<span>🤖</span>
+								<span><?php esc_html_e( 'Ottimizza con AI', 'fp-seo-performance' ); ?></span>
 							</button>
 						</div>
 					</div>
@@ -553,7 +561,41 @@ class ImprovedSocialMediaManager {
 			margin-right: var(--fp-seo-space-1);
 		}
 
+		.fp-seo-refresh-icon {
+			display: inline-block;
+			transition: transform 0.3s ease;
+		}
+		
 		.fp-seo-loading-icon {
+			animation: fp-seo-spin 1s linear infinite;
+		}
+		
+		/* Loading spinner for buttons */
+		.fp-seo-loading-spinner {
+			display: inline-block;
+			width: 14px;
+			height: 14px;
+			border: 2px solid rgba(255, 255, 255, 0.3);
+			border-top-color: #fff;
+			border-radius: 50%;
+			animation: fp-seo-spin 0.8s linear infinite;
+			vertical-align: middle;
+			margin-right: 6px;
+		}
+		
+		.fp-seo-btn.fp-seo-loading {
+			position: relative;
+			pointer-events: none;
+			opacity: 0.7;
+		}
+		
+		@keyframes fp-seo-spin {
+			from { transform: rotate(0deg); }
+			to { transform: rotate(360deg); }
+		}
+		
+		/* Add loading class only when button is clicked */
+		.fp-seo-btn.refreshing .fp-seo-refresh-icon {
 			animation: fp-seo-spin 1s linear infinite;
 		}
 
@@ -715,6 +757,8 @@ class ImprovedSocialMediaManager {
 				// Update title preview if field is empty (use SERP title)
 				if (!<?php echo esc_js( $platform_id ); ?>Title && seoTitle) {
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title-preview').text(seoTitle);
+					// Also update the field value if empty (for auto-fill)
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title').val(seoTitle);
 				} else if (<?php echo esc_js( $platform_id ); ?>Title) {
 					// If field has value, use it (already decoded)
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-title-preview').text(<?php echo esc_js( $platform_id ); ?>Title);
@@ -723,14 +767,18 @@ class ImprovedSocialMediaManager {
 				// Update description preview if field is empty (use SERP description)
 				if (!<?php echo esc_js( $platform_id ); ?>Desc && seoDescription) {
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description-preview').text(seoDescription);
+					// Also update the field value if empty (for auto-fill)
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description').val(seoDescription);
 				} else if (<?php echo esc_js( $platform_id ); ?>Desc) {
 					// If field has value, use it (already decoded)
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-description-preview').text(<?php echo esc_js( $platform_id ); ?>Desc);
 				}
 				
-				// Update image preview if field is empty (use featured image)
+				// Update image preview and field if empty (use featured image as standard)
 				if (!<?php echo esc_js( $platform_id ); ?>Image && featuredImageUrl) {
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', featuredImageUrl);
+					// Also update the input field if empty (for auto-fill with featured image)
+					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val(featuredImageUrl);
 				} else if (<?php echo esc_js( $platform_id ); ?>Image) {
 					// If field has value, use it
 					$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', <?php echo esc_js( $platform_id ); ?>Image);
@@ -762,6 +810,8 @@ class ImprovedSocialMediaManager {
 									const <?php echo esc_js( $platform_id ); ?>Image = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val();
 									if (!<?php echo esc_js( $platform_id ); ?>Image) {
 										$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', attachment.source_url);
+										// Also update the input field if empty (auto-fill with featured image)
+										$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val(attachment.source_url);
 									}
 									<?php endforeach; ?>
 								}
@@ -816,6 +866,23 @@ class ImprovedSocialMediaManager {
 				syncFromSerpToSocial();
 			}, 500); // Small delay to ensure all fields are loaded
 
+			// Refresh preview buttons
+			$('[id^="fp-seo-refresh-preview-"]').on('click', function() {
+				const $btn = $(this);
+				const platformId = $btn.attr('id').replace('fp-seo-refresh-preview-', '');
+				
+				// Add refreshing class to show animation
+				$btn.addClass('refreshing');
+				
+				// Refresh the preview by syncing from SERP
+				syncFromSerpToSocial();
+				
+				// Remove refreshing class after a short delay
+				setTimeout(function() {
+					$btn.removeClass('refreshing');
+				}, 500);
+			});
+
 			// Image selection
 			$('.fp-seo-image-select').on('click', function() {
 				const $button = $(this);
@@ -848,11 +915,23 @@ class ImprovedSocialMediaManager {
 				const $btn = $(this);
 				const postId = <?php echo get_the_ID(); ?>;
 				
-				FPSeoUI.showLoading($btn, 'Optimizing with AI...');
+				// Prevent multiple clicks
+				if ($btn.prop('disabled')) {
+					return;
+				}
+				
+				FPSeoUI.showLoading($btn, '<?php echo esc_js( __( 'Ottimizzazione con AI...', 'fp-seo-performance' ) ); ?>');
+				
+				// Safety timeout to ensure button is always restored
+				const safetyTimeout = setTimeout(function() {
+					FPSeoUI.hideLoading($btn);
+					FPSeoUI.showNotification('Request timeout. Please try again.', 'error');
+				}, 30000); // 30 seconds timeout
 				
 				$.ajax({
 					url: ajaxurl,
 					type: 'POST',
+					timeout: 25000, // 25 seconds AJAX timeout
 					data: {
 						action: 'fp_seo_optimize_social',
 						post_id: postId,
@@ -860,27 +939,49 @@ class ImprovedSocialMediaManager {
 						nonce: '<?php echo wp_create_nonce( 'fp_seo_social_nonce' ); ?>'
 					},
 					success: function(response) {
+						clearTimeout(safetyTimeout);
 						FPSeoUI.hideLoading($btn);
 						
-						if (response.success) {
-							// Update all fields with AI suggestions
-							Object.keys(response.data).forEach(platform => {
-								if (response.data[platform].title) {
-									$(`#fp-seo-${platform}-title`).val(response.data[platform].title).trigger('input');
-								}
-								if (response.data[platform].description) {
-									$(`#fp-seo-${platform}-description`).val(response.data[platform].description).trigger('input');
-								}
-							});
+						if (response && response.success) {
+							// Update all fields with AI suggestions (decode HTML entities)
+							if (response.data && typeof response.data === 'object') {
+								Object.keys(response.data).forEach(platform => {
+									if (response.data[platform] && response.data[platform].title) {
+										const decodedTitle = decodeHtmlEntities(response.data[platform].title);
+										$(`#fp-seo-${platform}-title`).val(decodedTitle).trigger('input');
+									}
+									if (response.data[platform] && response.data[platform].description) {
+										const decodedDesc = decodeHtmlEntities(response.data[platform].description);
+										$(`#fp-seo-${platform}-description`).val(decodedDesc).trigger('input');
+									}
+								});
+							}
 							
 							FPSeoUI.showNotification('Social media content optimized successfully!', 'success');
 						} else {
-							FPSeoUI.showNotification('Error: ' + response.data, 'error');
+							const errorMsg = (response && response.data) ? (typeof response.data === 'string' ? response.data : 'Unknown error') : 'Optimization failed';
+							FPSeoUI.showNotification('Error: ' + errorMsg, 'error');
 						}
 					},
-					error: function() {
+					error: function(xhr, status, error) {
+						clearTimeout(safetyTimeout);
 						FPSeoUI.hideLoading($btn);
-						FPSeoUI.showNotification('An error occurred. Please try again.', 'error');
+						
+						let errorMsg = 'An error occurred. Please try again.';
+						if (status === 'timeout') {
+							errorMsg = 'Request timeout. Please try again.';
+						} else if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+							errorMsg = xhr.responseJSON.data.message;
+						}
+						
+						FPSeoUI.showNotification(errorMsg, 'error');
+					},
+					complete: function() {
+						// Always ensure button is restored, even if something goes wrong
+						clearTimeout(safetyTimeout);
+						setTimeout(function() {
+							FPSeoUI.hideLoading($btn);
+						}, 100);
 					}
 				});
 			});
@@ -955,19 +1056,18 @@ class ImprovedSocialMediaManager {
 			? wp_specialchars_decode( $social_meta['facebook_description'], ENT_QUOTES )
 			: MetadataResolver::resolve_meta_description( $post );
 		
-		// For image: use social meta if available, then featured image, then default
+		// For image: use social meta if available, then featured image as standard, then default
 		$image = '';
+		$featured_image = get_the_post_thumbnail_url( $post->ID, 'full' );
+		
 		if ( ! empty( $social_meta['facebook_image'] ) ) {
 			$image = esc_url_raw( $social_meta['facebook_image'] );
+		} elseif ( $featured_image ) {
+			// Use featured image as standard when no social image is set
+			$image = $featured_image;
 		} else {
-			// Use featured image as fallback
-			$featured_image = get_the_post_thumbnail_url( $post->ID, 'full' );
-			if ( $featured_image ) {
-				$image = $featured_image;
-			} else {
-				// Final fallback to default social image
-				$image = get_option( 'fp_seo_social_default_image', '' );
-			}
+			// Final fallback to default social image
+			$image = get_option( 'fp_seo_social_default_image', '' );
 		}
 		
 		return array(
@@ -999,8 +1099,15 @@ class ImprovedSocialMediaManager {
 		$social_meta = array();
 
 		foreach ( self::PLATFORMS as $platform_id => $platform_data ) {
-			$social_meta[ $platform_id . '_title' ] = sanitize_text_field( $_POST[ 'fp_seo_' . $platform_id . '_title' ] ?? '' );
-			$social_meta[ $platform_id . '_description' ] = sanitize_textarea_field( $_POST[ 'fp_seo_' . $platform_id . '_description' ] ?? '' );
+			// Decode HTML entities before sanitizing to preserve actual characters like &
+			$title_raw = isset( $_POST[ 'fp_seo_' . $platform_id . '_title' ] ) ? wp_unslash( $_POST[ 'fp_seo_' . $platform_id . '_title' ] ) : '';
+			$title_decoded = html_entity_decode( (string) $title_raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$social_meta[ $platform_id . '_title' ] = sanitize_text_field( $title_decoded );
+			
+			$description_raw = isset( $_POST[ 'fp_seo_' . $platform_id . '_description' ] ) ? wp_unslash( $_POST[ 'fp_seo_' . $platform_id . '_description' ] ) : '';
+			$description_decoded = html_entity_decode( (string) $description_raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$social_meta[ $platform_id . '_description' ] = sanitize_textarea_field( $description_decoded );
+			
 			$social_meta[ $platform_id . '_image' ] = esc_url_raw( $_POST[ 'fp_seo_' . $platform_id . '_image' ] ?? '' );
 		}
 
@@ -1388,7 +1495,9 @@ class ImprovedSocialMediaManager {
 
 		$limit = $platform_data['title_limit'];
 		$content = wp_trim_words( $content, $limit / 6 ); // Rough word estimation
-		$content = str_replace( array( '&nbsp;', '&amp;' ), array( ' ', '&' ), $content );
+		
+		// Decode all HTML entities to ensure clean text
+		$content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		
 		return $content;
 	}
@@ -1427,3 +1536,4 @@ class ImprovedSocialMediaManager {
 		return trim( $content );
 	}
 }
+

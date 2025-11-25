@@ -81,6 +81,16 @@ class QAMetaBox {
 
 		$qa_pairs = $this->extractor->get_qa_pairs( $post->ID );
 		$has_openai = ( new \FP\SEO\Integrations\OpenAiClient() )->is_configured();
+		
+		// Debug logging
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			\FP\SEO\Utils\Logger::debug( 'QAMetaBox::render', array(
+				'post_id' => $post->ID,
+				'qa_pairs_count' => count( $qa_pairs ),
+				'has_openai' => $has_openai,
+				'qa_pairs_preview' => ! empty( $qa_pairs ) ? array_slice( $qa_pairs, 0, 2 ) : array(),
+			) );
+		}
 
 		?>
 		<div class="fp-seo-qa-metabox">

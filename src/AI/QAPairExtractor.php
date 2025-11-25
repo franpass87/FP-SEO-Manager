@@ -128,8 +128,25 @@ class QAPairExtractor {
 	 */
 	private function prepare_content( \WP_Post $post ): string {
 		$content = $post->post_content;
+		
+		// Process WPBakery shortcodes first to extract text content
+		if ( strpos( $content, '[vc_' ) !== false ) {
+			// Use WPBakeryContentExtractor if available
+			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
+				$wpbakery_text = \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $content );
+				if ( ! empty( $wpbakery_text ) ) {
+					$content = $wpbakery_text;
+				} else {
+					// Fallback: process shortcodes
+					$content = do_shortcode( $content );
+				}
+			} else {
+				// Fallback: process shortcodes
+				$content = do_shortcode( $content );
+			}
+		}
 
-		// Remove shortcodes
+		// Remove remaining shortcodes
 		$content = strip_shortcodes( $content );
 
 		// Remove HTML tags
@@ -137,6 +154,16 @@ class QAPairExtractor {
 
 		// Limit length (API token limits)
 		$content = substr( $content, 0, 6000 );
+		
+		// Debug logging
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'QAPairExtractor::prepare_content', array(
+				'post_id' => $post->ID,
+				'original_length' => strlen( $post->post_content ),
+				'processed_length' => strlen( $content ),
+				'has_wpbakery' => strpos( $post->post_content, '[vc_' ) !== false,
+			) );
+		}
 
 		return trim( $content );
 	}
@@ -308,7 +335,22 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * @return array<int, array<string, mixed>> Q&A pairs.
 	 */
 	public function get_qa_pairs( int $post_id ): array {
+		// Clear cache before retrieving to ensure fresh data
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+		
 		$qa_pairs = get_post_meta( $post_id, self::META_QA_PAIRS, true );
+		
+		// Debug logging
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'QAPairExtractor::get_qa_pairs', array(
+				'post_id' => $post_id,
+				'meta_key' => self::META_QA_PAIRS,
+				'is_array' => is_array( $qa_pairs ),
+				'count' => is_array( $qa_pairs ) ? count( $qa_pairs ) : 0,
+				'raw_value' => $qa_pairs,
+			) );
+		}
 
 		if ( ! is_array( $qa_pairs ) ) {
 			return array();

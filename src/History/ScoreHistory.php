@@ -23,10 +23,13 @@ class ScoreHistory {
 
 	/**
 	 * Register hooks
+	 *
+	 * Note: Activation hook is handled by CoreServiceProvider::activate()
+	 * to avoid duplicate registration and ensure proper service provider pattern.
 	 */
 	public function register(): void {
 		add_action( 'fpseo_after_score_calculation', array( $this, 'record_score' ), 10, 2 );
-		register_activation_hook( FP_SEO_PERFORMANCE_FILE, array( $this, 'create_table' ) );
+		// Activation hook removed - handled by CoreServiceProvider::activate()
 	}
 
 	/**

@@ -254,11 +254,11 @@ class MultipleKeywordsManager {
 		?>
 		<div class="fp-seo-keywords-metabox">
 			<div class="fp-seo-keywords-tabs">
-				<button type="button" class="fp-seo-keywords-tab active" data-tab="primary"><?php esc_html_e( 'Primary', 'fp-seo-performance' ); ?></button>
-				<button type="button" class="fp-seo-keywords-tab" data-tab="secondary"><?php esc_html_e( 'Secondary', 'fp-seo-performance' ); ?></button>
+				<button type="button" class="fp-seo-keywords-tab active" data-tab="primary"><?php esc_html_e( 'Principale', 'fp-seo-performance' ); ?></button>
+				<button type="button" class="fp-seo-keywords-tab" data-tab="secondary"><?php esc_html_e( 'Secondarie', 'fp-seo-performance' ); ?></button>
 				<button type="button" class="fp-seo-keywords-tab" data-tab="long-tail"><?php esc_html_e( 'Long Tail', 'fp-seo-performance' ); ?></button>
-				<button type="button" class="fp-seo-keywords-tab" data-tab="semantic"><?php esc_html_e( 'Semantic', 'fp-seo-performance' ); ?></button>
-				<button type="button" class="fp-seo-keywords-tab" data-tab="analysis"><?php esc_html_e( 'Analysis', 'fp-seo-performance' ); ?></button>
+				<button type="button" class="fp-seo-keywords-tab" data-tab="semantic"><?php esc_html_e( 'Semantiche', 'fp-seo-performance' ); ?></button>
+				<button type="button" class="fp-seo-keywords-tab" data-tab="analysis"><?php esc_html_e( 'Analisi', 'fp-seo-performance' ); ?></button>
 			</div>
 
 			<div class="fp-seo-keywords-tab-content active" id="primary">
@@ -277,7 +277,7 @@ class MultipleKeywordsManager {
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
-							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Use', 'fp-seo-performance' ); ?></button>
+							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Usa', 'fp-seo-performance' ); ?></button>
 						</div>
 						<?php endforeach; ?>
 					</div>
@@ -289,7 +289,7 @@ class MultipleKeywordsManager {
 					<label for="fp-seo-secondary-keywords"><?php esc_html_e( 'Secondary Keywords', 'fp-seo-performance' ); ?></label>
 					<div class="fp-seo-keywords-input-container">
 						<input type="text" id="fp-seo-secondary-keyword-input" placeholder="<?php esc_attr_e( 'Add secondary keyword', 'fp-seo-performance' ); ?>">
-						<button type="button" class="button" id="fp-seo-add-secondary-keyword"><?php esc_html_e( 'Add', 'fp-seo-performance' ); ?></button>
+						<button type="button" class="button" id="fp-seo-add-secondary-keyword"><?php esc_html_e( 'Aggiungi', 'fp-seo-performance' ); ?></button>
 					</div>
 					<div class="fp-seo-keywords-list" id="fp-seo-secondary-keywords-list">
 						<?php foreach ( $keywords_data['secondary_keywords'] ?? array() as $index => $keyword ) : ?>
@@ -310,7 +310,7 @@ class MultipleKeywordsManager {
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
-							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Use', 'fp-seo-performance' ); ?></button>
+							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Usa', 'fp-seo-performance' ); ?></button>
 						</div>
 						<?php endforeach; ?>
 					</div>
@@ -322,7 +322,7 @@ class MultipleKeywordsManager {
 					<label for="fp-seo-long-tail-keywords"><?php esc_html_e( 'Long Tail Keywords', 'fp-seo-performance' ); ?></label>
 					<div class="fp-seo-keywords-input-container">
 						<input type="text" id="fp-seo-long-tail-keyword-input" placeholder="<?php esc_attr_e( 'Add long tail keyword', 'fp-seo-performance' ); ?>">
-						<button type="button" class="button" id="fp-seo-add-long-tail-keyword"><?php esc_html_e( 'Add', 'fp-seo-performance' ); ?></button>
+						<button type="button" class="button" id="fp-seo-add-long-tail-keyword"><?php esc_html_e( 'Aggiungi', 'fp-seo-performance' ); ?></button>
 					</div>
 					<div class="fp-seo-keywords-list" id="fp-seo-long-tail-keywords-list">
 						<?php foreach ( $keywords_data['long_tail_keywords'] ?? array() as $index => $keyword ) : ?>
@@ -343,7 +343,7 @@ class MultipleKeywordsManager {
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
-							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Use', 'fp-seo-performance' ); ?></button>
+							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Usa', 'fp-seo-performance' ); ?></button>
 						</div>
 						<?php endforeach; ?>
 					</div>
@@ -355,7 +355,7 @@ class MultipleKeywordsManager {
 					<label for="fp-seo-semantic-keywords"><?php esc_html_e( 'Semantic Keywords', 'fp-seo-performance' ); ?></label>
 					<div class="fp-seo-keywords-input-container">
 						<input type="text" id="fp-seo-semantic-keyword-input" placeholder="<?php esc_attr_e( 'Add semantic keyword', 'fp-seo-performance' ); ?>">
-						<button type="button" class="button" id="fp-seo-add-semantic-keyword"><?php esc_html_e( 'Add', 'fp-seo-performance' ); ?></button>
+						<button type="button" class="button" id="fp-seo-add-semantic-keyword"><?php esc_html_e( 'Aggiungi', 'fp-seo-performance' ); ?></button>
 					</div>
 					<div class="fp-seo-keywords-list" id="fp-seo-semantic-keywords-list">
 						<?php foreach ( $keywords_data['semantic_keywords'] ?? array() as $index => $keyword ) : ?>
@@ -376,7 +376,7 @@ class MultipleKeywordsManager {
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
-							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Use', 'fp-seo-performance' ); ?></button>
+							<button type="button" class="button button-small fp-seo-use-suggestion"><?php esc_html_e( 'Usa', 'fp-seo-performance' ); ?></button>
 						</div>
 						<?php endforeach; ?>
 					</div>
@@ -413,10 +413,11 @@ class MultipleKeywordsManager {
 
 					<div class="fp-seo-keywords-actions">
 						<button type="button" class="button" id="fp-seo-analyze-keywords">
-							<?php esc_html_e( 'Analyze Keywords', 'fp-seo-performance' ); ?>
+							<?php esc_html_e( 'Analizza Keyword', 'fp-seo-performance' ); ?>
 						</button>
-						<button type="button" class="button" id="fp-seo-optimize-keywords">
-							<?php esc_html_e( 'Optimize with AI', 'fp-seo-performance' ); ?>
+						<button type="button" class="fp-seo-ai-btn" id="fp-seo-optimize-keywords">
+							<span>🤖</span>
+							<span><?php esc_html_e( 'Ottimizza con AI', 'fp-seo-performance' ); ?></span>
 						</button>
 					</div>
 				</div>

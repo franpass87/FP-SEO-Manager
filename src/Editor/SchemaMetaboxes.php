@@ -39,7 +39,7 @@ class SchemaMetaboxes {
 		// FAQ Schema Metabox - NOW INTEGRATED IN MAIN METABOX
 		add_meta_box(
 			'fp-seo-faq-schema',
-			'❓ ' . __( 'FAQ Schema - AI Overview Ready', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);">⚡ Impact: +20%</span>',
+			'❓ ' . __( 'FAQ Schema - Pronto per AI Overview', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);">⚡ Impatto: +20%</span>',
 			array( $this, 'render_faq_metabox' ),
 			$post_types,
 			'normal',
@@ -49,7 +49,7 @@ class SchemaMetaboxes {
 		// HowTo Schema Metabox - NOW INTEGRATED IN MAIN METABOX
 		add_meta_box(
 			'fp-seo-howto-schema',
-			'📖 ' . __( 'HowTo Schema - Guide Step-by-Step', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);">⚡ Impact: +15%</span>',
+			'📖 ' . __( 'HowTo Schema - Guida Passo-Passo', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);">⚡ Impatto: +15%</span>',
 			array( $this, 'render_howto_metabox' ),
 			$post_types,
 			'normal',
@@ -65,6 +65,9 @@ class SchemaMetaboxes {
 	 */
 	public function render_faq_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_faq_schema_nonce', 'fp_seo_faq_schema_nonce' );
+		
+		// Store post ID for JavaScript
+		$post_id = $post->ID;
 
 		// Clear cache before retrieving
 		clean_post_cache( $post->ID );
@@ -107,10 +110,16 @@ class SchemaMetaboxes {
 				?>
 			</div>
 
-			<button type="button" class="button button-secondary fp-seo-add-faq">
-				<span class="dashicons dashicons-plus-alt2"></span>
-				<?php esc_html_e( 'Aggiungi Domanda FAQ', 'fp-seo-performance' ); ?>
-			</button>
+			<div style="display: flex; gap: 8px; margin-top: 12px;">
+				<button type="button" class="button button-secondary fp-seo-add-faq">
+					<span class="dashicons dashicons-plus-alt2"></span>
+					<?php esc_html_e( 'Aggiungi Domanda FAQ', 'fp-seo-performance' ); ?>
+				</button>
+				<button type="button" class="fp-seo-generate-faq-ai" id="fp-seo-generate-faq-ai">
+					<span>🤖</span>
+					<span><?php esc_html_e( 'Genera con AI', 'fp-seo-performance' ); ?></span>
+				</button>
+			</div>
 
 			<div class="fp-seo-schema-tips">
 				<h4>💡 Best Practices per FAQ Schema:</h4>
@@ -126,6 +135,10 @@ class SchemaMetaboxes {
 
 		<script type="text/html" id="fp-seo-faq-template">
 			<?php $this->render_faq_item( '__INDEX__', array( 'question' => '', 'answer' => '' ) ); ?>
+		</script>
+		
+		<script type="text/javascript">
+		<?php echo $this->get_inline_js( $post->ID ); ?>
 		</script>
 		<?php
 	}
@@ -288,10 +301,16 @@ class SchemaMetaboxes {
 				?>
 			</div>
 
-			<button type="button" class="button button-secondary fp-seo-add-step">
-				<span class="dashicons dashicons-plus-alt2"></span>
-				<?php esc_html_e( 'Aggiungi Step', 'fp-seo-performance' ); ?>
-			</button>
+			<div style="display: flex; gap: 8px; margin-top: 12px;">
+				<button type="button" class="button button-secondary fp-seo-add-step">
+					<span class="dashicons dashicons-plus-alt2"></span>
+					<?php esc_html_e( 'Aggiungi Step', 'fp-seo-performance' ); ?>
+				</button>
+				<button type="button" class="fp-seo-generate-howto-ai" id="fp-seo-generate-howto-ai">
+					<span>🤖</span>
+					<span><?php esc_html_e( 'Genera con AI', 'fp-seo-performance' ); ?></span>
+				</button>
+			</div>
 
 			<div class="fp-seo-schema-tips">
 				<h4>💡 Best Practices per HowTo Schema:</h4>
@@ -307,6 +326,10 @@ class SchemaMetaboxes {
 
 		<script type="text/html" id="fp-seo-howto-step-template">
 			<?php $this->render_howto_step( '__INDEX__', array( 'name' => '', 'text' => '', 'url' => '' ) ); ?>
+		</script>
+		
+		<script type="text/javascript">
+		<?php echo $this->get_inline_js( $post->ID ); ?>
 		</script>
 		<?php
 	}
@@ -534,8 +557,8 @@ class SchemaMetaboxes {
 		// Enqueue CSS
 		wp_add_inline_style( 'wp-admin', $this->get_inline_css() );
 
-		// Enqueue JavaScript
-		wp_add_inline_script( 'jquery', $this->get_inline_js() );
+		// Enqueue JavaScript - we need post ID, so we'll add it inline in the metabox
+		// wp_add_inline_script( 'jquery', $this->get_inline_js() );
 	}
 
 	/**
@@ -603,30 +626,7 @@ class SchemaMetaboxes {
 			color: #3b82f6;
 		}
 
-		.fp-seo-remove-faq,
-		.fp-seo-remove-step,
-		.fp-seo-move-up,
-		.fp-seo-move-down {
-			background: transparent;
-			border: none;
-			padding: 4px 8px;
-			cursor: pointer;
-			color: #6b7280;
-			transition: all 0.2s ease;
-			border-radius: 4px;
-		}
-
-		.fp-seo-remove-faq:hover,
-		.fp-seo-remove-step:hover {
-			background: #fef2f2;
-			color: #dc2626;
-		}
-
-		.fp-seo-move-up:hover,
-		.fp-seo-move-down:hover {
-			background: #eff6ff;
-			color: #3b82f6;
-		}
+		/* Stili bottoni rimossi - ora gestiti da admin.css per uniformità */
 
 		.fp-seo-howto-actions {
 			display: flex;
@@ -688,10 +688,9 @@ class SchemaMetaboxes {
 		.fp-seo-add-faq,
 		.fp-seo-add-step {
 			margin-top: 12px;
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
 		}
+
+		/* Stili bottoni uniformati - ora gestiti da admin.css */
 
 		.fp-seo-schema-tips {
 			background: #fef3c7;
@@ -729,13 +728,135 @@ class SchemaMetaboxes {
 	/**
 	 * Get inline JavaScript for metaboxes.
 	 *
+	 * @param int $post_id Post ID.
 	 * @return string
 	 */
-	private function get_inline_js(): string {
+	private function get_inline_js( int $post_id = 0 ): string {
 		return "
 		jQuery(document).ready(function($) {
 			// FAQ Management
 			var faqIndex = $('.fp-seo-faq-item').length;
+
+			// Generate FAQ with AI
+			$('#fp-seo-generate-faq-ai').on('click', function() {
+				var $btn = $(this);
+				var postId = " . ( $post_id > 0 ? absint( $post_id ) : '0' ) . ";
+				
+				// Prevent multiple clicks
+				if ($btn.prop('disabled')) {
+					return;
+				}
+				
+				// Show loading state
+				if (typeof FPSeoUI !== 'undefined') {
+					FPSeoUI.showLoading($btn, 'Generando FAQ con AI...');
+				} else {
+					$btn.prop('disabled', true).text('Generando...');
+				}
+				
+				// Safety timeout
+				var safetyTimeout = setTimeout(function() {
+					if (typeof FPSeoUI !== 'undefined') {
+						FPSeoUI.hideLoading($btn);
+					} else {
+						$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+					}
+					if (typeof FPSeoUI !== 'undefined') {
+						FPSeoUI.showNotification('Timeout. Riprova.', 'error');
+					}
+				}, 30000);
+				
+				$.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					timeout: 25000,
+					data: {
+						action: 'fp_seo_generate_faq',
+						post_id: postId,
+						nonce: '" . wp_create_nonce( 'fp_seo_ai_first' ) . "'
+					},
+					success: function(response) {
+						clearTimeout(safetyTimeout);
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.hideLoading($btn);
+						} else {
+							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+						}
+						
+						if (response && response.success && response.data && response.data.faq_questions) {
+							// Clear existing FAQs
+							$('#fp-seo-faq-list').empty();
+							faqIndex = 0;
+							
+							// Add generated FAQs
+							var template = $('#fp-seo-faq-template').html();
+							response.data.faq_questions.forEach(function(faq) {
+								var newItem = template.replace(/__INDEX__/g, faqIndex);
+								var $newItem = $(newItem);
+								$newItem.find('input[name*=\"[question]\"').val(faq.question || '');
+								$newItem.find('textarea[name*=\"[answer]\"').val(faq.answer || '');
+								$('#fp-seo-faq-list').append($newItem);
+								faqIndex++;
+							});
+							
+							updateFaqNumbers();
+							
+							// Initialize character counts
+							$('.fp-seo-faq-item textarea').each(function() {
+								var count = $(this).val().length;
+								$(this).closest('.fp-seo-form-group').find('.fp-seo-char-count').text(count);
+							});
+							
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.showNotification('Generate ' + response.data.total + ' FAQ con successo!', 'success');
+							} else {
+								alert('Generate ' + response.data.total + ' FAQ con successo!');
+							}
+						} else {
+							var errorMsg = (response && response.data && response.data.message) ? response.data.message : 'Errore durante la generazione delle FAQ';
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.showNotification(errorMsg, 'error');
+							} else {
+								alert(errorMsg);
+							}
+						}
+					},
+					error: function(xhr, status, error) {
+						clearTimeout(safetyTimeout);
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.hideLoading($btn);
+						} else {
+							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+						}
+						
+						var errorMsg = 'Errore durante la generazione delle FAQ. Riprova.';
+						if (status === 'timeout') {
+							errorMsg = 'Timeout. Riprova.';
+						} else if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+							errorMsg = xhr.responseJSON.data.message;
+						}
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.showNotification(errorMsg, 'error');
+						} else {
+							alert(errorMsg);
+						}
+					},
+					complete: function() {
+						// Always ensure button is restored
+						clearTimeout(safetyTimeout);
+						setTimeout(function() {
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.hideLoading($btn);
+							} else {
+								$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+							}
+						}, 100);
+					}
+				});
+			});
 
 			// Add FAQ
 			$('.fp-seo-add-faq').on('click', function() {
@@ -776,6 +897,120 @@ class SchemaMetaboxes {
 
 			// HowTo Management
 			var stepIndex = $('.fp-seo-howto-step').length;
+
+			// Generate HowTo steps with AI
+			$('#fp-seo-generate-howto-ai').on('click', function() {
+				var $btn = $(this);
+				var postId = " . ( $post_id > 0 ? absint( $post_id ) : '0' ) . ";
+				
+				// Prevent multiple clicks
+				if ($btn.prop('disabled')) {
+					return;
+				}
+				
+				// Show loading state
+				if (typeof FPSeoUI !== 'undefined') {
+					FPSeoUI.showLoading($btn, 'Generando step con AI...');
+				} else {
+					$btn.prop('disabled', true).text('Generando...');
+				}
+				
+				// Safety timeout
+				var safetyTimeout = setTimeout(function() {
+					if (typeof FPSeoUI !== 'undefined') {
+						FPSeoUI.hideLoading($btn);
+					} else {
+						$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+					}
+					if (typeof FPSeoUI !== 'undefined') {
+						FPSeoUI.showNotification('Timeout. Riprova.', 'error');
+					}
+				}, 30000);
+				
+				$.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					timeout: 25000,
+					data: {
+						action: 'fp_seo_generate_howto',
+						post_id: postId,
+						nonce: '" . wp_create_nonce( 'fp_seo_ai_first' ) . "'
+					},
+					success: function(response) {
+						clearTimeout(safetyTimeout);
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.hideLoading($btn);
+						} else {
+							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+						}
+						
+						if (response && response.success && response.data && response.data.steps) {
+							// Add generated steps (append to existing)
+							var template = $('#fp-seo-howto-step-template').html();
+							response.data.steps.forEach(function(step) {
+								var newStep = template.replace(/__INDEX__/g, stepIndex);
+								var $newStep = $(newStep);
+								$newStep.find('input[name*=\"[name]\"').val(step.name || '');
+								$newStep.find('textarea[name*=\"[text]\"').val(step.text || '');
+								if (step.url) {
+									$newStep.find('input[name*=\"[url]\"').val(step.url || '');
+								}
+								$('#fp-seo-howto-steps-list').append($newStep);
+								stepIndex++;
+							});
+							
+							updateStepNumbers();
+							
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.showNotification('Generate ' + response.data.total + ' step con successo!', 'success');
+							} else {
+								alert('Generate ' + response.data.total + ' step con successo!');
+							}
+						} else {
+							var errorMsg = (response && response.data && response.data.message) ? response.data.message : 'Errore durante la generazione degli step';
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.showNotification(errorMsg, 'error');
+							} else {
+								alert(errorMsg);
+							}
+						}
+					},
+					error: function(xhr, status, error) {
+						clearTimeout(safetyTimeout);
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.hideLoading($btn);
+						} else {
+							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+						}
+						
+						var errorMsg = 'Errore durante la generazione degli step. Riprova.';
+						if (status === 'timeout') {
+							errorMsg = 'Timeout. Riprova.';
+						} else if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+							errorMsg = xhr.responseJSON.data.message;
+						}
+						
+						if (typeof FPSeoUI !== 'undefined') {
+							FPSeoUI.showNotification(errorMsg, 'error');
+						} else {
+							alert(errorMsg);
+						}
+					},
+					complete: function() {
+						// Always ensure button is restored
+						clearTimeout(safetyTimeout);
+						setTimeout(function() {
+							if (typeof FPSeoUI !== 'undefined') {
+								FPSeoUI.hideLoading($btn);
+							} else {
+								$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
+							}
+						}, 100);
+					}
+				});
+			});
 
 			// Add Step
 			$('.fp-seo-add-step').on('click', function() {

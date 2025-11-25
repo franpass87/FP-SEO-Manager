@@ -65,16 +65,114 @@ class Metabox {
 	private $renderer;
 
 	/**
-	 * Costruttore - registra gli hook immediatamente
+	 * Costruttore - registra gli hook immediatamente e inizializza il renderer
 	 */
 	public function __construct() {
 		// REGISTRA GLI HOOK IMMEDIATAMENTE nel costruttore per garantire che vengano sempre registrati
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::__construct() called' );
 		}
+		
+		// INIZIALIZZA IL RENDERER NEL COSTRUTTORE per garantire che sia sempre disponibile
+		// anche se register() non viene chiamato o fallisce
+		$this->initialize_renderer();
+		
+		// Registra hook di salvataggio
 		$this->register_hooks();
+		
+		// IMPORTANTE: Registra anche l'hook add_meta_boxes nel costruttore
+		// Questo garantisce che il metabox venga sempre registrato, anche se register() non viene chiamato
+		// Priorità 5 per essere registrato tra i primi metabox (prima di altri plugin)
+		$is_admin_uri = false;
+		if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+			$request_uri = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+			$is_admin_uri = strpos( $request_uri, '/wp-admin/' ) !== false;
+		}
+		if ( is_admin() || ( defined( 'WP_ADMIN' ) && WP_ADMIN ) || $is_admin_uri ) {
+			add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: add_meta_boxes hook registered in __construct()' );
+			}
+		}
+		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::__construct() completed - hooks should be registered' );
+			Logger::debug( 'Metabox::__construct() completed - hooks and renderer should be initialized', array(
+				'renderer_initialized' => $this->renderer !== null,
+			) );
+		}
+	}
+
+	/**
+	 * Inizializza il renderer con gestione errori robusta.
+	 * Chiamato dal costruttore per garantire che il renderer sia sempre disponibile.
+	 *
+	 * @return void
+	 */
+	private function initialize_renderer(): void {
+		// Se il renderer è già inizializzato, non fare nulla
+		if ( $this->renderer !== null ) {
+			return;
+		}
+
+		try {
+			// Verifica che la classe esista prima di istanziarla (per debug)
+			if ( ! class_exists( MetaboxRenderer::class ) ) {
+				throw new \RuntimeException( 'MetaboxRenderer class not found - autoloader may not be working' );
+			}
+			
+			// Prova a istanziare direttamente - l'autoloader PSR-4 dovrebbe caricarla automaticamente
+			$this->renderer = new MetaboxRenderer();
+			
+			// Verifica che il renderer sia stato creato correttamente
+			if ( ! $this->renderer instanceof MetaboxRenderer ) {
+				throw new \RuntimeException( 'MetaboxRenderer instance invalid - wrong type returned' );
+			}
+			
+			// Verifica che il renderer abbia il metodo render()
+			if ( ! method_exists( $this->renderer, 'render' ) ) {
+				throw new \RuntimeException( 'MetaboxRenderer instance missing render() method' );
+			}
+			
+			// Log successo in debug mode
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: MetaboxRenderer initialized successfully in __construct()', array(
+					'renderer_class' => get_class( $this->renderer ),
+					'has_render_method' => method_exists( $this->renderer, 'render' ),
+				) );
+			}
+		} catch ( \Error $e ) {
+			// Cattura errori fatali (class not found, etc.)
+			Logger::error( 'FP SEO: Fatal error initializing MetaboxRenderer in __construct() (Error)', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'class_exists' => class_exists( MetaboxRenderer::class ),
+				'autoloader_registered' => spl_autoload_functions() !== false,
+			) );
+			$this->renderer = null;
+		} catch ( \Exception $e ) {
+			// Log errore ma continua - useremo fallback rendering
+			Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer in __construct() (Exception)', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'class_exists' => class_exists( MetaboxRenderer::class ),
+			) );
+			$this->renderer = null;
+		} catch ( \Throwable $e ) {
+			// Catch-all per qualsiasi altro tipo di errore
+			Logger::error( 'FP SEO: Unexpected error initializing MetaboxRenderer in __construct() (Throwable)', array(
+				'error' => $e->getMessage(),
+				'type' => get_class( $e ),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'class_exists' => class_exists( MetaboxRenderer::class ),
+			) );
+			$this->renderer = null;
 		}
 	}
 
@@ -82,25 +180,49 @@ class Metabox {
 	 * Registra gli hook di salvataggio - chiamato dal costruttore e da register()
 	 */
 	private function register_hooks(): void {
-		// MULTIPLE HOOKS con priorità diverse per garantire il salvataggio
-		// save_post receives: (int $post_id, WP_Post $post, bool $update)
-		add_action( 'save_post', array( $this, 'save_meta' ), 1, 3 ); // Priorità 1 - molto presto
-		add_action( 'save_post', array( $this, 'save_meta' ), 5, 3 ); // Priorità 5 - normale
-		add_action( 'save_post', array( $this, 'save_meta' ), 99, 3 ); // Priorità 99 - molto tardi
+		// Hook save_post con priorità 10 (standard WordPress)
+		// Il controllo interno previene esecuzioni multiple tramite static $saved
+		// Priorità 10 garantisce che venga eseguito dopo i controlli di base ma prima della fine
+		if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
+			add_action( 'save_post', array( $this, 'save_meta' ), 10, 3 );
+		}
 		
 		// Hook aggiuntivo per edit_post (chiamato anche in Gutenberg)
-		add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 1, 2 );
-		add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 99, 2 );
+		// Una sola registrazione è sufficiente grazie al controllo interno
+		if ( ! has_action( 'edit_post', array( $this, 'save_meta_edit_post' ) ) ) {
+			add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10, 2 );
+		}
 		
 		// Hook wp_insert_post per catturare anche questo
-		add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
+		if ( ! has_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ) ) ) {
+			add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
+		}
 		
 		// Hook wp_insert_post_data per salvare prima che il post venga inserito
 		// Priorità 1 per intervenire PRIMA di qualsiasi altro plugin che potrebbe modificare lo status
-		add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
+		if ( ! has_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ) ) ) {
+			add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
+		}
 		
 		// Hook transition_post_status per intercettare cambiamenti di status (specialmente per homepage)
-		add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
+		if ( ! has_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ) ) ) {
+			add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
+		}
+		
+		// Hook shutdown come ultima risorsa per correggere lo status della homepage
+		if ( ! has_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ) ) ) {
+			add_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ), 999 );
+		}
+		
+		// Salva lo status originale della homepage all'inizio della richiesta
+		if ( ! has_action( 'init', array( $this, 'save_homepage_original_status' ) ) ) {
+			add_action( 'init', array( $this, 'save_homepage_original_status' ), 1 );
+		}
+		
+		// Previeni la creazione di nuove pagine auto-draft quando si modifica la homepage
+		if ( ! has_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ) ) ) {
+			add_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ), 1 );
+		}
 		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -119,51 +241,67 @@ class Metabox {
 	 * Hooks WordPress actions for registering and saving the metabox.
 	 */
 	public function register(): void {
-		// Inizializza renderer con gestione errori robusta
-		try {
-			// Verifica che la classe esista prima di istanziarla
-			if ( ! class_exists( 'FP\\SEO\\Editor\\MetaboxRenderer' ) ) {
-				throw new \RuntimeException( 'MetaboxRenderer class not found' );
-			}
-			
-			$this->renderer = new MetaboxRenderer();
-			
-			// Verifica che il renderer sia stato creato correttamente
-			if ( ! $this->renderer instanceof MetaboxRenderer ) {
-				throw new \RuntimeException( 'MetaboxRenderer instance invalid' );
-			}
-		} catch ( \Exception $e ) {
-			// Log errore ma continua - useremo fallback rendering
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer', array(
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-				) );
-			}
-			// Crea un renderer fallback invece di non registrare gli hook
-			$this->renderer = null;
-		} catch ( \Throwable $e ) {
-			// Log errore fatale ma continua - useremo fallback rendering
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Fatal error initializing MetaboxRenderer', array(
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-				) );
-			}
-			// Crea un renderer fallback invece di non registrare gli hook
-			$this->renderer = null;
+		// Log chiamata al metodo register
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'FP SEO: Metabox::register() called', array(
+				'admin_context' => is_admin(),
+				'hook' => current_filter(),
+			) );
 		}
 		
-		// Registra sempre gli hook, anche se il renderer non è disponibile
-		// Priorità 5 per essere registrato tra i primi metabox (prima di altri plugin)
-		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
+		// Il renderer viene già inizializzato nel costruttore per garantire che sia sempre disponibile
+		// Qui verifichiamo solo che sia stato inizializzato correttamente e tentiamo di reinizializzarlo se necessario
+		if ( $this->renderer === null ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'FP SEO: Renderer is null in register(), attempting to reinitialize' );
+			}
+			$this->initialize_renderer();
+		}
 		
-		// Gli hook di salvataggio sono già registrati nel costruttore, ma li registriamo di nuovo per sicurezza
+		// Log stato finale del renderer
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'FP SEO: Metabox::register() completed', array(
+				'renderer_initialized' => $this->renderer !== null,
+				'renderer_class' => $this->renderer ? get_class( $this->renderer ) : 'null',
+			) );
+		}
+		
+		// L'hook add_meta_boxes è già registrato nel costruttore per garantire che sia sempre presente
+		// Qui verifichiamo solo se è già registrato (potrebbe essere duplicato, ma WordPress lo gestisce)
+		// Non lo registriamo di nuovo per evitare duplicati
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			global $wp_filter;
+			$already_registered = false;
+			if ( isset( $wp_filter['add_meta_boxes'] ) ) {
+				foreach ( $wp_filter['add_meta_boxes']->callbacks as $priority => $hooks ) {
+					foreach ( $hooks as $hook ) {
+						if ( is_array( $hook['function'] ) && 
+						     is_object( $hook['function'][0] ) && 
+						     $hook['function'][0] === $this && 
+						     $hook['function'][1] === 'add_meta_box' ) {
+							$already_registered = true;
+							break 2;
+						}
+					}
+				}
+			}
+			
+			if ( ! $already_registered ) {
+			// Se per qualche motivo non è registrato, registralo qui come fallback
+			if ( ! has_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) ) ) {
+				add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'FP SEO: add_meta_boxes hook registered in register() (fallback)' );
+				}
+			}
+		}
+	}
+	
+	// Gli hook di salvataggio sono già registrati nel costruttore
+	// Verifica che non siano già stati registrati prima di registrarli di nuovo
+	if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
 		$this->register_hooks();
+	}
 		
 		// Questo permette al salvataggio di funzionare anche se il rendering fallisce
 		try {
@@ -1415,12 +1553,34 @@ class Metabox {
 			// First, try to get post ID from request (most reliable for existing posts)
 			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
 			
-			// For homepage, also check page_on_front option
-			if ( $post_id <= 0 && $is_homepage_edit && $page_on_front_id > 0 ) {
-				$post_id = $page_on_front_id;
+			// IMPORTANTE: Se stiamo modificando la homepage ma il post_id nella richiesta è diverso,
+			// potrebbe essere una pagina auto-draft orfana. Usa sempre l'ID della homepage.
+			if ( $is_homepage_edit && $page_on_front_id > 0 ) {
+				// Se il post_id nella richiesta non corrisponde alla homepage, potrebbe essere un problema
+				if ( $post_id > 0 && $post_id !== $page_on_front_id ) {
+					$requested_post = get_post( $post_id );
+					// Se il post richiesto è auto-draft, è probabilmente una pagina orfana
+					if ( $requested_post instanceof WP_Post && $requested_post->post_status === 'auto-draft' ) {
+						// Usa l'ID della homepage invece
+						$post_id = $page_on_front_id;
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::warning( 'FP SEO: Detected orphan auto-draft page, using homepage ID instead', array(
+								'requested_post_id' => $post_id,
+								'homepage_id' => $page_on_front_id,
+							) );
+						}
+					}
+				} elseif ( $post_id <= 0 ) {
+					// Se non c'è post_id nella richiesta ma stiamo modificando la homepage, usa l'ID della homepage
+					$post_id = $page_on_front_id;
+				}
 			}
 			
 			if ( $post_id > 0 ) {
+				// Pulisci la cache prima di recuperare il post
+				clean_post_cache( $post_id );
+				wp_cache_delete( $post_id, 'posts' );
+				
 				$retrieved_post = get_post( $post_id );
 				if ( $retrieved_post instanceof WP_Post && $retrieved_post->post_status !== 'auto-draft' ) {
 					$current_post = $retrieved_post;
@@ -1432,6 +1592,27 @@ class Metabox {
 							'original_status' => $post->post_status ?? 'unknown',
 							'is_homepage' => $is_homepage_edit,
 						) );
+					}
+				} elseif ( $retrieved_post instanceof WP_Post && $retrieved_post->post_status === 'auto-draft' && $is_homepage_edit ) {
+					// Se il post recuperato è ancora auto-draft ma stiamo modificando la homepage,
+					// potrebbe essere una pagina orfana. Prova a recuperare direttamente la homepage dal database.
+					global $wpdb;
+					$homepage_post = $wpdb->get_row( $wpdb->prepare(
+						"SELECT * FROM {$wpdb->posts} WHERE ID = %d AND post_type = 'page'",
+						$page_on_front_id
+					), OBJECT );
+					
+					if ( $homepage_post && $homepage_post->post_status !== 'auto-draft' ) {
+						$current_post = get_post( $homepage_post->ID );
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::warning( 'FP SEO: Retrieved homepage directly from database (bypassed auto-draft)', array(
+								'post_id' => $current_post->ID,
+								'post_status' => $current_post->post_status,
+							) );
+						}
+					} else {
+						// Se anche dal database è auto-draft, mantieni il post originale
+						$current_post = $retrieved_post;
 					}
 				} elseif ( $retrieved_post instanceof WP_Post ) {
 					// Post exists but is auto-draft - this is a new post, keep it
@@ -1478,16 +1659,31 @@ class Metabox {
 			}
 		}
 
-		// Se il renderer non è disponibile, mostra un messaggio di fallback
+		// Se il renderer non è disponibile, prova a reinizializzarlo o mostra fallback
 		if ( ! $this->renderer ) {
-			echo '<div class="notice notice-warning">';
-			echo '<p><strong>' . esc_html__( 'FP SEO Manager', 'fp-seo-performance' ) . '</strong></p>';
-			echo '<p>' . esc_html__( 'Il metabox non può essere visualizzato correttamente. I campi SEO verranno comunque salvati.', 'fp-seo-performance' ) . '</p>';
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				echo '<p><small>' . esc_html__( 'Controlla i log per dettagli.', 'fp-seo-performance' ) . '</small></p>';
+				Logger::error( 'FP SEO: MetaboxRenderer is null in render(), attempting reinitialization', array(
+					'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
+					'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
+				) );
 			}
-			echo '</div>';
-			return;
+			
+			// Tenta di reinizializzare il renderer
+			try {
+				$this->renderer = new MetaboxRenderer();
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'FP SEO: MetaboxRenderer reinitialized successfully in render()' );
+				}
+			} catch ( \Throwable $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
+						'error' => $e->getMessage(),
+					) );
+				}
+				// Se anche il tentativo fallisce, mostra fallback con campi essenziali
+				$this->render_fallback_fields( $current_post );
+				return;
+			}
 		}
 
 		// I dati per JS sono già stati preparati in enqueue_assets()
@@ -1527,21 +1723,75 @@ class Metabox {
 		// Use renderer to output HTML con gestione errori robusta
 		// Pass current_post instead of modifying the original $post parameter
 		try {
-			$this->renderer->render( $current_post, $analysis, $excluded );
-		} catch ( \Exception $e ) {
+			// Verifica che il renderer sia ancora disponibile prima di chiamarlo
+			if ( ! $this->renderer ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Renderer is null before render() call', array(
+						'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
+						'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
+					) );
+				}
+				throw new \RuntimeException( 'Renderer became null before render() call' );
+			}
+			
+			// Log inizio rendering in debug mode
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Error rendering metabox', array(
-					'post_id' => $post->ID,
+				Logger::debug( 'FP SEO: Starting metabox rendering', array(
+					'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
+					'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
+					'excluded' => $excluded,
+					'analysis_count' => count( $analysis ),
+					'renderer_class' => get_class( $this->renderer ),
+				) );
+			}
+			
+			// Chiama il renderer
+			$this->renderer->render( $current_post, $analysis, $excluded );
+			
+			// Log successo in debug mode
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: Metabox rendering completed successfully' );
+			}
+		} catch ( \Error $e ) {
+			// Cattura errori fatali
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Fatal error rendering metabox (Error)', array(
+					'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
 					'line' => $e->getLine(),
+					'renderer_null' => is_null( $this->renderer ),
+					'error_type' => get_class( $e ),
 				) );
 			}
-			// Fallback: show basic error message con campi essenziali
-			echo '<div class="notice notice-error">';
+			// Fallback: show basic error message con campi essenziali - FORZA VISIBILITÀ
+			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
+			echo '<p><strong>' . esc_html__( 'Errore fatale nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small>Errore: ' . esc_html( $e->getMessage() ) . '</small></p>';
+			}
+			echo '</div>';
+		} catch ( \Exception $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Error rendering metabox (Exception)', array(
+					'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'renderer_null' => is_null( $this->renderer ),
+					'exception_type' => get_class( $e ),
+				) );
+			}
+			// Fallback: show basic error message con campi essenziali - FORZA VISIBILITÀ
+			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
 			echo '<p><strong>' . esc_html__( 'Errore nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
 			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small>Errore: ' . esc_html( $e->getMessage() ) . '</small></p>';
+			}
 			echo '</div>';
 			
 			// Mostra almeno i campi essenziali per il salvataggio
@@ -1574,54 +1824,84 @@ class Metabox {
 	 */
 	private function render_fallback_fields( WP_Post $post ): void {
 		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
+		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
+			clean_post_cache( $post->ID );
+			wp_cache_delete( $post->ID, 'post_meta' );
+			wp_cache_delete( $post->ID, 'posts' );
+			if ( function_exists( 'wp_cache_flush_group' ) ) {
+				wp_cache_flush_group( 'post_meta' );
+			}
+			if ( function_exists( 'update_post_meta_cache' ) ) {
+				update_post_meta_cache( array( $post->ID ) );
+			}
 		}
 
-		$seo_title = get_post_meta( $post->ID, '_fp_seo_title', true );
-		$meta_desc = get_post_meta( $post->ID, '_fp_seo_meta_description', true );
+		$seo_title = ! empty( $post->ID ) && $post->ID > 0 ? get_post_meta( $post->ID, '_fp_seo_title', true ) : '';
+		$meta_desc = ! empty( $post->ID ) && $post->ID > 0 ? get_post_meta( $post->ID, '_fp_seo_meta_description', true ) : '';
+		$focus_keyword = ! empty( $post->ID ) && $post->ID > 0 ? get_post_meta( $post->ID, self::META_FOCUS_KEYWORD, true ) : '';
 		
 		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $seo_title ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_title' ) );
-			if ( $db_value !== null ) {
-				$seo_title = $db_value;
+		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
+			if ( empty( $seo_title ) ) {
+				global $wpdb;
+				$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_title' ) );
+				if ( $db_value !== null ) {
+					$seo_title = $db_value;
+				}
+			}
+			
+			if ( empty( $meta_desc ) ) {
+				global $wpdb;
+				$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_meta_description' ) );
+				if ( $db_value !== null ) {
+					$meta_desc = $db_value;
+				}
+			}
+			
+			if ( empty( $focus_keyword ) ) {
+				global $wpdb;
+				$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_FOCUS_KEYWORD ) );
+				if ( $db_value !== null ) {
+					$focus_keyword = $db_value;
+				}
 			}
 		}
 		
-		if ( empty( $meta_desc ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_meta_description' ) );
-			if ( $db_value !== null ) {
-				$meta_desc = $db_value;
-			}
-		}
+		// Render fallback con struttura simile al renderer principale
+		echo '<div class="fp-seo-performance-metabox" data-fp-seo-metabox style="padding: 0;">';
+		echo '<div class="notice notice-warning" style="margin: 0 0 15px 0; padding: 12px;">';
+		echo '<p><strong>' . esc_html__( 'FP SEO Manager - Modalità Fallback', 'fp-seo-performance' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'Il metabox completo non è disponibile, ma i campi SEO essenziali sono disponibili qui sotto.', 'fp-seo-performance' ) . '</p>';
+		echo '</div>';
 		
-		echo '<div style="padding: 15px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; margin-top: 15px;">';
-		echo '<h4>' . esc_html__( 'Campi SEO Essenziali', 'fp-seo-performance' ) . '</h4>';
-		
-		echo '<p>';
-		echo '<label for="fp-seo-title-fallback" style="display: block; margin-bottom: 5px; font-weight: 600;">';
-		echo esc_html__( 'SEO Title:', 'fp-seo-performance' );
+		// SEO Title
+		echo '<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;">';
+		echo '<label for="fp-seo-title-fallback" style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #0c4a6e;">';
+		echo '📝 ' . esc_html__( 'SEO Title', 'fp-seo-performance' ) . ' <span style="font-size: 10px; padding: 2px 6px; background: #10b981; color: #fff; border-radius: 4px;">+15%</span>';
 		echo '</label>';
-		echo '<input type="text" id="fp-seo-title-fallback" name="fp_seo_title" value="' . esc_attr( $seo_title ) . '" style="width: 100%; padding: 8px;" />';
+		echo '<input type="text" id="fp-seo-title" name="fp_seo_title" value="' . esc_attr( $seo_title ) . '" placeholder="' . esc_attr__( 'Titolo ottimizzato per Google (50-60 caratteri)', 'fp-seo-performance' ) . '" maxlength="70" style="width: 100%; padding: 10px; border: 2px solid #10b981; border-radius: 6px; font-size: 14px;" />';
 		echo '<input type="hidden" name="fp_seo_title_sent" value="1" />';
-		echo '</p>';
+		echo '<p style="margin: 8px 0 0; font-size: 11px; color: #64748b;">' . esc_html__( 'Appare come titolo principale nei risultati di ricerca Google.', 'fp-seo-performance' ) . '</p>';
+		echo '</div>';
 		
-		echo '<p>';
-		echo '<label for="fp-seo-meta-desc-fallback" style="display: block; margin-bottom: 5px; font-weight: 600;">';
-		echo esc_html__( 'Meta Description:', 'fp-seo-performance' );
+		// Meta Description
+		echo '<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;">';
+		echo '<label for="fp-seo-meta-desc-fallback" style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #0c4a6e;">';
+		echo '📄 ' . esc_html__( 'Meta Description', 'fp-seo-performance' ) . ' <span style="font-size: 10px; padding: 2px 6px; background: #10b981; color: #fff; border-radius: 4px;">+10%</span>';
 		echo '</label>';
-		echo '<textarea id="fp-seo-meta-desc-fallback" name="fp_seo_meta_description" rows="3" style="width: 100%; padding: 8px;">' . esc_textarea( $meta_desc ) . '</textarea>';
+		echo '<textarea id="fp-seo-meta-description" name="fp_seo_meta_description" rows="3" placeholder="' . esc_attr__( 'Descrizione ottimizzata per Google (150-160 caratteri)', 'fp-seo-performance' ) . '" maxlength="160" style="width: 100%; padding: 10px; border: 2px solid #10b981; border-radius: 6px; font-size: 14px; resize: vertical;">' . esc_textarea( $meta_desc ) . '</textarea>';
 		echo '<input type="hidden" name="fp_seo_meta_description_sent" value="1" />';
-		echo '</p>';
+		echo '<p style="margin: 8px 0 0; font-size: 11px; color: #64748b;">' . esc_html__( 'Appare come descrizione sotto il titolo nei risultati di ricerca.', 'fp-seo-performance' ) . '</p>';
+		echo '</div>';
+		
+		// Focus Keyword
+		echo '<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;">';
+		echo '<label for="fp-seo-focus-keyword-fallback" style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #0c4a6e;">';
+		echo '🎯 ' . esc_html__( 'Focus Keyword', 'fp-seo-performance' );
+		echo '</label>';
+		echo '<input type="text" id="fp-seo-focus-keyword" name="fp_seo_focus_keyword" value="' . esc_attr( $focus_keyword ) . '" placeholder="' . esc_attr__( 'Parola chiave principale per questo contenuto', 'fp-seo-performance' ) . '" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 14px;" />';
+		echo '<p style="margin: 8px 0 0; font-size: 11px; color: #64748b;">' . esc_html__( 'La parola chiave principale che vuoi far posizionare per questo contenuto.', 'fp-seo-performance' ) . '</p>';
+		echo '</div>';
 		
 		echo '</div>';
 	}
@@ -1635,19 +1915,23 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
-		// Prevent multiple calls - usa un array statico per tracciare
+		// Prevent multiple calls - usa un array statico per tracciare per post_id
+		// Questo previene esecuzioni multiple anche se lo stesso hook viene chiamato più volte
 		static $saved = array();
-		$hook_key = current_filter() . '_' . $post_id;
-		if ( isset( $saved[ $hook_key ] ) ) {
+		$post_key = (string) $post_id;
+		
+		if ( isset( $saved[ $post_key ] ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta already processed', array(
+				Logger::debug( 'Metabox::save_meta already processed for post_id', array(
 					'hook' => current_filter(),
 					'post_id' => $post_id,
 				) );
 			}
 			return;
 		}
-		$saved[ $hook_key ] = true;
+		
+		// Marca questo post come processato per tutta la request
+		$saved[ $post_key ] = true;
 		
 		// Log solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -1664,9 +1948,13 @@ class Metabox {
 			
 			foreach ( $seo_fields as $field ) {
 				if ( isset( $_POST[ $field ] ) ) {
-					$value = $_POST[ $field ];
-					if ( is_string( $value ) && strlen( $value ) > 100 ) {
-						$value = substr( $value, 0, 100 ) . '...';
+					$value = wp_unslash( $_POST[ $field ] );
+					// Sanitize for logging to prevent XSS in log output
+					if ( is_string( $value ) ) {
+						$value = sanitize_text_field( $value );
+						if ( strlen( $value ) > 100 ) {
+							$value = substr( $value, 0, 100 ) . '...';
+						}
 					}
 					$seo_fields_present[ $field ] = $value;
 				}
@@ -1681,38 +1969,65 @@ class Metabox {
 			) );
 		}
 		
+		// IMPORTANTE: Per la homepage, verifica e correggi lo status PRIMA di salvare i meta fields
+		// Questo previene che il salvataggio dei meta fields interferisca con lo status
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
+		
+		if ( $is_homepage ) {
+			// Verifica lo status PRIMA di salvare i meta fields
+			global $wpdb;
+			$current_status = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			if ( $current_status === 'auto-draft' ) {
+				// Correggi immediatamente PRIMA di salvare i meta fields
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_status' => 'publish' ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				clean_post_cache( $post_id );
+				
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'Metabox::save_meta - Corrected homepage status BEFORE saving meta fields', array(
+						'post_id' => $post_id,
+						'old_status' => $current_status,
+						'new_status' => 'publish',
+					) );
+				}
+			}
+		}
+		
 		$saver = new \FP\SEO\Editor\MetaboxSaver();
 		$result = $saver->save_all_fields( $post_id );
 		
-		// Protezione per homepage: verifica e correggi lo status se necessario
-		// Questo viene eseguito DOPO il salvataggio per correggere eventuali modifiche fatte da altri plugin
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id > 0 && $post_id === $page_on_front_id ) {
+		// Protezione per homepage: verifica e correggi lo status se necessario DOPO il salvataggio
+		if ( $is_homepage ) {
 			$current_post = get_post( $post_id );
 			if ( $current_post instanceof WP_Post && $current_post->post_status === 'auto-draft' ) {
-				// Recupera lo status originale dal database (potrebbe essere stato modificato)
+				// Correggi direttamente nel database
 				global $wpdb;
-				$original_status = $wpdb->get_var( $wpdb->prepare(
-					"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-					$post_id
-				) );
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_status' => 'publish' ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				clean_post_cache( $post_id );
+				wp_cache_delete( $post_id, 'posts' );
 				
-				// Se lo status è ancora auto-draft ma il post esiste da tempo, correggilo
-				if ( $original_status === 'auto-draft' && $current_post->post_date !== '0000-00-00 00:00:00' ) {
-					// Il post ha una data, quindi non dovrebbe essere auto-draft
-					// Imposta a 'publish' o 'draft' in base al contesto
-					$new_status = 'publish'; // Default per homepage
-					wp_update_post( array(
-						'ID' => $post_id,
-						'post_status' => $new_status,
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'Metabox::save_meta - Corrected homepage status AFTER saving meta fields', array(
+						'post_id' => $post_id,
+						'old_status' => 'auto-draft',
+						'new_status' => 'publish',
 					) );
-					
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::warning( 'Metabox::save_meta - Corrected homepage status from auto-draft', array(
-							'post_id' => $post_id,
-							'new_status' => $new_status,
-						) );
-					}
 				}
 			}
 		}
@@ -1974,6 +2289,35 @@ class Metabox {
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
 		
+		// PROTEZIONE AGGIUNTIVA PER HOMEPAGE: Se è la homepage, FORZA lo status a 'publish'
+		// anche se WordPress sta cercando di impostarlo diversamente
+		if ( $is_homepage && $post_id > 0 ) {
+			// Recupera lo status originale dal database
+			global $wpdb;
+			$original_status = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			// Se il post esiste e non è 'auto-draft', preserva lo status originale
+			// Se è 'publish' o altro status valido, usalo. Altrimenti forza 'publish'
+			if ( ! empty( $original_status ) && $original_status !== 'auto-draft' ) {
+				$data['post_status'] = $original_status;
+			} else {
+				// Se non trovato o è auto-draft, forza 'publish' per la homepage
+				$data['post_status'] = 'publish';
+			}
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'Metabox::save_meta_pre_insert - Homepage status forced', array(
+					'post_id' => $post_id,
+					'original_status' => $original_status,
+					'forced_status' => $data['post_status'],
+					'data_status' => $data['post_status'] ?? 'not set',
+				) );
+			}
+		}
+		
 		// Se è un update di un post esistente (inclusa la homepage)
 		if ( $post_id > 0 && $update ) {
 			// Recupera lo status originale direttamente dal database per maggiore affidabilità
@@ -2146,6 +2490,149 @@ class Metabox {
 					'post_id' => $post->ID,
 					'old_status' => $old_status,
 					'attempted_status' => 'auto-draft',
+				) );
+			}
+		}
+	}
+	
+	/**
+	 * Prevents creation of new auto-draft pages when editing homepage.
+	 * Hook: admin_init (priority 1)
+	 */
+	public function prevent_homepage_auto_draft_creation(): void {
+		// Solo in admin e quando si sta modificando un post
+		if ( ! is_admin() ) {
+			return;
+		}
+		
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		// Verifica se stiamo modificando la homepage
+		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
+		
+		// Se stiamo modificando la homepage, verifica se WordPress sta creando una nuova pagina auto-draft
+		$post_type = isset( $_GET['post_type'] ) ? sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) : '';
+		if ( $post_id === $page_on_front_id || ( $post_id === 0 && $post_type === 'page' ) ) {
+			// Se c'è un post_id nella richiesta ma è 0 o non corrisponde alla homepage, potrebbe essere un problema
+			if ( isset( $_GET['post'] ) && absint( $_GET['post'] ) !== $page_on_front_id && absint( $_GET['post'] ) > 0 ) {
+				$requested_post = get_post( absint( $_GET['post'] ) );
+				// Se il post richiesto è auto-draft e non è la homepage, potrebbe essere una pagina orfana
+				if ( $requested_post instanceof WP_Post && $requested_post->post_status === 'auto-draft' && $requested_post->ID !== $page_on_front_id ) {
+					// Reindirizza alla homepage corretta
+					wp_safe_redirect( admin_url( 'post.php?post=' . $page_on_front_id . '&action=edit' ) );
+					exit;
+				}
+			}
+		}
+		
+		// Verifica se ci sono pagine auto-draft orfane e le elimina (solo se non sono la homepage)
+		global $wpdb;
+		$orphan_auto_drafts = $wpdb->get_results( $wpdb->prepare(
+			"SELECT ID, post_title FROM {$wpdb->posts} 
+			WHERE post_type = 'page' 
+			AND post_status = 'auto-draft' 
+			AND ID != %d
+			AND post_date < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+			LIMIT 10",
+			$page_on_front_id
+		) );
+		
+		if ( ! empty( $orphan_auto_drafts ) ) {
+			foreach ( $orphan_auto_drafts as $orphan ) {
+				// Verifica se la pagina ha contenuto o meta fields - se è completamente vuota, è probabilmente orfana
+				$has_content = ! empty( get_post_field( 'post_content', $orphan->ID ) );
+				$has_meta = ! empty( get_post_meta( $orphan->ID, '_fp_seo_title', true ) );
+				
+				// Se non ha contenuto e non ha meta SEO, è probabilmente una pagina orfana creata per errore
+				if ( ! $has_content && ! $has_meta ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::warning( 'Metabox::prevent_homepage_auto_draft_creation - Found orphan auto-draft page', array(
+							'post_id' => $orphan->ID,
+							'post_title' => $orphan->post_title,
+						) );
+					}
+					// Non eliminiamo automaticamente - l'utente può farlo manualmente
+					// Ma possiamo aggiungere un avviso se necessario
+				}
+			}
+		}
+	}
+	
+	/**
+	 * Save homepage original status at the beginning of the request.
+	 * Hook: init (priority 1)
+	 */
+	public function save_homepage_original_status(): void {
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		// Salva lo status originale in una variabile statica
+		global $wpdb;
+		$original_status = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+			$page_on_front_id
+		) );
+		
+		if ( ! empty( $original_status ) && $original_status !== 'auto-draft' ) {
+			// Salva in una transiente che dura solo per questa richiesta
+			set_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id, $original_status, 60 );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_homepage_original_status - Saved original status', array(
+					'post_id' => $page_on_front_id,
+					'original_status' => $original_status,
+				) );
+			}
+		}
+	}
+	
+	/**
+	 * Fix homepage status on shutdown (ultima risorsa).
+	 * Hook: shutdown
+	 */
+	public function fix_homepage_status_on_shutdown(): void {
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		global $wpdb;
+		$current_status = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+			$page_on_front_id
+		) );
+		
+		// Se lo status è 'auto-draft', prova a ripristinare lo status originale salvato all'inizio
+		if ( $current_status === 'auto-draft' ) {
+			$original_status = get_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id );
+			
+			// Se abbiamo lo status originale salvato, usalo. Altrimenti forza 'publish'
+			$new_status = ! empty( $original_status ) && $original_status !== 'auto-draft' ? $original_status : 'publish';
+			
+			$wpdb->update(
+				$wpdb->posts,
+				array( 'post_status' => $new_status ),
+				array( 'ID' => $page_on_front_id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			clean_post_cache( $page_on_front_id );
+			wp_cache_delete( $page_on_front_id, 'posts' );
+			
+			// Elimina la transiente
+			delete_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'Metabox::fix_homepage_status_on_shutdown - Corrected homepage status on shutdown', array(
+					'post_id' => $page_on_front_id,
+					'old_status' => $current_status,
+					'new_status' => $new_status,
+					'restored_from_original' => ! empty( $original_status ),
 				) );
 			}
 		}

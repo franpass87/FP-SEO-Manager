@@ -123,17 +123,111 @@
 }
 
 /* ===========================
-   BUTTONS ENHANCED
+   AI BUTTONS - UNIFORMED STYLE
    =========================== */
 
-#fp-seo-ai-generate-btn:hover {
-	transform: translateY(-1px);
-	box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+/* Classe comune per tutti i bottoni AI (Genera con AI / Optimize with AI) */
+button.fp-seo-ai-generate-field-btn,
+button.fp-seo-ai-btn,
+button.fp-seo-generate-faq-ai,
+button.fp-seo-generate-howto-ai,
+button#fp-seo-optimize-all-social,
+button#fp-seo-optimize-keywords,
+.fp-seo-performance-metabox button.fp-seo-ai-generate-field-btn,
+.fp-seo-performance-metabox button.fp-seo-ai-btn,
+.fp-seo-performance-metabox button.fp-seo-generate-faq-ai,
+.fp-seo-performance-metabox button.fp-seo-generate-howto-ai {
+	padding: 10px 16px !important;
+	background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+	background-color: #0ea5e9 !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 8px !important;
+	cursor: pointer !important;
+	font-size: 12px !important;
+	font-weight: 600 !important;
+	white-space: nowrap !important;
+	transition: all 0.2s ease !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	gap: 6px !important;
+	box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2) !important;
+	text-decoration: none !important;
+	line-height: 1.5 !important;
+	min-height: 40px !important;
+	height: auto !important;
+	margin: 0 !important;
 }
 
-#fp-seo-ai-generate-btn:active {
-	transform: translateY(0);
-	box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+button.fp-seo-ai-generate-field-btn:hover,
+button.fp-seo-ai-btn:hover,
+button.fp-seo-generate-faq-ai:hover,
+button.fp-seo-generate-howto-ai:hover,
+button#fp-seo-optimize-all-social:hover,
+button#fp-seo-optimize-keywords:hover,
+.fp-seo-performance-metabox button.fp-seo-ai-generate-field-btn:hover,
+.fp-seo-performance-metabox button.fp-seo-ai-btn:hover {
+	transform: translateY(-1px) !important;
+	box-shadow: 0 4px 8px rgba(14, 165, 233, 0.3) !important;
+	background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+	background-color: #0284c7 !important;
+}
+
+.fp-seo-ai-generate-field-btn:active,
+.fp-seo-ai-btn:active,
+.fp-seo-generate-faq-ai:active,
+.fp-seo-generate-howto-ai:active,
+#fp-seo-optimize-all-social:active,
+#fp-seo-optimize-keywords:active {
+	transform: translateY(0) !important;
+	box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2) !important;
+}
+
+.fp-seo-ai-generate-field-btn:disabled,
+.fp-seo-ai-btn:disabled,
+.fp-seo-generate-faq-ai:disabled,
+.fp-seo-generate-howto-ai:disabled,
+#fp-seo-optimize-all-social:disabled,
+#fp-seo-optimize-keywords:disabled {
+	opacity: 0.6 !important;
+	cursor: not-allowed !important;
+	transform: none !important;
+}
+
+/* Icona AI standardizzata */
+.fp-seo-ai-generate-field-btn .fp-seo-btn-icon,
+.fp-seo-ai-btn .fp-seo-btn-icon,
+.fp-seo-ai-generate-field-btn span:first-child,
+.fp-seo-ai-btn span:first-child,
+.dashicons-admin-generic {
+	font-size: 14px !important;
+	margin: 0 !important;
+}
+
+/* Rimuove stili WordPress default dai bottoni AI */
+button.fp-seo-generate-faq-ai.button,
+button.fp-seo-generate-howto-ai.button,
+button#fp-seo-optimize-all-social.button,
+button#fp-seo-optimize-keywords.button,
+button.fp-seo-ai-generate-field-btn.button,
+button.fp-seo-ai-btn.button {
+	padding: 10px 16px !important;
+	height: auto !important;
+	min-height: 40px !important;
+	background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+	background-color: #0ea5e9 !important;
+	border: none !important;
+	border-radius: 8px !important;
+	box-shadow: 0 2px 4px rgba(14, 165, 233, 0.2) !important;
+}
+
+.fp-seo-generate-faq-ai .dashicons,
+.fp-seo-generate-howto-ai .dashicons {
+	margin: 0 !important;
+	line-height: 1 !important;
+	width: 16px !important;
+	height: 16px !important;
+	font-size: 16px !important;
 }
 
 /* Celebrazione micro - solo CSS */
