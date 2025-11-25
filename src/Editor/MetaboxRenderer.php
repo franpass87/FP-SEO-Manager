@@ -700,7 +700,7 @@ class MetaboxRenderer {
 				aria-label="<?php esc_attr_e( 'Riassunto - Excerpt usato come fallback meta description', 'fp-seo-performance' ); ?>"
 				style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #3b82f6; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
 				data-fp-seo-excerpt
-			><?php echo esc_textarea( $post->post_excerpt ); ?></textarea>
+			><?php echo esc_textarea( html_entity_decode( $post->post_excerpt, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ); ?></textarea>
 			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
 				<strong style="color: #3b82f6;">🎯 Medio impatto (+9%)</strong> - Riassunto breve del contenuto. Usato come fallback se Meta Description è vuota. Appare anche in archivi/elenchi. Ottimale: 100-150 caratteri.
 			</p>
@@ -1644,12 +1644,20 @@ class MetaboxRenderer {
 		
 		$seen_srcs = array(); // Avoid duplicates
 		
+		// Check for WPBakery shortcodes
+		$has_wpbakery = strpos( $content, '[vc_' ) !== false 
+			|| strpos( $content, '[vc_row' ) !== false
+			|| strpos( $content, '[vc_column' ) !== false
+			|| strpos( $content, 'vc_single_image' ) !== false
+			|| strpos( $content, 'vc_gallery' ) !== false;
+		
 		// First, extract images from WPBakery shortcodes (from raw content)
 		$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'extract_images_from_content - WPBakery images found', array(
 				'post_id' => $post->ID,
 				'count' => count( $wpbakery_images ),
+				'has_wpbakery' => $has_wpbakery,
 			) );
 		}
 		foreach ( $wpbakery_images as $image ) {
@@ -1660,7 +1668,25 @@ class MetaboxRenderer {
 		}
 		
 		// Process content with do_shortcode to get rendered HTML (for images that might be rendered)
+		// For WPBakery, we need to ensure shortcodes are fully processed
 		$processed_content = do_shortcode( $content );
+		
+		// If WPBakery is active, try to process shortcodes more thoroughly
+		if ( $has_wpbakery ) {
+			// Try using the_content filter which processes all shortcodes including WPBakery
+			$processed_content = apply_filters( 'the_content', $content );
+			
+			// Also try WPBakery's own shortcode processor if available
+			if ( class_exists( 'Vc_Manager' ) ) {
+				// WPBakery might need to be initialized first
+				if ( function_exists( 'vc_do_shortcode' ) ) {
+					$wpbakery_rendered = vc_do_shortcode( $content );
+					if ( ! empty( $wpbakery_rendered ) && $wpbakery_rendered !== $content ) {
+						$processed_content = $wpbakery_rendered . "\n" . $processed_content;
+					}
+				}
+			}
+		}
 		
 		// Then, extract images from HTML img tags (from both raw and processed content)
 		$content_to_parse = $processed_content . "\n" . $content; // Combine both to catch all images
@@ -1728,6 +1754,9 @@ class MetaboxRenderer {
 				'total_images' => count( $images ),
 				'wpbakery_images' => count( $wpbakery_images ),
 				'html_images' => count( $images ) - count( $wpbakery_images ),
+				'has_wpbakery' => $has_wpbakery,
+				'processed_content_length' => strlen( $processed_content ?? '' ),
+				'content_preview' => substr( $content, 0, 500 ),
 			) );
 		}
 		
@@ -1748,19 +1777,91 @@ class MetaboxRenderer {
 			return $images;
 		}
 		
-		// Check for WPBakery shortcodes
-		$has_wpbakery = strpos( $content, '[vc_' ) !== false;
+		// Check for WPBakery shortcodes - expanded check
+		$has_wpbakery = strpos( $content, '[vc_' ) !== false 
+			|| strpos( $content, '[vc_row' ) !== false
+			|| strpos( $content, '[vc_column' ) !== false
+			|| strpos( $content, 'vc_single_image' ) !== false
+			|| strpos( $content, 'vc_gallery' ) !== false;
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'extract_wpbakery_images called', array(
 				'post_id' => $post_id,
 				'content_length' => strlen( $content ),
 				'has_wpbakery' => $has_wpbakery,
+				'content_preview' => substr( $content, 0, 200 ),
 			) );
 		}
 		
 		if ( ! $has_wpbakery ) {
 			return $images;
+		}
+		
+		// Track seen sources to avoid duplicates
+		$seen_srcs = array();
+		
+		// First, try to process shortcodes to get rendered HTML and extract from there
+		$rendered = do_shortcode( $content );
+		
+		// If WPBakery is active, try to use its own shortcode processor
+		if ( class_exists( 'Vc_Manager' ) && function_exists( 'WPBakery_Visual_Composer' ) ) {
+			// Try to get the rendered content more thoroughly
+			$rendered = apply_filters( 'the_content', $content );
+		}
+		
+		if ( $rendered !== $content && ! empty( $rendered ) ) {
+			// Shortcodes were processed, extract images from rendered HTML
+			$dom_rendered = new \DOMDocument();
+			libxml_use_internal_errors( true );
+			$dom_rendered->loadHTML( '<?xml encoding="UTF-8">' . $rendered );
+			libxml_clear_errors();
+			
+			$rendered_img_tags = $dom_rendered->getElementsByTagName( 'img' );
+			foreach ( $rendered_img_tags as $img ) {
+				$src = $img->getAttribute( 'src' );
+				if ( ! empty( $src ) && ! isset( $seen_srcs[ $src ] ) ) {
+					$seen_srcs[ $src ] = true;
+					
+					// Normalize URL (handle relative URLs)
+					if ( strpos( $src, 'http' ) !== 0 ) {
+						$src = site_url( $src );
+					}
+					
+					$attachment_id = $this->get_attachment_id_from_url( $src );
+					$alt = $img->getAttribute( 'alt' ) ?: '';
+					$title = $img->getAttribute( 'title' ) ?: '';
+					
+					if ( $attachment_id ) {
+						$attachment = get_post( $attachment_id );
+						$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						if ( empty( $alt ) ) {
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+						}
+						if ( empty( $title ) && $attachment ) {
+							$title = $attachment->post_title ?: '';
+						}
+					} else {
+						$description = '';
+					}
+					
+					// Check for saved custom data
+					$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+					if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
+						$saved = $saved_images[ $src ];
+						$alt = $saved['alt'] ?? $alt;
+						$title = $saved['title'] ?? $title;
+						$description = $saved['description'] ?? $description;
+					}
+					
+					$images[] = array(
+						'src'           => $src,
+						'alt'           => $alt,
+						'title'         => $title,
+						'description'   => $description,
+						'attachment_id' => $attachment_id,
+					);
+				}
+			}
 		}
 		
 		// Extract vc_single_image shortcodes
@@ -1810,7 +1911,8 @@ class MetaboxRenderer {
 			
 			if ( $attachment_id > 0 ) {
 				$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
-				if ( $image_url ) {
+				if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+					$seen_srcs[ $image_url ] = true;
 					// Get alt text from attachment
 					$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
 					
@@ -1851,7 +1953,8 @@ class MetaboxRenderer {
 				foreach ( $image_ids as $attachment_id ) {
 					if ( $attachment_id > 0 ) {
 						$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
-						if ( $image_url ) {
+						if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+							$seen_srcs[ $image_url ] = true;
 							// Get alt text from attachment
 							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
 							
@@ -1895,7 +1998,8 @@ class MetaboxRenderer {
 						$attachment_id = (int) $image_param;
 						if ( $attachment_id > 0 ) {
 							$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
-							if ( $image_url ) {
+							if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+								$seen_srcs[ $image_url ] = true;
 								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
 								$attachment = get_post( $attachment_id );
 								$title = $attachment ? $attachment->post_title : '';
@@ -1912,32 +2016,36 @@ class MetaboxRenderer {
 						}
 					} elseif ( filter_var( $image_param, FILTER_VALIDATE_URL ) ) {
 						// It's a URL, use it directly
-						$attachment_id = $this->get_attachment_id_from_url( $image_param );
-						$alt = '';
-						$title = '';
-						$description = '';
-						
-						if ( $attachment_id ) {
-							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
-							$attachment = get_post( $attachment_id );
-							$title = $attachment ? $attachment->post_title : '';
-							$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						if ( ! isset( $seen_srcs[ $image_param ] ) ) {
+							$seen_srcs[ $image_param ] = true;
+							$attachment_id = $this->get_attachment_id_from_url( $image_param );
+							$alt = '';
+							$title = '';
+							$description = '';
+							
+							if ( $attachment_id ) {
+								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+								$attachment = get_post( $attachment_id );
+								$title = $attachment ? $attachment->post_title : '';
+								$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+							}
+							
+							$images[] = array(
+								'src'           => $image_param,
+								'alt'           => $alt,
+								'title'         => $title,
+								'description'   => $description,
+								'attachment_id' => $attachment_id,
+							);
 						}
-						
-						$images[] = array(
-							'src'           => $image_param,
-							'alt'           => $alt,
-							'title'         => $title,
-							'description'   => $description,
-							'attachment_id' => $attachment_id,
-						);
 					} else {
 						// Might be comma-separated IDs
 						$image_ids = array_map( 'intval', array_filter( explode( ',', $image_param ), 'is_numeric' ) );
 						foreach ( $image_ids as $attachment_id ) {
 							if ( $attachment_id > 0 ) {
 								$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
-								if ( $image_url ) {
+								if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+									$seen_srcs[ $image_url ] = true;
 									$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
 									$attachment = get_post( $attachment_id );
 									$title = $attachment ? $attachment->post_title : '';
@@ -1963,7 +2071,8 @@ class MetaboxRenderer {
 		if ( preg_match_all( '/\[vc_single_image[^\]]*source\s*=\s*["\']external_link["\'][^\]]*custom_src\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $match ) {
 				$image_url = esc_url_raw( $match[1] );
-				if ( $image_url ) {
+				if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+					$seen_srcs[ $image_url ] = true;
 					$images[] = array(
 						'src'           => $image_url,
 						'alt'           => '',

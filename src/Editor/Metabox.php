@@ -418,6 +418,9 @@ class Metabox {
 			return;
 		}
 
+		// Ensure wp.media is available for image uploads (including featured image)
+		wp_enqueue_media();
+		
 		wp_enqueue_style( 'fp-seo-performance-admin' );
 		wp_enqueue_script( 'fp-seo-performance-editor' );
 		wp_enqueue_script( 'fp-seo-performance-serp-preview' );

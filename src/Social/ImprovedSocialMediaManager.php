@@ -100,6 +100,8 @@ class ImprovedSocialMediaManager {
 		$is_post_editor = in_array( $screen->id, array( 'post', 'page' ), true );
 
 		if ( $is_fp_seo_page || $is_post_editor ) {
+			// Ensure wp.media is available for image uploads (including featured image)
+			wp_enqueue_media();
 			wp_enqueue_style( 'fp-seo-ui-system' );
 			wp_enqueue_style( 'fp-seo-notifications' );
 			wp_enqueue_script( 'fp-seo-ui-system' );

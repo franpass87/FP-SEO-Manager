@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Editor;
 
+use function wp_unslash;
+
 /**
  * Handles FAQ and HowTo Schema metaboxes in the editor.
  */
@@ -419,7 +421,7 @@ class SchemaMetaboxes {
 	 */
 	public function save_faq_schema( int $post_id, \WP_Post $post ): void {
 		// Security checks
-		if ( ! isset( $_POST['fp_seo_faq_schema_nonce'] ) || ! wp_verify_nonce( $_POST['fp_seo_faq_schema_nonce'], 'fp_seo_faq_schema_nonce' ) ) {
+		if ( ! isset( $_POST['fp_seo_faq_schema_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_faq_schema_nonce'] ) ), 'fp_seo_faq_schema_nonce' ) ) {
 			return;
 		}
 
@@ -432,7 +434,11 @@ class SchemaMetaboxes {
 		}
 
 		// Get and sanitize FAQ data
-		$faq_data = $_POST['fp_seo_faq'] ?? array();
+		$faq_data = isset( $_POST['fp_seo_faq'] ) ? wp_unslash( $_POST['fp_seo_faq'] ) : array();
+		// Ensure $faq_data is always an array
+		if ( ! is_array( $faq_data ) ) {
+			$faq_data = array();
+		}
 		$sanitized_faqs = array();
 
 		if ( is_array( $faq_data ) ) {
@@ -474,7 +480,7 @@ class SchemaMetaboxes {
 	 */
 	public function save_howto_schema( int $post_id, \WP_Post $post ): void {
 		// Security checks
-		if ( ! isset( $_POST['fp_seo_howto_schema_nonce'] ) || ! wp_verify_nonce( $_POST['fp_seo_howto_schema_nonce'], 'fp_seo_howto_schema_nonce' ) ) {
+		if ( ! isset( $_POST['fp_seo_howto_schema_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_howto_schema_nonce'] ) ), 'fp_seo_howto_schema_nonce' ) ) {
 			return;
 		}
 
@@ -487,10 +493,10 @@ class SchemaMetaboxes {
 		}
 
 		// Get and sanitize HowTo data
-		$howto_data = $_POST['fp_seo_howto'] ?? array();
-		
+		$howto_data = isset( $_POST['fp_seo_howto'] ) ? wp_unslash( $_POST['fp_seo_howto'] ) : array();
+		// Ensure $howto_data is always an array
 		if ( ! is_array( $howto_data ) ) {
-			return;
+			$howto_data = array();
 		}
 
 		$sanitized_howto = array(
