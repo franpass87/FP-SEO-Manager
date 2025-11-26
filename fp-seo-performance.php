@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.45
+ * Version: 0.9.0-pre.46
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -42,13 +42,23 @@ $fp_seo_is_pure_media_library = (
 	)
 );
 
-// If on pure media library page, do NOT load the plugin
-if ( $fp_seo_is_pure_media_library ) {
+// CRITICAL: Block plugin on Nectar Slider edit pages to prevent interference with slider image saving
+$fp_seo_is_nectar_slider_page = (
+	// Nectar Slider edit page
+	( strpos( $fp_seo_request_uri, 'post.php' ) !== false && strpos( $fp_seo_request_uri, 'post_type=nectar_slider' ) !== false ) ||
+	// Nectar Slider new page
+	( strpos( $fp_seo_request_uri, 'post-new.php' ) !== false && strpos( $fp_seo_request_uri, 'post_type=nectar_slider' ) !== false ) ||
+	// Nectar Slider list page
+	( strpos( $fp_seo_request_uri, 'edit.php' ) !== false && strpos( $fp_seo_request_uri, 'post_type=nectar_slider' ) !== false )
+);
+
+// If on pure media library page or Nectar Slider page, do NOT load the plugin
+if ( $fp_seo_is_pure_media_library || $fp_seo_is_nectar_slider_page ) {
 	return; // Exit early, plugin will not be loaded
 }
 
 // Clean up temporary variables
-unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_pure_media_library );
+unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_pure_media_library, $fp_seo_is_nectar_slider_page );
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 		define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
@@ -57,7 +67,7 @@ if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 require_once __DIR__ . '/src/Utils/Version.php';
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.45' ) );
+		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.46' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';
