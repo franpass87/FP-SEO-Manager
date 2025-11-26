@@ -39,7 +39,14 @@ class SocialMediaManager {
 		add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
 		add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
 		add_action( 'add_meta_boxes', array( $this, 'add_social_metabox' ) );
-		add_action( 'save_post', array( $this, 'save_social_meta' ) );
+		
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 10, 1 );
+			}
+		}
 	}
 
 	/**

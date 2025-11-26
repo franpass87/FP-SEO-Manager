@@ -248,8 +248,13 @@ class AutoSeoOptimizer {
 				'post_title' => sanitize_text_field( $ai_data['seo_title'] ),
 			) );
 			
-			// Re-add our hook
-			add_action( 'save_post', array( $this, 'maybe_auto_optimize' ), 20, 3 );
+			// Re-add our hooks (post-type-specific only)
+			$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+			foreach ( $supported_types as $post_type ) {
+				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
+					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
+				}
+			}
 			
 			$updated_fields[] = 'Post Title';
 		}
@@ -265,8 +270,13 @@ class AutoSeoOptimizer {
 				'post_name' => sanitize_title( $ai_data['slug'] ),
 			) );
 			
-			// Re-add our hook
-			add_action( 'save_post', array( $this, 'maybe_auto_optimize' ), 20, 3 );
+			// Re-add our hooks (post-type-specific only)
+			$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+			foreach ( $supported_types as $post_type ) {
+				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
+					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
+				}
+			}
 			
 			$updated_fields[] = 'URL Slug';
 		}
