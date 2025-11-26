@@ -3237,17 +3237,38 @@ class Metabox {
 		update_post_meta( $post_id, '_fp_seo_images_data', $sanitized_images );
 
 		// Update post content with new alt and title attributes
+		// CRITICAL: Double-check post type before modifying post content
+		// This prevents interference with slider meta saving
 		$post = get_post( $post_id );
 		if ( $post ) {
+			// Double-check post type before any modification
+			$current_post_type = get_post_type( $post_id );
+			if ( ! in_array( $current_post_type, $supported_types, true ) ) {
+				wp_send_json_error( array( 
+					'message' => __( 'Post type changed during processing. Operation cancelled.', 'fp-seo-performance' ),
+					'post_type' => $current_post_type,
+				), 400 );
+			}
+			
 			$content = $post->post_content;
 			$updated_content = $this->update_images_in_content( $content, $sanitized_images );
 
 			if ( $updated_content !== $content ) {
 				// Update post content
+				// CRITICAL: Remove our save_post hooks temporarily to prevent recursion
+				remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
+				remove_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10 );
+				remove_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10 );
+				
 				wp_update_post( array(
 					'ID'           => $post_id,
 					'post_content' => $updated_content,
 				) );
+				
+				// Re-add our hooks
+				add_action( 'save_post', array( $this, 'save_meta' ), 10, 3 );
+				add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10, 2 );
+				add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
 			}
 
 			// Also update attachment alt text if image is a WordPress attachment
