@@ -1643,17 +1643,6 @@ class Metabox {
 			return;
 		}
 		
-		// DEBUG: Log what post WordPress is passing to us
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'FP SEO: render() called with post', array(
-				'post_id' => $post->ID,
-				'post_title' => $post->post_title,
-				'post_status' => $post->post_status,
-				'post_type' => $post->post_type,
-				'request_post_id' => isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0,
-			) );
-		}
-		
 		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
 		// All the previous "homepage protection" code was causing more problems than it solved
 		$current_post = $post;

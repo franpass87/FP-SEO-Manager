@@ -104,6 +104,13 @@ class PerformanceOptimizer {
 	 * @return string Modified WHERE clause.
 	 */
 	public function optimize_posts_where( string $where, $query ): string {
+		// CRITICAL: Never modify queries on post edit pages - this can cause WordPress
+		// to load the wrong post or interfere with the editor
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+		if ( strpos( $request_uri, 'post.php' ) !== false || strpos( $request_uri, 'post-new.php' ) !== false ) {
+			return $where; // Don't modify queries on edit pages
+		}
+		
 		// This method is only called in admin (filter registered only in admin)
 		// Add optimizations for common queries
 		if ( $query->is_main_query() && $query->is_home() ) {
@@ -122,6 +129,13 @@ class PerformanceOptimizer {
 	 * @return string Modified ORDER BY clause.
 	 */
 	public function optimize_posts_orderby( string $orderby, $query ): string {
+		// CRITICAL: Never modify queries on post edit pages - this can cause WordPress
+		// to load the wrong post or interfere with the editor
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+		if ( strpos( $request_uri, 'post.php' ) !== false || strpos( $request_uri, 'post-new.php' ) !== false ) {
+			return $orderby; // Don't modify queries on edit pages
+		}
+		
 		// This method is only called in admin (filter registered only in admin)
 		// Add optimizations for common ordering
 		if ( $query->is_main_query() && $query->is_home() ) {
