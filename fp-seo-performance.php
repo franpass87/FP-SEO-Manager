@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.16
+ * Version: 0.9.0-pre.17
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -22,6 +22,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * CRITICAL: Completely disable plugin on media library pages to prevent interference.
+ * This must be checked BEFORE any plugin code is loaded.
+ */
+if ( is_admin() ) {
+	// Check for media library page via $_GET parameters (available before admin_init)
+	$is_media_page = false;
+	
+	// Check request URI for upload.php or media pages
+	if ( isset( $_SERVER['REQUEST_URI'] ) ) {
+		$request_uri = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		$is_media_page = (
+			strpos( $request_uri, 'upload.php' ) !== false ||
+			strpos( $request_uri, 'media-upload.php' ) !== false ||
+			strpos( $request_uri, 'async-upload.php' ) !== false ||
+			strpos( $request_uri, 'media-new.php' ) !== false ||
+			( strpos( $request_uri, 'admin-ajax.php' ) !== false && 
+			  isset( $_REQUEST['action'] ) && 
+			  in_array( $_REQUEST['action'], array( 'query-attachments', 'get-attachment', 'send-attachment-to-editor', 'save-attachment', 'save-attachment-compat', 'save-attachment-order', 'upload-attachment', 'image-editor', 'set-attachment-thumbnail', 'delete-post', 'trash-post' ), true )
+			)
+		);
+	}
+	
+	// If on media library page, do NOT load the plugin at all
+	if ( $is_media_page ) {
+		return; // Exit early, plugin will not be loaded
+	}
+}
+
 if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 		define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
 }
@@ -29,7 +58,7 @@ if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 require_once __DIR__ . '/src/Utils/Version.php';
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.16' ) );
+		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.17' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';
