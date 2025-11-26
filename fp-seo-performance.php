@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.20
+ * Version: 0.9.0-pre.21
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance

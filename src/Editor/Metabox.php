@@ -283,26 +283,26 @@ class Metabox {
 			add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
 		}
 		
-		// Hook wp_insert_post_data per salvare prima che il post venga inserito
-		// Priorità 1 per intervenire PRIMA di qualsiasi altro plugin che potrebbe modificare lo status
-		if ( ! has_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ) ) ) {
-			add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
-		}
-		
-		// Hook transition_post_status per intercettare cambiamenti di status (specialmente per homepage)
-		if ( ! has_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ) ) ) {
-			add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
-		}
+		// DISABLED - All homepage protection hooks were causing more problems than they solved
+		// They interfered with creating new posts, sliders, and editing the homepage
+		// 
+		// if ( ! has_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ) ) ) {
+		// 	add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
+		// }
+		// 
+		// if ( ! has_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ) ) ) {
+		// 	add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
+		// }
 		
 		// Hook shutdown come ultima risorsa per correggere lo status della homepage
 		if ( ! has_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ) ) ) {
 			add_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ), 999 );
 		}
 		
-		// Salva lo status originale della homepage all'inizio della richiesta
-		if ( ! has_action( 'init', array( $this, 'save_homepage_original_status' ) ) ) {
-			add_action( 'init', array( $this, 'save_homepage_original_status' ), 1 );
-		}
+		// DISABLED - Homepage status tracking was causing issues
+		// if ( ! has_action( 'init', array( $this, 'save_homepage_original_status' ) ) ) {
+		// 	add_action( 'init', array( $this, 'save_homepage_original_status' ), 1 );
+		// }
 		
 		// DISABLED - Was causing redirects when creating new sliders/CPTs
 		// See prevent_homepage_auto_draft_creation() for details
