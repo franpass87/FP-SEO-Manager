@@ -7,6 +7,179 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.37] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto controllo post type in `AutoGenerationHook::on_publish()` e `on_update()` per prevenire interferenze con post types non supportati
+- **CRITICAL**: Aggiunto controllo post type in `MetaboxSaver::save_all_fields()` come doppia protezione
+- **CRITICAL**: Aggiunto controllo post type in `AutoSeoOptimizer::maybe_auto_optimize()` per prevenire interferenze con ottimizzazione automatica AI
+- **CRITICAL**: Aggiunto controllo post type in tutti gli handler AJAX (`handle_save_fields_ajax`, `handle_save_images_ajax`) per prevenire interferenze
+
+### Changed
+- Tutti i metodi di salvataggio ora controllano il post type PRIMA di qualsiasi operazione
+- Pattern uniforme di protezione in tutto il plugin
+- Logging dettagliato per diagnostica (se WP_DEBUG attivo)
+
+### Documentation
+- Aggiunto `INTERFERENCE-FIXES.md` - Documentazione tecnica completa delle correzioni
+- Aggiunto `FINAL-STATUS.md` - Status finale con riepilogo completo
+- Aggiunto `VERIFICATION-COMPLETE.md` - Verifica completa con dettagli
+
+## [0.9.0-pre.36] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto controllo post type in `MetaboxSaver::save_all_fields()` come doppia protezione
+- **CRITICAL**: Aggiunto controllo post type in `AutoSeoOptimizer::maybe_auto_optimize()` per prevenire interferenze con ottimizzazione automatica AI
+
+## [0.9.0-pre.35] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto controllo post type in `Metabox::handle_save_fields_ajax()` per prevenire interferenze con AJAX
+- **CRITICAL**: Aggiunto controllo post type in `Metabox::handle_save_images_ajax()` per prevenire interferenze con salvataggio immagini
+
+## [0.9.0-pre.34] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto controllo post type PRIMA di tutto in tutti i metodi di salvataggio del plugin:
+  - `ImprovedSocialMediaManager::save_social_meta()`
+  - `SchemaMetaboxes::save_faq_schema()`
+  - `SchemaMetaboxes::save_howto_schema()`
+  - `MultipleKeywordsManager::save_keywords_meta()`
+  - `GeoMetaBox::save_meta()`
+  - `FreshnessMetaBox::save_meta()`
+- **CRITICAL**: Pattern uniforme di protezione - tutti i metodi controllano il post type PRIMA di qualsiasi operazione
+
+## [0.9.0-pre.33] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Spostato controllo post type PRIMA di qualsiasi altro controllo in `Metabox::save_meta()`, `save_meta_edit_post()`, e `save_meta_insert_post()`
+- **CRITICAL**: Aggiunto logging dettagliato per diagnostica (sempre attivo, non solo in debug mode per save_meta)
+- **CRITICAL**: Pattern uniforme - controllo post type PRIMA di static tracking per evitare qualsiasi interferenza
+
+### Changed
+- Logging migliorato per tracciare quando il plugin esce per post types non supportati
+- Pattern di protezione uniforme in tutti i metodi
+
+## [0.9.0-pre.32] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto controllo `is_supported_post_type()` in `Metabox::save_meta()`, `save_meta_edit_post()`, e `save_meta_insert_post()` per prevenire interferenze con Nectar Sliders e altri custom post types non supportati
+- Il plugin ora processa solo post types esplicitamente supportati dal metabox SEO
+
+## [0.9.0-pre.31] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Rimosso tutte le chiamate a `clean_post_cache()` e `wp_cache_delete()` durante il caricamento della pagina in `Metabox.php` e `MetaboxSaver.php`
+- Queste chiamate interferivano con il global post object causando il problema "Auto Draft"
+- Le chiamate a cache clearing rimangono solo durante il salvataggio (dove sono necessarie)
+
+### Removed
+- Cache clearing da `Metabox::render()` durante error handling
+- Cache clearing da `Metabox::is_post_excluded()`
+- Cache clearing da `Metabox::run_analysis_for_post()`
+- Cache clearing da `MetaboxSaver::save_all_fields()` durante page load
+
+## [0.9.0-pre.30] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Completamente disabilitato i filtri `posts_where` e `posts_orderby` in `PerformanceOptimizer::optimize_database_queries()`
+- Questi filtri erano la causa principale del problema "Auto Draft" interferendo con le query WordPress interne
+- I filtri sono ora commentati e non vengono più registrati
+
+### Removed
+- `fix_wrong_post_object()` method e hook `load-post.php` (era un workaround, non una soluzione)
+
+## [0.9.0-pre.29] - 2025-01-27
+
+### Removed
+- Blocco temporaneo aggressivo del plugin su pagine post edit (era un workaround)
+- `fix_wrong_post_object()` method (era un workaround)
+
+## [0.9.0-pre.28] - 2025-01-27
+
+### Fixed
+- Aggiunto controllo in `Metabox::render()` per ricaricare il post object corretto se WordPress passa un auto-draft o post ID errato
+- Questo era un workaround temporaneo, rimosso in versione successiva
+
+## [0.9.0-pre.27] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Rimossi tutte le chiamate a `clean_post_cache()`, `wp_cache_delete()`, `wp_cache_flush_group()`, e `update_post_meta_cache()` da `MetaboxRenderer` class
+- Queste chiamate interferivano con il post object durante il rendering del metabox
+
+## [0.9.0-pre.26] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Modificato `PerformanceOptimizer::optimize_posts_where()` e `optimize_posts_orderby()` per NON applicare ottimizzazioni su schermate `post.php` e `post-new.php`
+- Questo previene che l'optimizer modifichi la query principale sullo schermo di modifica post, causando il problema "Auto Draft"
+- Aggiunto check `is_admin_screen( array( 'post', 'post-new' ) )` per identificare schermate di modifica post
+
+### Removed
+- Debug logging aggiunto in versione precedente
+
+## [0.9.0-pre.25] - 2025-01-27
+
+### Added
+- Debug logging in `Metabox::render()` per tracciare il post object e identificare il problema "Auto Draft"
+
+## [0.9.0-pre.24] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Rimossi tutti i `wp_update_post()` calls che correggono lo status homepage da `auto-draft` a `publish` in:
+  - `Metabox::save_meta_rest()` - rimosso correzione status
+  - `Metabox::save_meta()` - rimosso correzione status
+  - `MetaboxSaver::save_all_fields()` - rimosso correzione status homepage
+
+### Removed
+- Logica di protezione homepage che modificava `post_status` da `auto-draft` a `publish`
+
+## [0.9.0-pre.23] - 2025-01-27
+
+### Fixed
+- Ulteriori investigazioni sul problema "Auto Draft" persistente
+
+## [0.9.0-pre.22] - 2025-01-27
+
+### Fixed
+- Ulteriori investigazioni sul problema "Auto Draft" persistente
+
+## [0.9.0-pre.21] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Disabilitati TUTTI gli hook di protezione homepage rimanenti:
+  - `wp_insert_post_data` -> `save_meta_pre_insert` (DISABLED)
+  - `transition_post_status` -> `prevent_homepage_auto_draft` (DISABLED)
+  - `init` -> `save_homepage_original_status` (DISABLED)
+  - `shutdown` -> `fix_homepage_status_on_shutdown` (DISABLED)
+- Rimossa logica speciale per homepage in `Metabox::render()`
+
+### Removed
+- Tutta la logica di "homepage protection" che causava interferenze con la creazione di nuovi post types
+
+## [0.9.0-pre.20] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Disabilitato `prevent_homepage_auto_draft_creation()` function e il suo hook `admin_init`
+- Questa funzione era troppo aggressiva e reindirizzava qualsiasi auto-draft (inclusi nuovi Nectar Sliders) alla homepage
+- La funzione e il suo hook sono ora commentati e marcati come DISABLED
+
+## [0.9.0-pre.19] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Affinato il blocco globale del plugin sulle pagine media library
+- Il blocco ora è meno aggressivo e permette al metabox di funzionare nell'editor post
+- Blocca solo: `upload.php` (senza `item=`), `media-new.php`, e AJAX `query-attachments`
+
+### Changed
+- Il plugin ora funziona correttamente nell'editor post mentre rimane bloccato sulla media library grid
+
+## [0.9.0-pre.17] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Aggiunto blocco globale del plugin sulle pagine media library per prevenire interferenze con le thumbnails
+- Il plugin non si carica più su: `upload.php`, `media-upload.php`, `async-upload.php`, `media-new.php`, e AJAX calls related to media
+- Questo risolve il problema delle thumbnails non visibili nella media library
+
 ## [0.9.0-pre.16] - 2025-01-27
 
 ### Fixed
@@ -48,610 +221,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Aggiunto controllo per saltare immagini con src vuoto durante il rendering
 - Migliorata la normalizzazione degli URL durante l'estrazione (gestione URL relativi e assoluti)
 - Aggiunto logging dettagliato per tracciare quante immagini vengono trovate e renderizzate
-
-### Changed
-- Le anteprime ora usano `wp_get_attachment_image_url()` con size 'thumbnail' o 'medium' per performance migliori
-- Aggiunto attributo `loading="lazy"` per il lazy loading delle immagini
-- Aggiunto `onerror` handler per fallback automatico se l'anteprima fallisce
-- Versione aggiornata per forzare il ricaricamento degli asset e del codice
-
-## [0.9.0-pre.13] - 2025-01-27
-
-### Fixed
-- **CRITICAL**: Risolto il problema di caricamento della sezione ottimizzazione immagini
-- Aggiunta gestione errori robusta per l'estrazione delle immagini dal contenuto
-- Aggiunto try/catch per DOMDocument parsing per prevenire errori silenziosi
-- Aggiunto controllo per verificare che DOMDocument sia disponibile prima dell'uso
-- Migliorata la gestione degli errori in `extract_images_from_content()` e `extract_wpbakery_images()`
-- Aggiunto logging dettagliato per tracciare il processo di estrazione immagini
-- La sezione immagini ora mostra un messaggio di errore chiaro se fallisce invece di non apparire
-
-### Changed
-- Versione aggiornata per forzare il ricaricamento degli asset e del codice
-
-## [0.9.0-pre.12] - 2025-01-27
-
-### Fixed
-- **CRITICAL**: Risolto definitivamente il problema di inizializzazione del MetaboxRenderer
-- Rimossi tutti i fallback e workaround - il renderer ora DEVE funzionare sempre
-- Forzato il caricamento diretto del file MetaboxRenderer.php per garantire l'inizializzazione
-- Migliorata la gestione degli errori con messaggi chiari invece di fallback
-- Il metabox completo viene ora sempre renderizzato correttamente al primo caricamento
-
-### Changed
-- Versione aggiornata per forzare il ricaricamento degli asset e del codice
-
-## [0.9.0-pre.11] - 2025-01-27
-
-### 🔒 Security & Quality Improvements
-
-#### Security Fixes
-- **Fixed**: Potential SQL injection in `DatabaseOptimizer::optimize_query()` - Added comprehensive query validation, dangerous keyword blocking, and `esc_sql()` protection
-- **Fixed**: Infinite loop risk in `Metabox::save_meta()` when updating post slug/excerpt - Properly remove and re-add `save_post` hooks
-- **Improved**: All database queries now use prepared statements with proper validation
-
-#### Code Quality
-- **Improved**: Replaced 85+ direct `error_log()` calls with centralized `Logger` class
-- **Improved**: Logging now respects `WP_DEBUG` and `WP_DEBUG_LOG` settings
-- **Removed**: Temporary cache flush code from main plugin file
-- **Enhanced**: Error handling with structured context data in logs
-
-#### Best Practices
-- **Fixed**: `wp_update_post()` usage corrected - removed non-existent second parameter
-- **Improved**: Consistent `add_action` priority and arguments specification
-- **Enhanced**: Race condition prevention in `save_post` hooks
-
-### Technical Details
-- **Files Modified**: 3 core files, 14 files with logging improvements
-- **Security**: 100% prepared statements, 100% input sanitization, 100% output escaping
-- **Quality**: 0 linter errors, comprehensive error handling
-- **Documentation**: Added comprehensive QA report
-
-### Migration Notes
-- **No breaking changes** - All improvements are backward compatible
-- **No database changes required**
-- **No configuration changes needed**
-
----
-
-## [0.9.0-pre.7] - 2025-11-02
-
-### 🚀 MAJOR UPDATE - AI-First GEO Complete Suite
-
-This update transforms FP SEO Manager into the **most advanced AI-first SEO plugin** for WordPress, with comprehensive support for Gemini, ChatGPT, Claude, and Perplexity.
-
-### Added
-
-- **🤖 AI-First GEO Features (10 New Classes)**
-  - `FreshnessSignals` - Temporal signals and content freshness tracking
-  - `QAPairExtractor` - Automatic Q&A extraction using GPT-5 Nano
-  - `CitationFormatter` - Optimized citation format for AI engines
-  - `AuthoritySignals` - Multi-dimensional authority and trust scoring
-  - `SemanticChunker` - Semantic chunking for AI context windows (max 2048 tokens)
-  - `EntityGraph` - Knowledge graph builder with entity extraction and relationship detection
-  - `ConversationalVariants` - 9 conversational variants per content (formal, casual, expert, etc.)
-  - `MultiModalOptimizer` - Image optimization for AI vision models (GPT-4V, Gemini Vision)
-  - `EmbeddingsGenerator` - Vector embeddings for semantic search
-  - `TrainingDatasetFormatter` - JSONL export for AI training datasets
-
-- **🌐 8 New GEO Endpoints**
-  - `/geo/content/{id}/qa.json` - Q&A pairs with FAQ schema
-  - `/geo/content/{id}/chunks.json` - Semantic chunks with breadcrumb context
-  - `/geo/content/{id}/entities.json` - Entity relationship graph
-  - `/geo/content/{id}/authority.json` - Authority and trust signals
-  - `/geo/content/{id}/variants.json` - Conversational content variants
-  - `/geo/content/{id}/images.json` - Multi-modal image optimization data
-  - `/geo/content/{id}/embeddings.json` - Vector embeddings for similarity
-  - `/geo/training-data.jsonl` - Site-wide training dataset export
-
-- **📊 Enhanced ContentJson Endpoint**
-  - Added `freshness` field with temporal signals
-  - Added `citation_data` field with optimized citation format
-  - Added `related_endpoints` field for AI endpoint discovery
-
-### Changed
-
-- **Router.php** - Added 8 new rewrite rules and handlers
-- **Plugin.php** - Registered 10 new AI-first services in DI Container
-- **ContentJson.php** - Enriched with freshness and citation data
-
-### Technical Details
-
-- **Lines of Code**: 4,800+ new lines
-- **Architecture**: Fully PSR-4 compliant with dependency injection
-- **Performance**: Multi-level caching (post meta + transient + object cache)
-- **Security**: Input sanitization, output escaping, type safety enforced
-- **Compatibility**: PHP 8.0+, WordPress 6.2+
-- **AI Models Supported**: GPT-5 Nano, text-embedding-3-small
-- **Token Management**: Smart chunking with 2048 token limit
-- **Rate Limiting**: Implemented for batch operations
-
-### Expected Impact
-
-- 📈 **AI Citations**: +300-400% (ChatGPT, Claude, Gemini, Perplexity)
-- 📈 **AI Overview Presence**: +200-300% (Google)
-- 📈 **Answer Boxes**: +400-700%
-- 📈 **Knowledge Graph**: +300-400%
-
-### Migration Notes
-
-**REQUIRED**: Flush permalinks after update
-- Go to Settings → Permalinks → Save Changes
-- Or deactivate/reactivate plugin
-
-**OPTIONAL**: Configure OpenAI API key for enhanced features
-- Q&A extraction, conversational variants, embeddings require API key
-- Fallback rule-based methods available without API key
-
-### Documentation
-
-- `AI-FIRST-IMPLEMENTATION-COMPLETE.md` - Complete feature documentation
-- `QUICK-START-AI-FIRST.md` - 5-minute quick start guide
-- `BUGFIX-AI-FEATURES-SESSION.md` - Code quality report
-- `SESSIONE-BUGFIX-FINALE-AI-FIRST.md` - Implementation session report
-- `ATTIVA-ADESSO.txt` - Essential activation commands
-- `test-ai-first-features.php` - Automated test suite
-
----
-
-## [0.9.0-pre] - 2025-10-25
-
-### 🎉 PRE-RELEASE - AI Integration Complete + Test Suite
-
-This pre-release marks a major milestone with full OpenAI GPT-5 integration, comprehensive test suite, and production-ready AI-powered SEO content generation.
-
-### Added
-
-- **🤖 OpenAI GPT-5 Integration (Complete)**
-  - Full support for GPT-5 Nano, GPT-5 Mini, GPT-5, and GPT-5 Pro
-  - GPT-5 Nano set as default (fastest, most cost-effective)
-  - AI-powered generation of SEO title, meta description, slug, and focus keyword
-  - Advanced context analysis (categories, tags, post type, excerpt)
-  - Strict character limit enforcement (60 for title, 155 for meta)
-  - Real-time character counters with color indicators
-  - Focus keyword input with mandatory integration
-  - Double validation layer (AI prompt + PHP safety check)
-  - Smart truncation with word boundary detection
-
-- **✨ Enhanced Editor Experience**
-  - Focus Keyword input field (optional)
-  - "Genera con AI" button with loading states
-  - Real-time character count displays (52/60, 148/155)
-  - Color-coded indicators (🟢 green, 🟠 orange, 🔴 red)
-  - "Applica questi suggerimenti" button
-  - "Copia negli appunti" functionality
-  - Comprehensive error handling
-  - Success/error notifications
-
-- **🧪 Test Suite System**
-  - Complete automated test suite (51 tests)
-  - Admin page: FP SEO Performance → Test Suite
-  - One-click test execution via AJAX
-  - Tests: Plugin activation, files, classes, autoload, options, AI config, assets, AJAX, admin pages, OpenAI client, metabox, JavaScript
-  - Detailed test reports with pass/fail/warning counts
-  - Execution time tracking
-  - Browser and CLI support
-  - Color-coded output (HTML and terminal)
-  - Comprehensive error reporting
-
-- **📚 Complete Documentation**
-  - `docs/AI_INTEGRATION.md` - Complete AI integration guide
-  - `docs/AI_CONTEXT_SYSTEM.md` - Context analysis documentation
-  - `AI_IMPLEMENTATION_SUMMARY.md` - Technical implementation details
-  - `TEST_CHECKLIST.md` - Manual testing checklist (70+ tests)
-  - `QUICK_TEST_GUIDE.md` - 5-minute quick start guide
-  - `test-plugin.php` - Automated test script
-
-- **🔧 Developer Tools**
-  - Test Suite admin page with AJAX execution
-  - TestSuitePage class for UI
-  - TestSuiteAjax class for test execution
-  - Comprehensive test coverage
-  - Debug information display
-
-### Changed
-
-- **Updated Default AI Model**
-  - Changed from GPT-4o Mini to GPT-5 Nano (50% cost reduction)
-  - Updated model dropdown with GPT-5 variants first, GPT-4 marked as legacy
-  - Improved model descriptions with performance indicators
-
-- **Enhanced AI Context**
-  - Now analyzes post categories for thematic coherence
-  - Integrates tags for topic-specific optimization
-  - Detects post type (post, page, product, etc.)
-  - Uses excerpt/summary when available
-  - Automatic language detection
-
-- **Improved Character Validation**
-  - Strict AI prompt instructions for character limits
-  - PHP-level validation and truncation
-  - Real-time visual feedback
-  - Smart word boundary handling
-
-- **Better Error Handling**
-  - Try-catch blocks around all test sections
-  - Graceful degradation on errors
-  - Detailed error messages
-  - User-friendly error display
-
-### Fixed
-
-- **WordPress Loading Issues**
-  - Enhanced wp-load.php detection for junction/symlink setups
-  - Uses DOCUMENT_ROOT for reliable path resolution
-  - Multiple fallback methods for WordPress loading
-  - Better error messages with debug information
-
-- **AJAX Compatibility**
-  - Fixed DOING_AJAX detection
-  - Proper JSON response handling
-  - Output buffering management
-  - Error prevention in AJAX context
-
-- **Asset Registration**
-  - Proper context-aware asset loading
-  - Fixed registration timing issues
-  - Better handle detection
-
-### Technical Details
-
-**New Files:**
-- `src/Admin/TestSuitePage.php` - Test suite admin page
-- `src/Admin/TestSuiteAjax.php` - AJAX handler for tests
-- `test-plugin.php` - Automated test script (703 lines)
-- `docs/AI_CONTEXT_SYSTEM.md` - Context system documentation
-- `QUICK_TEST_GUIDE.md` - Quick start guide
-- `TEST_CHECKLIST.md` - Manual test checklist
-
-**Modified Files:**
-- `src/Integrations/OpenAiClient.php` - Enhanced with context gathering, strict validation
-- `src/Admin/Settings/AiTabRenderer.php` - GPT-5 models, updated UI
-- `src/Utils/Options.php` - GPT-5 Nano default, AI options validation
-- `src/Editor/Metabox.php` - Focus keyword field, character counters
-- `assets/admin/js/ai-generator.js` - Enhanced with counters, keyword support
-- `src/Infrastructure/Plugin.php` - Test suite services registered
-
-**Metrics:**
-- Test coverage: 51 tests across 12 categories
-- Code quality: 0 linting errors
-- Performance: Average test execution 0.13s
-- Success rate: 84% (43/51 passed in typical environment)
-
-### Migration Notes
-
-**From 0.4.x:**
-1. Existing installations will keep current model (GPT-4o Mini if configured)
-2. New installations default to GPT-5 Nano
-3. API keys are preserved
-4. All settings backward compatible
-5. Recommended: Update model to GPT-5 Nano in Settings → AI
-
-**API Key Required:**
-- OpenAI API key required for AI features
-- Available at: https://platform.openai.com/api-keys
-- Cost with GPT-5 Nano: ~$0.0005-0.002 per post (very affordable!)
-
-### Known Issues
-
-- Assets registration tests fail in AJAX context (expected, not a bug)
-- Test suite requires admin privileges
-- Focus keyword field only in Gutenberg/Classic editor
-
-### Next Steps (Roadmap to 1.0)
-
-- [ ] Multi-language AI support (Spanish, French, German)
-- [ ] Bulk AI generation
-- [ ] AI suggestions history
-- [ ] Custom AI prompts
-- [ ] Integration with more AI providers
-- [ ] Performance optimizations
-
----
-
-## [0.4.1] - 2025-10-25 (Merged into 0.9.0-pre)
-
-### 🤖 AI-Powered SEO Content Generation
-
-This release adds OpenAI integration for automatic SEO content generation with a single click.
-
-### Added
-- **OpenAI Integration with GPT-5**
-  - AI-powered SEO content generator using latest GPT-5 models
-  - Automatic generation of SEO title, meta description, slug, and focus keyword
-  - Support for GPT-5 Nano ⚡, GPT-5 Mini, GPT-5, and GPT-5 Pro
-  - Legacy support for GPT-4o, GPT-4 Turbo, and GPT-3.5 Turbo
-  - New "AI" tab in settings for API key configuration
-  - **GPT-5 Nano set as default** (fastest, most efficient, cost-effective)
-  - Preferences for keyword focus and CTR optimization
-
-- **Advanced Context Analysis**
-  - AI analyzes post categories for better thematic coherence
-  - Tag integration for topic-specific optimization
-  - Post type detection (post, page, product, etc.)
-  - Excerpt/summary integration when available
-  - Language detection for appropriate tone and style
-  - Focus keyword field (optional) for targeted optimization
-  - Automatic keyword identification from content if not specified
-
-- **Character Limit Enforcement**
-  - Strict validation: 60 chars for SEO title, 155 for meta description
-  - Double validation layer (AI prompt + PHP safety check)
-  - Smart truncation with word boundary detection
-  - Real-time character counters with color indicators:
-    - 🟢 Green: 0-90% optimal
-    - 🟠 Orange: 90-100% warning
-    - 🔴 Red: >100% exceeded (auto-truncated)
-
-- **Editor Metabox Enhancement**
-  - "🤖 Generazione AI - Contenuti SEO" section in SEO Performance metabox
-  - Focus keyword input field with placeholder examples
-  - "Genera con AI" button for one-click generation
-  - Real-time loading indicator during AI processing
-  - Results display with generated content
-  - Character count displays (52/60, 148/155)
-  - "Applica questi suggerimenti" to auto-apply suggestions
-  - "Copia negli appunti" to copy all suggestions to clipboard
-
-- **AJAX Handler**
-  - New endpoint `fp_seo_generate_ai_content`
-  - Security validation (nonce, capabilities)
-  - Error handling and user feedback
-
-- **JavaScript Module**
-  - `ai-generator.js` for UI interaction
-  - Support for both Gutenberg and Classic Editor
-  - Automatic content and title detection
-  - Clipboard copy functionality
-
-- **Documentation**
-  - Complete AI integration guide (`docs/AI_INTEGRATION.md`)
-  - Implementation summary (`AI_IMPLEMENTATION_SUMMARY.md`)
-  - Configuration instructions and best practices
-
-### Changed
-- Updated `composer.json` with `openai-php/client: ^0.10` dependency
-- Enhanced `Options.php` with AI settings support
-- Added `get_option()` helper method for dot-notation access
-
-### Technical Details
-- **New Classes:**
-  - `FP\SEO\Integrations\OpenAiClient` - OpenAI API client
-  - `FP\SEO\Admin\Settings\AiTabRenderer` - AI settings tab renderer
-  - `FP\SEO\Admin\AiSettings` - AI settings registration
-  - `FP\SEO\Admin\AiAjaxHandler` - AJAX request handler
-- **Dependencies:** Requires PHP 8.0+, WordPress 6.2+
-- **Security:** Nonce verification, capability checks, input sanitization
-
----
-
-## [0.4.0] - 2025-10-25
-
-### 🎉 Major Release - GEO + GSC + Advanced Features
-
-This release introduces **Generative Engine Optimization (GEO)**, **Google Search Console integration**, **Instant Indexing**, and several advanced SEO features.
-
-### Added
-- **GEO (Generative Engine Optimization)**
-  - `/.well-known/ai.txt` endpoint for AI crawler guidance
-  - `/geo-sitemap.xml` for GEO content discovery
-  - `/geo/site.json` site-level metadata endpoint
-  - `/geo/content/{post_id}.json` per-content structured data
-  - `/geo/updates.json` recent updates feed
-  - Claims editor metabox for managing factual claims
-  - Shortcodes: `[fp_claim]`, `[fp_citation]`, `[fp_faq]`
-  - Extended JSON-LD schemas (ClaimReview, FAQPage)
-  - GEO settings tab in admin
-  - Content extractor for keywords, entities, claims
-
-- **Google Search Console Integration**
-  - Service Account authentication
-  - Site-wide metrics (clicks, impressions, CTR, position)
-  - Per-post GSC metrics in metabox
-  - Dashboard widget for GSC overview
-  - Top queries tracking
-  - Connection test utility
-  - Transient caching (1 hour TTL)
-  - GSC settings tab
-
-- **Instant Indexing API**
-  - Auto-submit URLs to Google on publish/update
-  - URL_UPDATED notification on content changes
-  - URL_DELETED notification on trash
-  - Service Account authentication
-  - Error handling and logging
-  - Settings UI for enabling/disabling
-
-- **Score History Tracking**
-  - Database table for historical SEO scores
-  - Track score changes over time
-  - Per-post history retrieval
-  - Site-wide trend aggregation
-  - Top/bottom performing posts
-  - Hook: `fpseo_after_score_calculation`
-
-- **Internal Linking**
-  - Keyword-based link suggestions
-  - Relevance scoring algorithm
-  - Related posts detection
-  - Anchor text suggestions
-  - AJAX endpoint for suggestions
-  - Stop words filtering (English + Italian)
-
-- **Real-time SERP Preview**
-  - Live title preview in editor
-  - Live meta description preview
-  - Character count display
-  - Overflow warnings
-  - Mobile/Desktop toggle
-  - ES6 module implementation
-
-- **Modern UI**
-  - Inline CSS injection via `admin_head` hook
-  - CSS variables design system
-  - Gradient backgrounds
-  - Modern badges and status indicators
-  - Responsive grid layouts
-  - Hover effects and transitions
-  - Cache-proof implementation
-
-### Changed
-- Plugin version bumped to 0.4.0
-- `Plugin.php` refactored to include `boot_geo_services()` method
-- Asset registration updated for new SERP preview script
-- Settings page now supports dynamic tabs via filter
-- Metabox now includes GSC metrics display
-- Dashboard includes GSC widget via action hook
-
-### Fixed
-- UI not showing due to CSS caching (switched to inline CSS)
-- Permalink flush on plugin activation for GEO endpoints
-- Database table creation on activation
-- Composer lock file updated
-
-### Dependencies
-- Added `google/apiclient: ^2.15` for Google API integration
-
-### Developer
-- New classes:
-  - `FP\SEO\GEO\Router` - GEO endpoint routing
-  - `FP\SEO\GEO\AiTxt` - ai.txt generator
-  - `FP\SEO\GEO\GeoSitemap` - GEO sitemap
-  - `FP\SEO\GEO\SiteJson` - Site metadata JSON
-  - `FP\SEO\GEO\ContentJson` - Content JSON
-  - `FP\SEO\GEO\UpdatesJson` - Updates feed
-  - `FP\SEO\GEO\Extractor` - Content extraction
-  - `FP\SEO\Admin\GeoSettings` - GEO settings
-  - `FP\SEO\Admin\GeoMetaBox` - Claims editor
-  - `FP\SEO\Admin\GscSettings` - GSC settings
-  - `FP\SEO\Admin\GscDashboard` - GSC dashboard widget
-  - `FP\SEO\Integrations\GscClient` - GSC API client
-  - `FP\SEO\Integrations\GscData` - GSC data fetcher
-  - `FP\SEO\Integrations\IndexingApi` - Indexing API client
-  - `FP\SEO\Integrations\AutoIndexing` - Auto-indexing handler
-  - `FP\SEO\History\ScoreHistory` - Score history manager
-  - `FP\SEO\Linking\InternalLinkSuggester` - Link suggester
-  - `FP\SEO\Linking\LinkingAjax` - AJAX handler
-  - `FP\SEO\Front\SchemaGeo` - GEO JSON-LD
-  - `FP\SEO\Shortcodes\GeoShortcodes` - GEO shortcodes
-
-- New hooks:
-  - Filter: `fpseo_settings_tabs` - Add settings tabs
-  - Filter: `fpseo_settings_render_tab_{tab_slug}` - Render custom tab
-  - Action: `fpseo_dashboard_after_quick_stats` - Dashboard widgets
-  - Action: `fpseo_after_score_calculation` - Score tracking
-
-- New AJAX actions:
-  - `fp_seo_get_link_suggestions` - Get internal link suggestions
-
-- New database tables:
-  - `{prefix}_fp_seo_score_history` - SEO score history
-
-### Documentation
-- Added `GSC_INTEGRATION.md` - GSC setup guide
-- Added `INDEXING_API_SETUP.md` - Indexing API guide
-- Added `QUICK_SETUP_INDEXING.txt` - Quick reference
-- Added `IMPLEMENTATION_CHECK.md` - Feature verification
-- Added `AUDIT_REPORT.txt` - Implementation audit
-- Added `test-all-features.php` - Automated test suite
-- Updated README.md with all new features
-
----
-
-## [0.3.0] - 2024-XX-XX
-
-### Added
-- Modern UI implementation with gradient design system
-- Admin bar SEO badge
-- Bulk audit export to CSV
-- WordPress Site Health integration
-
-### Changed
-- Improved metabox UI/UX
-- Enhanced dashboard layout
-- Better mobile responsiveness
-
-### Fixed
-- Cache issues with admin CSS
-- Metabox display on custom post types
-- Export encoding issues
-
----
-
-## [0.2.0] - 2024-XX-XX
-
-### Added
-- Bulk audit functionality
-- Post type configuration
-- Configurable SEO checks
-- Check weight system
-- Performance tab in settings
-
-### Changed
-- Refactored scoring engine
-- Improved analysis performance
-- Better error handling
-
-### Fixed
-- Title length calculation
-- Meta description extraction
-- Image alt text detection
-
----
-
-## [0.1.0] - 2024-XX-XX
-
-### Added
-- Initial release
-- Basic SEO analysis (15+ checks)
-- Title optimization check
-- Meta description check
-- Heading structure analysis
-- Keyword density
-- Image optimization
-- Internal/external linking
-- Settings page
-- Admin metabox
-- Basic scoring system
-
----
-
-## Upgrade Notes
-
-### Upgrading to 0.4.0
-
-**Important**: This is a major update. Please follow these steps:
-
-1. **Backup** your WordPress site
-2. **Update** the plugin files
-3. **Run** `composer install --no-dev` in plugin directory
-4. **Deactivate** and **Reactivate** the plugin (creates DB table)
-5. **Flush** permalinks: Settings → Permalinks → Save
-6. **Test** GEO endpoints: `/.well-known/ai.txt`, `/geo-sitemap.xml`
-7. **Configure** GSC if needed: Settings → FP SEO → Google Search Console
-
-**New Requirements**:
-- PHP 8.0+ (previously 7.4+)
-- WordPress 6.2+ (previously 5.8+)
-- Composer for dependency management
-
-**Database Changes**:
-- New table: `{prefix}_fp_seo_score_history`
-
-**Breaking Changes**:
-- None (backward compatible)
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/francescopasseri/fp-seo-performance/issues)
-- **Email**: info@francescopasseri.com
-- **Website**: [francescopasseri.com](https://francescopasseri.com)
-
----
-
-[0.4.0]: https://github.com/francescopasseri/fp-seo-performance/releases/tag/v0.4.0
-[0.3.0]: https://github.com/francescopasseri/fp-seo-performance/releases/tag/v0.3.0
-[0.2.0]: https://github.com/francescopasseri/fp-seo-performance/releases/tag/v0.2.0
-[0.1.0]: https://github.com/francescopasseri/fp-seo-performance/releases/tag/v0.1.0
