@@ -265,7 +265,24 @@ class Metabox {
 	 * Registra gli hook di salvataggio - chiamato dal costruttore e da register()
 	 */
 	private function register_hooks(): void {
-		// Hook save_post con priorità 10 (standard WordPress)
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		// This is more efficient than registering generic hooks and exiting early
+		$supported_types = $this->get_supported_post_types();
+		
+		foreach ( $supported_types as $post_type ) {
+			// Register post-type-specific hooks to avoid calling hooks for unsupported types
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
+			}
+			if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
+				add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
+			}
+			if ( ! has_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ) ) ) {
+				add_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10, 3 );
+			}
+		}
+		
+		// Also register generic hooks as fallback for compatibility
 		// CRITICAL: The save_meta method checks post type FIRST and exits immediately if not supported
 		// This prevents ANY interference with unsupported post types (attachments, Nectar Sliders, etc.)
 		if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
