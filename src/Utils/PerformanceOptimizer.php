@@ -49,15 +49,24 @@ class PerformanceOptimizer {
 	 * Optimize database queries.
 	 */
 	public function optimize_database_queries(): void {
-		// DISABLED in frontend: Can interfere with page rendering
-		// Only optimize database queries in admin
-		if ( ! is_admin() ) {
-			return;
-		}
+		// DISABLED: These filters interfere with WordPress's internal queries,
+		// including queries used to load posts in the editor.
+		// They were causing WordPress to load auto-draft posts instead of the correct post.
+		// 
+		// If query optimization is needed in the future, it should be done
+		// in a way that does NOT modify WordPress core queries.
+		return;
 		
-		// Add database query optimizations (admin only)
-		add_filter( 'posts_where', array( $this, 'optimize_posts_where' ), 10, 2 );
-		add_filter( 'posts_orderby', array( $this, 'optimize_posts_orderby' ), 10, 2 );
+		// OLD CODE - DISABLED
+		// // DISABLED in frontend: Can interfere with page rendering
+		// // Only optimize database queries in admin
+		// if ( ! is_admin() ) {
+		// 	return;
+		// }
+		// 
+		// // Add database query optimizations (admin only)
+		// add_filter( 'posts_where', array( $this, 'optimize_posts_where' ), 10, 2 );
+		// add_filter( 'posts_orderby', array( $this, 'optimize_posts_orderby' ), 10, 2 );
 	}
 
 	/**

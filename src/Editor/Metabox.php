@@ -413,10 +413,6 @@ class Metabox {
 			// Hook pre_post_update rimosso - usiamo solo save_post per evitare doppi salvataggi
 			// add_filter( 'pre_post_update', array( $this, 'save_meta_pre_update' ), 5, 2 );
 			
-			// CRITICAL FIX: Fix wrong post object on post edit pages
-			// This must run very early, before WordPress uses the post object for the title field
-			add_action( 'load-post.php', array( $this, 'fix_wrong_post_object' ), 1, 0 );
-			
 			// Use priority 5 to ensure wp.media is loaded early, before other plugins
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5, 0 );
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
@@ -490,71 +486,6 @@ class Metabox {
 				Logger::debug( 'FP SEO: Metabox registered for post type', array(
 					'post_type' => $post_type,
 				) );
-			}
-		}
-	}
-
-	/**
-	 * Fix wrong post object on post edit pages.
-	 * 
-	 * CRITICAL: This fixes the issue where WordPress loads an auto-draft instead of the correct post.
-	 * This must run very early (load-post.php hook) before WordPress uses the post object for the title field.
-	 */
-	public function fix_wrong_post_object(): void {
-		// Only run on post edit pages
-		if ( ! isset( $_GET['post'] ) ) {
-			return;
-		}
-		
-		$requested_post_id = absint( $_GET['post'] );
-		if ( $requested_post_id <= 0 ) {
-			return;
-		}
-		
-		global $post;
-		
-		// If global $post is not set or is wrong, fix it
-		if ( ! $post || ! isset( $post->ID ) || $post->ID !== $requested_post_id ) {
-			$wrong_post_id = $post ? $post->ID : 0;
-			$wrong_post_title = $post ? $post->post_title : 'none';
-			$wrong_post_status = $post ? $post->post_status : 'none';
-			
-			$correct_post = get_post( $requested_post_id );
-			if ( $correct_post instanceof WP_Post ) {
-				$post = $correct_post;
-				$GLOBALS['post'] = $post;
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'FP SEO: Fixed wrong post object on load-post.php', array(
-						'wrong_post_id' => $wrong_post_id,
-						'wrong_post_title' => $wrong_post_title,
-						'wrong_post_status' => $wrong_post_status,
-						'requested_post_id' => $requested_post_id,
-						'correct_post_id' => $correct_post->ID,
-						'correct_post_title' => $correct_post->post_title,
-						'correct_post_status' => $correct_post->post_status,
-					) );
-				}
-			}
-		} elseif ( isset( $post->post_status ) && $post->post_status === 'auto-draft' ) {
-			// If we have an auto-draft but the URL requests a specific post, fix it
-			$correct_post = get_post( $requested_post_id );
-			if ( $correct_post instanceof WP_Post && $correct_post->post_status !== 'auto-draft' ) {
-				$wrong_post_id = $post->ID;
-				$wrong_post_title = $post->post_title;
-				
-				$post = $correct_post;
-				$GLOBALS['post'] = $post;
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'FP SEO: Fixed auto-draft post object on load-post.php', array(
-						'wrong_post_id' => $wrong_post_id,
-						'wrong_post_title' => $wrong_post_title,
-						'requested_post_id' => $requested_post_id,
-						'correct_post_id' => $correct_post->ID,
-						'correct_post_title' => $correct_post->post_title,
-					) );
-				}
 			}
 		}
 	}
@@ -1711,28 +1642,6 @@ class Metabox {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: oggetto post non valido.', 'fp-seo-performance' ) . '</p></div>';
 			return;
 		}
-		
-		// CRITICAL FIX: If we receive an auto-draft but the URL has a specific post ID, 
-		// WordPress is loading the wrong post. Force reload the correct post from the URL.
-		$requested_post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
-		if ( $requested_post_id > 0 && $requested_post_id !== $post->ID ) {
-			// WordPress is passing us the wrong post - reload the correct one
-			$wrong_post_id = $post->ID;
-			$wrong_post_title = $post->post_title;
-			$correct_post = get_post( $requested_post_id );
-			if ( $correct_post instanceof WP_Post ) {
-				$post = $correct_post;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'FP SEO: WordPress passed wrong post object, corrected', array(
-						'wrong_post_id' => $wrong_post_id,
-						'correct_post_id' => $requested_post_id,
-						'wrong_post_title' => $wrong_post_title,
-						'correct_post_title' => $correct_post->post_title,
-					) );
-				}
-			}
-		}
-		
 		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
 		// All the previous "homepage protection" code was causing more problems than it solved
 		$current_post = $post;
