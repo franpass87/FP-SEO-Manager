@@ -842,38 +842,29 @@ class ImprovedSocialMediaManager {
 					const thumbnailInput = $('input[name="_thumbnail_id"]');
 					if (thumbnailInput.length && thumbnailInput.val()) {
 						const thumbnailId = thumbnailInput.val();
-						// Try to get from wp.media attachment
-						if (typeof wp !== 'undefined' && wp.media) {
-							try {
-								const attachment = wp.media.attachment(thumbnailId);
-								if (attachment && attachment.get('url')) {
-									featuredImageUrl = attachment.get('url');
-								}
-							} catch(e) {
-								// wp.media not available or error, try AJAX
-								if (typeof ajaxurl !== 'undefined') {
-									$.ajax({
-										url: ajaxurl,
-										type: 'POST',
-										data: {
-											action: 'fp_seo_get_attachment_url',
-											attachment_id: thumbnailId,
-											nonce: '<?php echo wp_create_nonce( 'fp_seo_get_attachment' ); ?>'
-										},
-										success: function(response) {
-											if (response && response.success && response.data && response.data.url) {
-												featuredImageUrl = response.data.url;
-												// Update all image inputs with featured image
-												$('input[id*="-image"]').each(function() {
-													if (!$(this).val()) {
-														$(this).val(featuredImageUrl).trigger('input');
-													}
-												});
+						// NEVER use wp.media.attachment() - it can interfere with media library
+						// Use AJAX instead to get attachment URL
+						if (typeof ajaxurl !== 'undefined') {
+							$.ajax({
+								url: ajaxurl,
+								type: 'POST',
+								data: {
+									action: 'fp_seo_get_attachment_url',
+									attachment_id: thumbnailId,
+									nonce: '<?php echo wp_create_nonce( 'fp_seo_get_attachment' ); ?>'
+								},
+								success: function(response) {
+									if (response && response.success && response.data && response.data.url) {
+										featuredImageUrl = response.data.url;
+										// Update all image inputs with featured image
+										$('input[id*="-image"]').each(function() {
+											if (!$(this).val()) {
+												$(this).val(featuredImageUrl).trigger('input');
 											}
-										}
-									});
+										});
+									}
 								}
-							}
+							});
 						}
 					}
 				}
@@ -1036,21 +1027,12 @@ class ImprovedSocialMediaManager {
 					}
 				}
 				
-				// Check classic editor
+				// Check classic editor - NEVER use wp.media.attachment() to avoid interference
+				// Use DOM-based method instead
 				if (!currentFeaturedImage) {
-					const thumbnailInput = $('input[name="_thumbnail_id"]');
-					if (thumbnailInput.length && thumbnailInput.val()) {
-						const thumbnailId = thumbnailInput.val();
-						if (typeof wp !== 'undefined' && wp.media) {
-							try {
-								const attachment = wp.media.attachment(thumbnailId);
-								if (attachment && attachment.get('url')) {
-									currentFeaturedImage = attachment.get('url');
-								}
-							} catch(e) {
-								// Ignore errors
-							}
-						}
+					const $featuredImg = $('#postimagediv .inside img');
+					if ($featuredImg.length > 0) {
+						currentFeaturedImage = $featuredImg.attr('src');
 					}
 				}
 				

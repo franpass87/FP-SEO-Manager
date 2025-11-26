@@ -140,8 +140,7 @@ class Assets {
 						
 						// Function to sync featured image to social media fields
 						var syncFeaturedImageToSocial = function() {
-							// CRITICAL: Do not use wp.media if we're on a media library page
-							// This prevents interference with media library thumbnail rendering
+							// CRITICAL: Do not run on media library pages - this prevents ALL interference
 							if (window.location.href.indexOf('upload.php') !== -1 || 
 							    window.location.href.indexOf('media-upload.php') !== -1) {
 								return;
@@ -151,40 +150,17 @@ class Assets {
 							
 							// Check if featured image is set (not empty, not "0", not "-1")
 							if (thumbnailId && parseInt(thumbnailId, 10) > 0) {
-								// Get featured image URL
+								// Get featured image URL ONLY from DOM - NEVER use wp.media.attachment().fetch()
+								// This prevents ANY interference with media library
 								var $featuredImg = $('#postimagediv .inside img');
 								var featuredUrl = '';
 								
 								if ($featuredImg.length > 0) {
 									featuredUrl = $featuredImg.attr('src');
-								} else {
-									// Try to get from attachment - but ONLY if wp.media is fully loaded
-									// Add extensive checks to prevent interference with media library
-									if (typeof wp !== 'undefined' && 
-									    wp.media && 
-									    typeof wp.media.attachment === 'function' &&
-									    window.location.href.indexOf('upload.php') === -1 &&
-									    window.location.href.indexOf('media-upload.php') === -1) {
-										try {
-											var attachment = wp.media.attachment(thumbnailId);
-											if (attachment && typeof attachment.fetch === 'function') {
-												attachment.fetch().done(function() {
-													var url = attachment.get('url');
-													if (url) {
-														setSocialImageFields(url);
-													}
-												}).fail(function() {
-													// Silently fail - don't interfere with wp.media
-												});
-												return; // Exit early, will be set in callback
-											}
-										} catch (e) {
-											// Silently catch errors - don't interfere with wp.media
-											console.warn('FP SEO: Error fetching attachment (non-critical)', e);
-										}
-									}
 								}
 								
+								// NEVER use wp.media.attachment().fetch() - it can interfere with media library
+								// Only use DOM-based methods to get image URL
 								if (featuredUrl) {
 									setSocialImageFields(featuredUrl);
 								}
@@ -231,19 +207,28 @@ class Assets {
 						});
 						
 						// Listen for AJAX completion to sync after WordPress updates metabox
-						// This is a safe way to detect when featured image is updated via AJAX
-						$(document).ajaxComplete(function(event, xhr, settings) {
-							if (settings && settings.data && typeof settings.data === 'string') {
-								// Check if this is a featured image update
-								if (settings.data.indexOf('action=set-post-thumbnail') !== -1 || 
-								    settings.data.indexOf('action=get-post-thumbnail-html') !== -1) {
-									// Featured image was updated, sync to social fields after metabox updates
-									setTimeout(function() {
-										syncFeaturedImageToSocial();
-									}, 1000);
+						// CRITICAL: Only listen on post editor pages, never on media library
+						if (window.location.href.indexOf('upload.php') === -1 && 
+						    window.location.href.indexOf('media-upload.php') === -1) {
+							$(document).ajaxComplete(function(event, xhr, settings) {
+								// Double-check we're not on media library page
+								if (window.location.href.indexOf('upload.php') !== -1 || 
+								    window.location.href.indexOf('media-upload.php') !== -1) {
+									return;
 								}
-							}
-						});
+								
+								if (settings && settings.data && typeof settings.data === 'string') {
+									// Check if this is a featured image update
+									if (settings.data.indexOf('action=set-post-thumbnail') !== -1 || 
+									    settings.data.indexOf('action=get-post-thumbnail-html') !== -1) {
+										// Featured image was updated, sync to social fields after metabox updates
+										setTimeout(function() {
+											syncFeaturedImageToSocial();
+										}, 1000);
+									}
+								}
+							});
+						}
 						
 						// Initial sync on page load
 						setTimeout(syncFeaturedImageToSocial, 1000);
@@ -323,15 +308,25 @@ class Assets {
 						};
 						
 						// Listen for AJAX completion (WordPress uses AJAX to set featured image)
-						$(document).ajaxComplete(function(event, xhr, settings) {
-							if (settings && settings.data && typeof settings.data === 'string') {
-								// Check if this is a featured image update
-								if (settings.data.indexOf('action=set-post-thumbnail') !== -1) {
-									// Featured image was updated, sync to social fields
-									setTimeout(syncFeaturedImageToSocial, 500);
+						// CRITICAL: Only listen on post editor pages, never on media library
+						if (window.location.href.indexOf('upload.php') === -1 && 
+						    window.location.href.indexOf('media-upload.php') === -1) {
+							$(document).ajaxComplete(function(event, xhr, settings) {
+								// Double-check we're not on media library page
+								if (window.location.href.indexOf('upload.php') !== -1 || 
+								    window.location.href.indexOf('media-upload.php') !== -1) {
+									return;
 								}
-							}
-						});
+								
+								if (settings && settings.data && typeof settings.data === 'string') {
+									// Check if this is a featured image update
+									if (settings.data.indexOf('action=set-post-thumbnail') !== -1) {
+										// Featured image was updated, sync to social fields
+										setTimeout(syncFeaturedImageToSocial, 500);
+									}
+								}
+							});
+						}
 						
 						// Initial sync on page load
 						setTimeout(syncFeaturedImageToSocial, 1500);
@@ -373,6 +368,24 @@ class Assets {
 	public function conditional_asset_loading(): void {
 		$screen = get_current_screen();
 		if ( ! $screen ) {
+			return;
+		}
+
+		// CRITICAL: Never load assets on media library or upload pages to avoid interference
+		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		if ( $is_media_page ) {
+			// Explicitly dequeue all FP SEO assets on media library pages
+			wp_dequeue_style( 'fp-seo-ui-system' );
+			wp_dequeue_style( 'fp-seo-notifications' );
+			wp_dequeue_style( 'fp-seo-ai-enhancements' );
+			wp_dequeue_script( 'fp-seo-ui-system' );
+			wp_dequeue_script( 'fp-seo-performance-bulk' );
+			wp_dequeue_script( 'fp-seo-performance-ai-generator' );
+			wp_dequeue_script( 'fp-seo-performance-serp-preview' );
+			wp_dequeue_script( 'fp-seo-performance-editor' );
+			wp_dequeue_script( 'fp-seo-performance-editor-modern' );
+			wp_dequeue_script( 'fp-seo-performance-admin' );
+			wp_dequeue_script( 'fp-seo-performance-metabox-ai-fields' );
 			return;
 		}
 
