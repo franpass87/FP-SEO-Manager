@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.13] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Risolto il problema di caricamento della sezione ottimizzazione immagini
+- Aggiunta gestione errori robusta per l'estrazione delle immagini dal contenuto
+- Aggiunto try/catch per DOMDocument parsing per prevenire errori silenziosi
+- Aggiunto controllo per verificare che DOMDocument sia disponibile prima dell'uso
+- Migliorata la gestione degli errori in `extract_images_from_content()` e `extract_wpbakery_images()`
+- Aggiunto logging dettagliato per tracciare il processo di estrazione immagini
+- La sezione immagini ora mostra un messaggio di errore chiaro se fallisce invece di non apparire
+
+### Changed
+- Versione aggiornata per forzare il ricaricamento degli asset e del codice
+
 ## [0.9.0-pre.12] - 2025-01-27
 
 ### Fixed

@@ -342,7 +342,21 @@ class MetaboxRenderer {
 			try {
 				$this->render_images_section( $post );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Error rendering images', array( 'error' => $e->getMessage() ) );
+				Logger::error( 'FP SEO: Error rendering images section', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'post_id' => $post->ID ?? 0,
+				) );
+				// Mostra un messaggio di errore invece di nascondere completamente la sezione
+				echo '<div class="notice notice-warning" style="margin: 10px 0; padding: 12px;">';
+				echo '<p><strong>⚠️ Errore nel caricamento della sezione immagini:</strong></p>';
+				echo '<p>' . esc_html( $e->getMessage() ) . '</p>';
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					echo '<p><small>File: ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
+				}
+				echo '</div>';
 			}
 			
 			try {
@@ -1456,15 +1470,27 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_images_section( WP_Post $post ): void {
-		$images = $this->extract_images_from_content( $post );
-		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'render_images_section called', array(
+		// Log sempre (non solo in debug) per tracciare se viene chiamato
+		Logger::info( 'FP SEO: render_images_section called', array(
+			'post_id' => $post->ID,
+			'has_content' => ! empty( $post->post_content ),
+		) );
+
+		try {
+			$images = $this->extract_images_from_content( $post );
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error extracting images from content', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
 				'post_id' => $post->ID,
-				'images_count' => count( $images ),
-				'has_content' => ! empty( $post->post_content ),
 			) );
+			$images = array(); // Continua con array vuoto invece di fallire completamente
 		}
+		
+		Logger::info( 'FP SEO: render_images_section - images extracted', array(
+			'post_id' => $post->ID,
+			'images_count' => count( $images ),
+		) );
 		
 		?>
 		<!-- Section: Images Optimization -->
@@ -1746,6 +1772,12 @@ class MetaboxRenderer {
 	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
 	 */
 	private function extract_images_from_content( WP_Post $post ): array {
+		// Verifica che DOMDocument sia disponibile
+		if ( ! class_exists( 'DOMDocument' ) ) {
+			Logger::error( 'FP SEO: DOMDocument class not available for image extraction' );
+			return array();
+		}
+
 		// Get content - try both raw and processed
 		$content = $post->post_content;
 		$images = array();
@@ -1761,18 +1793,26 @@ class MetaboxRenderer {
 		}
 		
 		// First, add featured image if available (most important for SEO)
-		$featured_image = $this->get_featured_image_data( $post->ID );
-		if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
-			$images[] = $featured_image;
-			$seen_srcs[ $featured_image['src'] ] = true;
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'extract_images_from_content - Featured image added', array(
-					'post_id' => $post->ID,
-					'featured_image_src' => $featured_image['src'],
-					'featured_image_id' => $featured_image['attachment_id'] ?? null,
-				) );
+		try {
+			$featured_image = $this->get_featured_image_data( $post->ID );
+			if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
+				$images[] = $featured_image;
+				$seen_srcs[ $featured_image['src'] ] = true;
+				
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'extract_images_from_content - Featured image added', array(
+						'post_id' => $post->ID,
+						'featured_image_src' => $featured_image['src'],
+						'featured_image_id' => $featured_image['attachment_id'] ?? null,
+					) );
+				}
 			}
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error getting featured image data', array(
+				'error' => $e->getMessage(),
+				'post_id' => $post->ID,
+			) );
+			// Continua senza featured image
 		}
 		
 		if ( empty( $content ) ) {
@@ -1790,19 +1830,28 @@ class MetaboxRenderer {
 			|| strpos( $content, 'vc_gallery' ) !== false;
 		
 		// First, extract images from WPBakery shortcodes (from raw content)
-		$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'extract_images_from_content - WPBakery images found', array(
-				'post_id' => $post->ID,
-				'count' => count( $wpbakery_images ),
-				'has_wpbakery' => $has_wpbakery,
-			) );
-		}
-		foreach ( $wpbakery_images as $image ) {
-			if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
-				$seen_srcs[ $image['src'] ] = true;
-				$images[] = $image;
+		$wpbakery_images = array();
+		try {
+			$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'extract_images_from_content - WPBakery images found', array(
+					'post_id' => $post->ID,
+					'count' => count( $wpbakery_images ),
+					'has_wpbakery' => $has_wpbakery,
+				) );
 			}
+			foreach ( $wpbakery_images as $image ) {
+				if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
+					$seen_srcs[ $image['src'] ] = true;
+					$images[] = $image;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error extracting WPBakery images', array(
+				'error' => $e->getMessage(),
+				'post_id' => $post->ID,
+			) );
+			// Continua senza le immagini WPBakery
 		}
 		
 		// Process content with do_shortcode to get rendered HTML (for images that might be rendered)
@@ -1829,61 +1878,81 @@ class MetaboxRenderer {
 		// Then, extract images from HTML img tags (from both raw and processed content)
 		$content_to_parse = $processed_content . "\n" . $content; // Combine both to catch all images
 		
-		$dom = new \DOMDocument();
-		libxml_use_internal_errors( true );
-		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content_to_parse );
-		libxml_clear_errors();
+		// Usa try/catch per gestire errori di parsing HTML
+		try {
+			$dom = new \DOMDocument();
+			libxml_use_internal_errors( true );
+			$dom->loadHTML( '<?xml encoding="UTF-8">' . $content_to_parse );
+			libxml_clear_errors();
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error parsing HTML for image extraction', array(
+				'error' => $e->getMessage(),
+				'post_id' => $post->ID,
+			) );
+			// Ritorna le immagini già trovate (featured, wpbakery, ecc.)
+			return $images;
+		}
 		
 		$img_tags = $dom->getElementsByTagName( 'img' );
 		
 		foreach ( $img_tags as $index => $img ) {
-			$src = $img->getAttribute( 'src' );
-			
-			// Skip if empty or already seen
-			if ( empty( $src ) || isset( $seen_srcs[ $src ] ) ) {
-				continue;
-			}
-			
-			$seen_srcs[ $src ] = true;
-			
-			// Get attachment ID from URL if it's a WordPress attachment
-			$attachment_id = $this->get_attachment_id_from_url( $src );
-			
-			// Get existing alt, title
-			$alt = $img->getAttribute( 'alt' ) ?: '';
-			$title = $img->getAttribute( 'title' ) ?: '';
-			
-			// Get description from attachment if available
-			$description = '';
-			if ( $attachment_id ) {
-				$attachment = get_post( $attachment_id );
-				if ( $attachment ) {
-					// Use attachment description or content
-					$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
-					
-					// If alt is empty, try to get from attachment
-					if ( empty( $alt ) ) {
-						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+			try {
+				$src = $img->getAttribute( 'src' );
+				
+				// Skip if empty or already seen
+				if ( empty( $src ) || isset( $seen_srcs[ $src ] ) ) {
+					continue;
+				}
+				
+				$seen_srcs[ $src ] = true;
+				
+				// Get attachment ID from URL if it's a WordPress attachment
+				$attachment_id = $this->get_attachment_id_from_url( $src );
+				
+				// Get existing alt, title
+				$alt = $img->getAttribute( 'alt' ) ?: '';
+				$title = $img->getAttribute( 'title' ) ?: '';
+				
+				// Get description from attachment if available
+				$description = '';
+				if ( $attachment_id ) {
+					$attachment = get_post( $attachment_id );
+					if ( $attachment ) {
+						// Use attachment description or content
+						$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+						
+						// If alt is empty, try to get from attachment
+						if ( empty( $alt ) ) {
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+						}
 					}
 				}
+				
+				// Get saved custom data from post meta
+				$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
+				if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
+					$saved = $saved_images[ $src ];
+					$alt = $saved['alt'] ?? $alt;
+					$title = $saved['title'] ?? $title;
+					$description = $saved['description'] ?? $description;
+				}
+				
+				$images[] = array(
+					'src'           => $src,
+					'alt'           => $alt,
+					'title'         => $title,
+					'description'   => $description,
+					'attachment_id' => $attachment_id,
+				);
+			} catch ( \Throwable $e ) {
+				// Log errore ma continua con le altre immagini
+				Logger::error( 'FP SEO: Error processing image in extract_images_from_content', array(
+					'error' => $e->getMessage(),
+					'post_id' => $post->ID,
+					'image_index' => $index,
+				) );
+				continue;
 			}
-			
-			// Get saved custom data from post meta
-			$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
-			if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
-				$saved = $saved_images[ $src ];
-				$alt = $saved['alt'] ?? $alt;
-				$title = $saved['title'] ?? $title;
-				$description = $saved['description'] ?? $description;
-			}
-			
-			$images[] = array(
-				'src'           => $src,
-				'alt'           => $alt,
-				'title'         => $title,
-				'description'   => $description,
-				'attachment_id' => $attachment_id,
-			);
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
