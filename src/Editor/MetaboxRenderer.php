@@ -137,6 +137,22 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
+		// Verifica che tutte le dipendenze siano caricate prima di iniziare
+		$required_classes = array(
+			'FP\\SEO\\Utils\\Logger',
+			'FP\\SEO\\Utils\\Options',
+		);
+
+		foreach ( $required_classes as $class_name ) {
+			if ( ! class_exists( $class_name, false ) ) {
+				Logger::error( 'FP SEO: Required class not loaded in MetaboxRenderer::render()', array(
+					'class' => $class_name,
+				) );
+				echo '<div class="notice notice-error"><p><strong>Errore: Classe ' . esc_html( $class_name ) . ' non caricata.</strong></p></div>';
+				return;
+			}
+		}
+
 		// Log inizio rendering in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'FP SEO: MetaboxRenderer::render() called', array(
@@ -293,18 +309,72 @@ class MetaboxRenderer {
 				'first_check' => ! empty( $checks ) ? reset( $checks ) : null,
 			) );
 		}
+
+		// Avvolgi tutto il rendering in un try/catch per catturare errori specifici
 		?>
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
-			<?php $this->render_header( $excluded, $score_value, $score_status ); ?>
-			<?php $this->render_serp_optimization_section( $post ); ?>
-			<?php $this->render_serp_preview_section( $post ); ?>
-			<?php $this->render_analysis_section( $checks ); ?>
-			<?php $this->render_images_section( $post ); ?>
-			<?php $this->render_gsc_metrics( $post ); ?>
-			<?php $this->render_ai_section( $post ); ?>
-			<?php $this->render_social_section( $post ); ?>
-			<?php $this->render_internal_links_section( $post ); ?>
-			<?php $this->render_schema_sections( $post ); ?>
+			<?php
+			try {
+				$this->render_header( $excluded, $score_value, $score_status );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering header', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_serp_optimization_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering SERP optimization', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_serp_preview_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering SERP preview', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_analysis_section( $checks );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering analysis', array( 'error' => $e->getMessage() ) );
+				echo '<div class="notice notice-error"><p>Errore nel rendering dell\'analisi: ' . esc_html( $e->getMessage() ) . '</p></div>';
+			}
+			
+			try {
+				$this->render_images_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering images', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_gsc_metrics( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering GSC metrics', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_ai_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering AI section', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_social_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering social section', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_internal_links_section( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering internal links', array( 'error' => $e->getMessage() ) );
+			}
+			
+			try {
+				$this->render_schema_sections( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error rendering schema sections', array( 'error' => $e->getMessage() ) );
+			}
+			?>
 		</div>
 		<?php
 	}
@@ -965,6 +1035,11 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_gsc_metrics( WP_Post $post ): void {
+		// Verifica che Options sia disponibile
+		if ( ! class_exists( 'FP\\SEO\\Utils\\Options', false ) ) {
+			return;
+		}
+
 		$options = Options::get();
 		$gsc     = $options['gsc'] ?? array();
 
@@ -972,8 +1047,41 @@ class MetaboxRenderer {
 			return;
 		}
 
-		$gsc_data = new GscData();
-		$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
+		// Verifica che GscData sia disponibile prima di istanziarlo
+		if ( ! class_exists( 'FP\\SEO\\Integrations\\GscData', false ) ) {
+			// Prova a caricare il file manualmente
+			$gsc_data_file = __DIR__ . '/../Integrations/GscData.php';
+			if ( file_exists( $gsc_data_file ) ) {
+				require_once $gsc_data_file;
+			} else {
+				return;
+			}
+		}
+
+		// Verifica anche che GscClient sia disponibile (dipendenza di GscData)
+		if ( ! class_exists( 'FP\\SEO\\Integrations\\GscClient', false ) ) {
+			$gsc_client_file = __DIR__ . '/../Integrations/GscClient.php';
+			if ( file_exists( $gsc_client_file ) ) {
+				require_once $gsc_client_file;
+			} else {
+				// Se GscClient non esiste, non possiamo usare GscData
+				return;
+			}
+		}
+
+		try {
+			$gsc_data = new GscData();
+			$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
+		} catch ( \Throwable $e ) {
+			// Se GscData fallisce, logga ma continua senza mostrare la sezione
+			Logger::error( 'FP SEO: Error loading GSC data', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+			) );
+			return;
+		}
 
 		if ( ! $metrics || ! is_array( $metrics ) ) {
 			return;

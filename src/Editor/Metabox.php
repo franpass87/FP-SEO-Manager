@@ -160,7 +160,7 @@ class Metabox {
 			throw new \RuntimeException( $error_msg );
 		}
 
-		// Verifica che CheckHelpText esista prima di istanziare MetaboxRenderer
+		// Verifica e carica tutte le dipendenze necessarie prima di istanziare MetaboxRenderer
 		$check_help_text_file = __DIR__ . '/CheckHelpText.php';
 		if ( ! file_exists( $check_help_text_file ) ) {
 			$error_msg = sprintf(
@@ -174,6 +174,41 @@ class Metabox {
 		// Carica CheckHelpText se necessario
 		if ( ! class_exists( 'FP\\SEO\\Editor\\CheckHelpText', false ) ) {
 			require_once $check_help_text_file;
+		}
+
+		// Verifica che le classi utilizzate da MetaboxRenderer siano disponibili
+		$required_classes = array(
+			'FP\\SEO\\Utils\\Logger' => __DIR__ . '/../Utils/Logger.php',
+			'FP\\SEO\\Utils\\Options' => __DIR__ . '/../Utils/Options.php',
+			'FP\\SEO\\Integrations\\GscClient' => __DIR__ . '/../Integrations/GscClient.php',
+			'FP\\SEO\\Integrations\\GscData' => __DIR__ . '/../Integrations/GscData.php',
+		);
+
+		foreach ( $required_classes as $class_name => $class_file ) {
+			if ( ! class_exists( $class_name, false ) ) {
+				if ( file_exists( $class_file ) ) {
+					require_once $class_file;
+				} else {
+					$error_msg = sprintf(
+						'FP SEO: Required class file not found: %s (for %s)',
+						$class_file,
+						$class_name
+					);
+					Logger::error( $error_msg );
+					throw new \RuntimeException( $error_msg );
+				}
+			}
+
+			// Verifica che la classe esista dopo il caricamento
+			if ( ! class_exists( $class_name, false ) ) {
+				$error_msg = sprintf(
+					'FP SEO: Class %s not found after loading file %s',
+					$class_name,
+					$class_file
+				);
+				Logger::error( $error_msg );
+				throw new \RuntimeException( $error_msg );
+			}
 		}
 
 		// Istanzia il renderer - DEVE funzionare
