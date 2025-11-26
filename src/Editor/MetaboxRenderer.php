@@ -188,19 +188,9 @@ class MetaboxRenderer {
 			}
 		}
 		
-		// IMPORTANTE: Pulisci la cache PRIMA di iniziare il rendering
-		// Questo assicura che tutti i valori vengano letti correttamente
-		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
-			clean_post_cache( $post->ID );
-			wp_cache_delete( $post->ID, 'post_meta' );
-			wp_cache_delete( $post->ID, 'posts' );
-			if ( function_exists( 'wp_cache_flush_group' ) ) {
-				wp_cache_flush_group( 'post_meta' );
-			}
-			if ( function_exists( 'update_post_meta_cache' ) ) {
-				update_post_meta_cache( array( $post->ID ) );
-			}
-		}
+		// DISABLED: Cache clearing was interfering with WordPress's post object
+		// WordPress manages its own cache, we should not clear it during rendering
+		// This was causing WordPress to load the wrong post (auto-draft instead of homepage)
 		
 		// Log per debug - verifica diretta dal database (solo in debug mode)
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -543,13 +533,7 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_seo_title_field( WP_Post $post ): void {
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
+		// DISABLED: Cache clearing interferes with WordPress's post object
 		if ( function_exists( 'update_post_meta_cache' ) ) {
 			update_post_meta_cache( array( $post->ID ) );
 		}
@@ -630,13 +614,7 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_meta_description_field( WP_Post $post ): void {
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
+		// DISABLED: Cache clearing interferes with WordPress's post object
 		if ( function_exists( 'update_post_meta_cache' ) ) {
 			update_post_meta_cache( array( $post->ID ) );
 		}
@@ -798,13 +776,7 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_keywords_section( WP_Post $post ): void {
-		// Clear cache before retrieving keywords
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
+		// DISABLED: Cache clearing interferes with WordPress's post object
 		if ( function_exists( 'update_post_meta_cache' ) ) {
 			update_post_meta_cache( array( $post->ID ) );
 		}
@@ -1837,17 +1809,9 @@ class MetaboxRenderer {
 			return array();
 		}
 
-		// Get content - try both raw and processed
-		// Forza il refresh del post per assicurarsi di avere il contenuto più recente
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'posts' );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		
-		// Recupera il post fresco dal database
-		$fresh_post = get_post( $post->ID );
-		if ( $fresh_post instanceof \WP_Post ) {
-			$post = $fresh_post;
-		}
+		// DISABLED: Cache clearing and post refresh interferes with WordPress's post object
+		// WordPress manages its own cache, we should not clear it during rendering
+		// This was causing WordPress to load the wrong post (auto-draft instead of homepage)
 		
 		$content = $post->post_content ?? '';
 		
