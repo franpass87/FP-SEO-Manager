@@ -66,6 +66,16 @@ class AutoSeoOptimizer {
 	 * @param bool     $update  Whether this is an update or new post.
 	 */
 	public function maybe_auto_optimize( int $post_id, \WP_Post $post, bool $update ): void {
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		
+		// If not a supported post type, return immediately without any processing
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		// Check if auto-optimization is enabled
 		if ( ! $this->is_auto_optimization_enabled() ) {
 			return;

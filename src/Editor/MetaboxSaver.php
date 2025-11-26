@@ -81,9 +81,27 @@ class MetaboxSaver {
 	 * @return bool True if saved successfully, false otherwise.
 	 */
 	public function save_all_fields( int $post_id ): bool {
+		// CRITICAL: Check post type FIRST, before any processing
+		// This is a double protection - even if called from somewhere else, we won't interfere
+		$post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		
+		// If not a supported post type, return immediately without any processing
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'MetaboxSaver::save_all_fields skipped - unsupported post type', array(
+					'post_id' => $post_id,
+					'post_type' => $post_type,
+					'supported_types' => $supported_types,
+				) );
+			}
+			return false; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'MetaboxSaver::save_all_fields called', array(
 				'post_id' => $post_id,
+				'post_type' => $post_type,
 				'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
 			) );
 		}
