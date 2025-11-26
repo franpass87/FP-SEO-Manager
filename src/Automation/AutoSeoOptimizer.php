@@ -236,12 +236,23 @@ class AutoSeoOptimizer {
 			$updated_fields[] = 'Meta Description';
 		}
 
+		// CRITICAL: Double-check post type before ANY wp_update_post call
+		// This prevents interference with unsupported post types like Nectar Sliders
+		$current_post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		if ( ! in_array( $current_post_type, $supported_types, true ) ) {
+			// Post type changed or not supported - do NOT call wp_update_post
+			return;
+		}
+
 		// Update post title if it's auto-generated and we have an SEO title suggestion
 		// (Only for new posts with default title)
 		// IMPORTANT: Remove and re-add hook to prevent infinite loop
 		if ( ! empty( $ai_data['seo_title'] ) && $post->post_title === 'Auto Draft' ) {
-			// Remove our hook temporarily
-			remove_action( 'save_post', array( $this, 'maybe_auto_optimize' ), 20 );
+			// Remove our hooks temporarily (post-type-specific only)
+			foreach ( $supported_types as $post_type ) {
+				remove_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20 );
+			}
 			
 			wp_update_post( array(
 				'ID'         => $post_id,
@@ -249,7 +260,6 @@ class AutoSeoOptimizer {
 			) );
 			
 			// Re-add our hooks (post-type-specific only)
-			$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 			foreach ( $supported_types as $post_type ) {
 				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
 					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
@@ -262,8 +272,10 @@ class AutoSeoOptimizer {
 		// Update slug if it's auto-generated (only for new posts)
 		// IMPORTANT: Remove and re-add hook to prevent infinite loop
 		if ( $post->post_name === sanitize_title( $post->post_title ) && ! empty( $ai_data['slug'] ) ) {
-			// Remove our hook temporarily
-			remove_action( 'save_post', array( $this, 'maybe_auto_optimize' ), 20 );
+			// Remove our hooks temporarily (post-type-specific only)
+			foreach ( $supported_types as $post_type ) {
+				remove_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20 );
+			}
 			
 			wp_update_post( array(
 				'ID'        => $post_id,
@@ -271,7 +283,6 @@ class AutoSeoOptimizer {
 			) );
 			
 			// Re-add our hooks (post-type-specific only)
-			$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 			foreach ( $supported_types as $post_type ) {
 				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
 					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
