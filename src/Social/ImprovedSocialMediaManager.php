@@ -26,7 +26,7 @@ use function get_the_post_thumbnail_url;
 use function get_the_title;
 use function is_singular;
 use function trim;
-use function wp_get_attachment_image_url;
+use function wp_get_attachment_url;
 use function wp_strip_all_tags;
 use function wp_trim_words;
 
@@ -96,6 +96,12 @@ class ImprovedSocialMediaManager {
 		
 		$screen = get_current_screen();
 		if ( ! $screen ) {
+			return;
+		}
+
+		// CRITICAL: Never run on media library or upload pages to avoid interference
+		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		if ( $is_media_page ) {
 			return;
 		}
 
@@ -413,13 +419,14 @@ class ImprovedSocialMediaManager {
 										// Method 2: Direct meta query if standard method fails
 										if ( empty( $featured_image_url ) ) {
 											$thumbnail_id = get_post_meta( $post->ID, '_thumbnail_id', true );
-											if ( $thumbnail_id && function_exists( 'wp_get_attachment_image_url' ) ) {
-												$featured_image_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+											if ( $thumbnail_id && function_exists( 'wp_get_attachment_url' ) ) {
+												// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+												$featured_image_url = wp_get_attachment_url( (int) $thumbnail_id );
 											}
 										}
 										
 										// Method 3: Database query as last resort
-										if ( empty( $featured_image_url ) && function_exists( 'wp_get_attachment_image_url' ) ) {
+										if ( empty( $featured_image_url ) && function_exists( 'wp_get_attachment_url' ) ) {
 											global $wpdb;
 											if ( isset( $wpdb ) && is_object( $wpdb ) ) {
 												$thumbnail_id = $wpdb->get_var( $wpdb->prepare(
@@ -427,7 +434,8 @@ class ImprovedSocialMediaManager {
 													$post->ID
 												) );
 												if ( $thumbnail_id ) {
-													$featured_image_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+													// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+													$featured_image_url = wp_get_attachment_url( (int) $thumbnail_id );
 												}
 											}
 										}
@@ -877,10 +885,11 @@ class ImprovedSocialMediaManager {
 					$featured_url = '';
 					try {
 						$featured_url = get_the_post_thumbnail_url( $post->ID, 'full' );
-						if ( empty( $featured_url ) && function_exists( 'wp_get_attachment_image_url' ) ) {
+						if ( empty( $featured_url ) && function_exists( 'wp_get_attachment_url' ) ) {
 							$thumbnail_id = get_post_meta( $post->ID, '_thumbnail_id', true );
 							if ( $thumbnail_id ) {
-								$featured_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+								// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+								$featured_url = wp_get_attachment_url( (int) $thumbnail_id );
 							}
 						}
 					} catch ( \Throwable $e ) {
@@ -1817,7 +1826,8 @@ class ImprovedSocialMediaManager {
 			wp_send_json_error( 'Invalid attachment ID' );
 		}
 
-		$url = wp_get_attachment_image_url( $attachment_id, 'full' );
+		// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+		$url = wp_get_attachment_url( $attachment_id );
 
 		if ( ! $url ) {
 			wp_send_json_error( 'Attachment not found' );

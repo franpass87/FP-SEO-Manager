@@ -297,7 +297,8 @@ class AdvancedSchemaManager {
 		if ( ! empty( $image_ids ) ) {
 			$schema['image'] = array();
 			foreach ( $image_ids as $image_id ) {
-				$image_url = wp_get_attachment_image_url( $image_id, 'full' );
+				// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+				$image_url = wp_get_attachment_url( $image_id );
 				if ( $image_url ) {
 					$schema['image'][] = $image_url;
 				}
@@ -1452,7 +1453,8 @@ function get_custom_logo_url(): string {
 		return '';
 	}
 	
-	$logo_url = wp_get_attachment_image_url( $custom_logo_id, 'full' );
+	// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+	$logo_url = wp_get_attachment_url( $custom_logo_id );
 	
 	return $logo_url ? (string) $logo_url : '';
 }

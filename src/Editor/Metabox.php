@@ -508,6 +508,12 @@ class Metabox {
 			return;
 		}
 
+		// CRITICAL: Never run on media library or upload pages to avoid interference
+		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		if ( $is_media_page ) {
+			return;
+		}
+
 		global $post;
 		if ( ! $post ) {
 			return;

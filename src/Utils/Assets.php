@@ -61,6 +61,7 @@ class Assets {
 	/**
 	 * Ensures wp.media is loaded early for featured image button support.
 	 * This must run before other plugins to prevent conflicts.
+	 * CRITICAL: Never run on media library pages to avoid interference.
 	 */
 	public function ensure_wp_media(): void {
 		$screen = get_current_screen();
@@ -70,6 +71,13 @@ class Assets {
 
 		// Only enqueue on post editor pages where featured image is used
 		$is_post_editor = in_array( $screen->base, array( 'post', 'page' ), true );
+		
+		// CRITICAL: Never run on media library or upload pages
+		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		
+		if ( $is_media_page ) {
+			return;
+		}
 		
 		if ( $is_post_editor ) {
 			// Ensure wp.media is available for featured image button (modern WordPress API)
@@ -109,8 +117,14 @@ class Assets {
 			return;
 		}
 
-		// Only on post editor pages
+		// Only on post editor pages - NEVER on media library or upload pages
 		$is_post_editor = in_array( $screen->base, array( 'post', 'page' ), true );
+		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		
+		// CRITICAL: Do not run on media library pages to avoid interference
+		if ( $is_media_page ) {
+			return;
+		}
 		
 		if ( $is_post_editor ) {
 			$executed = true;
@@ -126,6 +140,13 @@ class Assets {
 						
 						// Function to sync featured image to social media fields
 						var syncFeaturedImageToSocial = function() {
+							// CRITICAL: Do not use wp.media if we're on a media library page
+							// This prevents interference with media library thumbnail rendering
+							if (window.location.href.indexOf('upload.php') !== -1 || 
+							    window.location.href.indexOf('media-upload.php') !== -1) {
+								return;
+							}
+							
 							var thumbnailId = $('input[name="_thumbnail_id"]').val();
 							
 							// Check if featured image is set (not empty, not "0", not "-1")
@@ -137,16 +158,30 @@ class Assets {
 								if ($featuredImg.length > 0) {
 									featuredUrl = $featuredImg.attr('src');
 								} else {
-									// Try to get from attachment
-									if (typeof wp !== 'undefined' && wp.media && wp.media.attachment) {
-										var attachment = wp.media.attachment(thumbnailId);
-										attachment.fetch().done(function() {
-											var url = attachment.get('url');
-											if (url) {
-												setSocialImageFields(url);
+									// Try to get from attachment - but ONLY if wp.media is fully loaded
+									// Add extensive checks to prevent interference with media library
+									if (typeof wp !== 'undefined' && 
+									    wp.media && 
+									    typeof wp.media.attachment === 'function' &&
+									    window.location.href.indexOf('upload.php') === -1 &&
+									    window.location.href.indexOf('media-upload.php') === -1) {
+										try {
+											var attachment = wp.media.attachment(thumbnailId);
+											if (attachment && typeof attachment.fetch === 'function') {
+												attachment.fetch().done(function() {
+													var url = attachment.get('url');
+													if (url) {
+														setSocialImageFields(url);
+													}
+												}).fail(function() {
+													// Silently fail - don't interfere with wp.media
+												});
+												return; // Exit early, will be set in callback
 											}
-										});
-										return; // Exit early, will be set in callback
+										} catch (e) {
+											// Silently catch errors - don't interfere with wp.media
+											console.warn('FP SEO: Error fetching attachment (non-critical)', e);
+										}
 									}
 								}
 								

@@ -1538,21 +1538,8 @@ class MetaboxRenderer {
 							) );
 						}
 						
-						// Get featured image URL to identify it
-						$featured_image_url = '';
-						$featured_image_urls = array(); // Array di URL possibili per la featured image
+						// Get featured image ID to identify it - NON usare wp_get_attachment_image_url per evitare interferenze
 						$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
-						if ( $featured_thumbnail_id ) {
-							$featured_image_url = wp_get_attachment_image_url( $featured_thumbnail_id, 'full' );
-							// Aggiungi anche altre varianti dell'URL per il confronto
-							$featured_image_urls[] = $featured_image_url;
-							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'large' );
-							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'medium' );
-							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'thumbnail' );
-							// Normalizza anche l'URL base
-							$featured_image_urls[] = str_replace( home_url(), '', $featured_image_url );
-							$featured_image_urls = array_filter( $featured_image_urls );
-						}
 						
 						$rendered_count = 0;
 						$skipped_count = 0;
@@ -1571,32 +1558,10 @@ class MetaboxRenderer {
 								continue;
 							}
 							
-							// Normalizza l'URL dell'immagine per il confronto
-							$image_src_normalized = $image['src'];
-							if ( strpos( $image_src_normalized, 'http' ) !== 0 ) {
-								if ( strpos( $image_src_normalized, '/' ) === 0 ) {
-									$image_src_normalized = site_url( $image_src_normalized );
-								} else {
-									$image_src_normalized = content_url( $image_src_normalized );
-								}
-							}
-							
-							// Confronta con tutte le varianti della featured image
+							// Confronta usando SOLO l'ID dell'attachment - NON interferire con URL o dimensioni
 							$is_featured = false;
-							if ( ! empty( $featured_image_urls ) ) {
-								foreach ( $featured_image_urls as $featured_url ) {
-									if ( $image['src'] === $featured_url || $image_src_normalized === $featured_url ) {
-										$is_featured = true;
-										break;
-									}
-									// Confronto anche senza query string e fragment
-									$image_src_clean = strtok( $image_src_normalized, '?' );
-									$featured_url_clean = strtok( $featured_url, '?' );
-									if ( $image_src_clean === $featured_url_clean ) {
-										$is_featured = true;
-										break;
-									}
-								}
+							if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
+								$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
 							}
 							
 							$rendered_count++;
@@ -1611,33 +1576,21 @@ class MetaboxRenderer {
 									<!-- Image Preview -->
 									<div style="position: relative;">
 										<?php
-										// Usa thumbnail WordPress se disponibile, altrimenti l'URL originale
-										$thumbnail_url = $image['src'];
-										$attachment_id = $image['attachment_id'] ?? null;
-										
-										if ( $attachment_id && $attachment_id > 0 ) {
-											// Prova a ottenere la thumbnail ottimizzata
-											$thumbnail = wp_get_attachment_image_url( $attachment_id, 'thumbnail' );
-											if ( $thumbnail ) {
-												$thumbnail_url = $thumbnail;
-											} else {
-												// Fallback a medium se thumbnail non disponibile
-												$medium = wp_get_attachment_image_url( $attachment_id, 'medium' );
-												if ( $medium ) {
-													$thumbnail_url = $medium;
-												}
-											}
-										}
+										// Usa SOLO l'URL originale dell'immagine - NON interferire con WordPress image sizes
+										$preview_url = $image['src'];
 										
 										// Normalizza URL (assicura che sia assoluto)
-										if ( strpos( $thumbnail_url, 'http' ) !== 0 ) {
-											$thumbnail_url = site_url( $thumbnail_url );
+										if ( strpos( $preview_url, 'http' ) !== 0 ) {
+											if ( strpos( $preview_url, '/' ) === 0 ) {
+												$preview_url = site_url( $preview_url );
+											} else {
+												$preview_url = content_url( $preview_url );
+											}
 										}
 										?>
-										<img src="<?php echo esc_url( $thumbnail_url ); ?>" 
+										<img src="<?php echo esc_url( $preview_url ); ?>" 
 											 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
 											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
-											 onerror="this.onerror=null; this.src='<?php echo esc_js( $image['src'] ); ?>';"
 											 loading="lazy">
 										<?php if ( $is_featured ) : ?>
 											<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
@@ -2422,7 +2375,8 @@ class MetaboxRenderer {
 			$attachment_id = (int) preg_replace( '/[^\d]/', '', $image_param );
 			
 			if ( $attachment_id > 0 ) {
-				$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+				// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+				$image_url = wp_get_attachment_url( $attachment_id );
 				if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
 					$seen_srcs[ $image_url ] = true;
 					// Get alt text from attachment
@@ -2464,7 +2418,8 @@ class MetaboxRenderer {
 				
 				foreach ( $image_ids as $attachment_id ) {
 					if ( $attachment_id > 0 ) {
-						$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+						// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+						$image_url = wp_get_attachment_url( $attachment_id );
 						if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
 							$seen_srcs[ $image_url ] = true;
 							// Get alt text from attachment
@@ -2509,7 +2464,8 @@ class MetaboxRenderer {
 					if ( is_numeric( $image_param ) ) {
 						$attachment_id = (int) $image_param;
 						if ( $attachment_id > 0 ) {
-							$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+							// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+							$image_url = wp_get_attachment_url( $attachment_id );
 							if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
 								$seen_srcs[ $image_url ] = true;
 								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
@@ -2555,7 +2511,8 @@ class MetaboxRenderer {
 						$image_ids = array_map( 'intval', array_filter( explode( ',', $image_param ), 'is_numeric' ) );
 						foreach ( $image_ids as $attachment_id ) {
 							if ( $attachment_id > 0 ) {
-								$image_url = wp_get_attachment_image_url( $attachment_id, 'full' );
+								// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+								$image_url = wp_get_attachment_url( $attachment_id );
 								if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
 									$seen_srcs[ $image_url ] = true;
 									$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
@@ -2668,8 +2625,8 @@ class MetaboxRenderer {
 			return null;
 		}
 		
-		// Get full size image URL
-		$image_url = wp_get_attachment_image_url( $thumbnail_id, 'full' );
+		// Get image URL - usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
+		$image_url = wp_get_attachment_url( $thumbnail_id );
 		if ( ! $image_url ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'get_featured_image_data - No image URL', array( 
