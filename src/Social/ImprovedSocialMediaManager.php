@@ -80,7 +80,16 @@ class ImprovedSocialMediaManager {
 		add_action( 'wp_ajax_fp_seo_get_attachment_url', array( $this, 'ajax_get_attachment_url' ) );
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_social_metabox' ) );
-		add_action( 'save_post', array( $this, 'save_social_meta' ) );
+		
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		// This is more efficient than registering generic hooks and exiting early
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 10, 1 );
+			}
+		}
+		
 		// Use priority 5 to ensure wp.media is loaded early, before other plugins
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5 );
 	}
