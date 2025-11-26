@@ -283,22 +283,25 @@ class Metabox {
 		}
 		
 		// Also register generic hooks as fallback for compatibility
-		// CRITICAL: The save_meta method checks post type FIRST and exits immediately if not supported
+		// CRITICAL: Use priority 20 to run AFTER Nectar Slider (priority 10) to prevent interference
+		// The save_meta method checks post type FIRST and exits immediately if not supported
 		// This prevents ANY interference with unsupported post types (attachments, Nectar Sliders, etc.)
 		if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
-			add_action( 'save_post', array( $this, 'save_meta' ), 10, 3 );
+			add_action( 'save_post', array( $this, 'save_meta' ), 20, 3 );
 		}
 		
 		// Hook aggiuntivo per edit_post (chiamato anche in Gutenberg)
-		// CRITICAL: The save_meta_edit_post method checks post type FIRST and exits immediately if not supported
+		// CRITICAL: Use priority 20 to run AFTER Nectar Slider (priority 10) to prevent interference
+		// The save_meta_edit_post method checks post type FIRST and exits immediately if not supported
 		if ( ! has_action( 'edit_post', array( $this, 'save_meta_edit_post' ) ) ) {
-			add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10, 2 );
+			add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 20, 2 );
 		}
 		
 		// Hook wp_insert_post per catturare anche questo
-		// CRITICAL: The save_meta_insert_post method checks post type FIRST and exits immediately if not supported
+		// CRITICAL: Use priority 20 to run AFTER Nectar Slider (priority 10) to prevent interference
+		// The save_meta_insert_post method checks post type FIRST and exits immediately if not supported
 		if ( ! has_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ) ) ) {
-			add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
+			add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 20, 3 );
 		}
 		
 		// DISABLED - All homepage protection hooks were causing more problems than they solved
