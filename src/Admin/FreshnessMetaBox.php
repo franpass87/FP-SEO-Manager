@@ -41,7 +41,14 @@ class FreshnessMetaBox {
 	public function register(): void {
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
-		add_action( 'save_post', array( $this, 'save_meta' ) );
+		
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 1 );
+			}
+		}
 	}
 
 	/**

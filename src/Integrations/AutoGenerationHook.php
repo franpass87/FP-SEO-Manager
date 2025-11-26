@@ -53,8 +53,13 @@ class AutoGenerationHook {
 		add_action( 'publish_post', array( $this, 'on_publish' ), 10, 2 );
 		add_action( 'publish_page', array( $this, 'on_publish' ), 10, 2 );
 
-		// Hook on post update (existing posts)
-		add_action( 'save_post', array( $this, 'on_update' ), 20, 3 );
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'on_update' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'on_update' ), 20, 3 );
+			}
+		}
 	}
 
 	/**

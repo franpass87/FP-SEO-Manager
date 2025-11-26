@@ -48,8 +48,13 @@ class AutoSeoOptimizer {
 	 * Register hooks.
 	 */
 	public function register(): void {
-		// Hook to post publish/update
-		add_action( 'save_post', array( $this, 'maybe_auto_optimize' ), 20, 3 );
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
+			}
+		}
 		
 		// Admin notice for auto-optimization
 		add_action( 'admin_notices', array( $this, 'show_optimization_notice' ) );

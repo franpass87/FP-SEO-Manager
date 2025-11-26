@@ -23,8 +23,18 @@ class SchemaMetaboxes {
 	 */
 	public function register(): void {
 		add_action( 'add_meta_boxes', array( $this, 'add_metaboxes' ) );
-		add_action( 'save_post', array( $this, 'save_faq_schema' ), 10, 2 );
-		add_action( 'save_post', array( $this, 'save_howto_schema' ), 10, 2 );
+		
+		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ), 10, 2 );
+			}
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ), 10, 2 );
+			}
+		}
+		
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
