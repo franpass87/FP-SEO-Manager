@@ -1913,6 +1913,21 @@ class Metabox {
 			return;
 		}
 		
+		// CRITICAL FIX: Only process supported post types to avoid interfering with other post types
+		// This prevents the plugin from interfering with Nectar Sliders and other custom post types
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta skipped - unsupported post type', array(
+					'post_id' => $post_id,
+					'post_type' => $post_type,
+					'supported_types' => $supported_types,
+				) );
+			}
+			return; // Don't process unsupported post types
+		}
+		
 		// Marca questo post come processato per tutta la request
 		$saved[ $post_key ] = true;
 		
@@ -1976,6 +1991,13 @@ class Metabox {
 	 * @param WP_Post $post    Post object (ignored).
 	 */
 	public function save_meta_edit_post( int $post_id, $post = null ): void {
+		// CRITICAL FIX: Only process supported post types
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Don't process unsupported post types
+		}
+		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta_edit_post called', array(
 				'post_id' => $post_id,
@@ -2145,6 +2167,13 @@ class Metabox {
 	 * @param bool     $update  Whether this is an existing post being updated.
 	 */
 	public function save_meta_insert_post( int $post_id, $post, bool $update ): void {
+		// CRITICAL FIX: Only process supported post types
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Don't process unsupported post types
+		}
+		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta_insert_post called', array(
 				'post_id' => $post_id,
