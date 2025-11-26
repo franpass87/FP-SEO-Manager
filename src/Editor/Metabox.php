@@ -1964,68 +1964,11 @@ class Metabox {
 			) );
 		}
 		
-		// IMPORTANTE: Per la homepage, verifica e correggi lo status PRIMA di salvare i meta fields
-		// Questo previene che il salvataggio dei meta fields interferisca con lo status
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
-		
-		if ( $is_homepage ) {
-			// Verifica lo status PRIMA di salvare i meta fields
-			global $wpdb;
-			$current_status = $wpdb->get_var( $wpdb->prepare(
-				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-				$post_id
-			) );
-			
-			if ( $current_status === 'auto-draft' ) {
-				// Correggi immediatamente PRIMA di salvare i meta fields
-				$wpdb->update(
-					$wpdb->posts,
-					array( 'post_status' => 'publish' ),
-					array( 'ID' => $post_id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-				clean_post_cache( $post_id );
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'Metabox::save_meta - Corrected homepage status BEFORE saving meta fields', array(
-						'post_id' => $post_id,
-						'old_status' => $current_status,
-						'new_status' => 'publish',
-					) );
-				}
-			}
-		}
+		// DISABLED - All homepage status protection code has been removed
+		// The plugin should NOT touch post_status at all - this was causing the Auto Draft issue
 		
 		$saver = new \FP\SEO\Editor\MetaboxSaver();
 		$result = $saver->save_all_fields( $post_id );
-		
-		// Protezione per homepage: verifica e correggi lo status se necessario DOPO il salvataggio
-		if ( $is_homepage ) {
-			$current_post = get_post( $post_id );
-			if ( $current_post instanceof WP_Post && $current_post->post_status === 'auto-draft' ) {
-				// Correggi direttamente nel database
-				global $wpdb;
-				$wpdb->update(
-					$wpdb->posts,
-					array( 'post_status' => 'publish' ),
-					array( 'ID' => $post_id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'posts' );
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'Metabox::save_meta - Corrected homepage status AFTER saving meta fields', array(
-						'post_id' => $post_id,
-						'old_status' => 'auto-draft',
-						'new_status' => 'publish',
-					) );
-				}
-			}
-		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta completed', array(
@@ -2185,32 +2128,8 @@ class Metabox {
 			unset( $_POST['fp_seo_excerpt'], $_POST['fp_seo_excerpt_sent'] );
 			unset( $_POST['fp_seo_performance_metabox_present'] );
 			
-			// Protezione per homepage: verifica e correggi lo status se necessario
-			$page_on_front_id = (int) get_option( 'page_on_front' );
-			if ( $page_on_front_id > 0 && $post->ID === $page_on_front_id && ! $creating ) {
-				$current_post = get_post( $post->ID );
-				if ( $current_post instanceof WP_Post && $current_post->post_status === 'auto-draft' ) {
-					// Recupera lo status originale dal database
-					global $wpdb;
-					$original_status = $wpdb->get_var( $wpdb->prepare(
-						"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-						$post->ID
-					) );
-					
-					if ( $original_status === 'auto-draft' && $current_post->post_date !== '0000-00-00 00:00:00' ) {
-						// Il post ha una data, quindi non dovrebbe essere auto-draft
-						wp_update_post( array(
-							'ID' => $post->ID,
-							'post_status' => 'publish',
-						) );
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::warning( 'Metabox::save_meta_rest - Corrected homepage status from auto-draft', array(
-								'post_id' => $post->ID,
-							) );
-						}
-					}
-				}
-			}
+			// DISABLED - Homepage protection was causing the Auto Draft issue
+			// The plugin should not touch post status at all
 		} else {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'REST API - No SEO fields found in request params', array(
