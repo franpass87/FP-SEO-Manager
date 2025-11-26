@@ -160,6 +160,22 @@ class Metabox {
 			throw new \RuntimeException( $error_msg );
 		}
 
+		// Verifica che CheckHelpText esista prima di istanziare MetaboxRenderer
+		$check_help_text_file = __DIR__ . '/CheckHelpText.php';
+		if ( ! file_exists( $check_help_text_file ) ) {
+			$error_msg = sprintf(
+				'FP SEO: CheckHelpText file not found at %s',
+				$check_help_text_file
+			);
+			Logger::error( $error_msg );
+			throw new \RuntimeException( $error_msg );
+		}
+
+		// Carica CheckHelpText se necessario
+		if ( ! class_exists( 'FP\\SEO\\Editor\\CheckHelpText', false ) ) {
+			require_once $check_help_text_file;
+		}
+
 		// Istanzia il renderer - DEVE funzionare
 		try {
 			$this->renderer = new MetaboxRenderer();
@@ -173,6 +189,9 @@ class Metabox {
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
 				'line' => $e->getLine(),
+				'check_help_text_file' => $check_help_text_file,
+				'check_help_text_exists' => file_exists( $check_help_text_file ),
+				'check_help_text_class_exists' => class_exists( 'FP\\SEO\\Editor\\CheckHelpText', false ),
 			) );
 			throw new \RuntimeException( $error_msg, 0, $e );
 		}
@@ -1821,16 +1840,26 @@ class Metabox {
 				'file' => $e->getFile(),
 				'line' => $e->getLine(),
 				'renderer_null' => is_null( $this->renderer ),
+				'renderer_class' => $this->renderer ? get_class( $this->renderer ) : 'null',
 				'error_type' => get_class( $e ),
 			) );
 			
-			// Mostra errore chiaro - nessun fallback
+			// Mostra errore chiaro con dettagli utili
 			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
 			echo '<p><strong>' . esc_html__( 'Errore critico nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
 			echo '<p>' . esc_html__( 'Impossibile caricare il metabox completo. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			
+			// Mostra sempre il messaggio di errore (non solo in debug)
+			echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
+			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
 				echo '<p><small><strong>File:</strong> ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
+				echo '<p><small><strong>Tipo errore:</strong> ' . esc_html( get_class( $e ) ) . '</small></p>';
+				if ( ! is_null( $this->renderer ) ) {
+					echo '<p><small><strong>Renderer class:</strong> ' . esc_html( get_class( $this->renderer ) ) . '</small></p>';
+				} else {
+					echo '<p><small><strong>Renderer:</strong> null</small></p>';
+				}
 			}
 			echo '</div>';
 		}
