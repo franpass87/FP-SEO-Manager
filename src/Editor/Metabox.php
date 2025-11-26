@@ -1816,18 +1816,7 @@ class Metabox {
 		echo '<p><strong>' . esc_html__( 'ERRORE CRITICO: Il metabox non può essere renderizzato.', 'fp-seo-performance' ) . '</strong></p>';
 		echo '<p>' . esc_html__( 'Contatta il supporto tecnico con i dettagli dell\'errore.', 'fp-seo-performance' ) . '</p>';
 		echo '</div>';
-		// Clear cache before retrieving
-		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
-			clean_post_cache( $post->ID );
-			wp_cache_delete( $post->ID, 'post_meta' );
-			wp_cache_delete( $post->ID, 'posts' );
-			if ( function_exists( 'wp_cache_flush_group' ) ) {
-				wp_cache_flush_group( 'post_meta' );
-			}
-			if ( function_exists( 'update_post_meta_cache' ) ) {
-				update_post_meta_cache( array( $post->ID ) );
-			}
-		}
+		// DISABLED: Cache clearing interferes with WordPress's post object during page load
 
 		$seo_title = ! empty( $post->ID ) && $post->ID > 0 ? get_post_meta( $post->ID, '_fp_seo_title', true ) : '';
 		$meta_desc = ! empty( $post->ID ) && $post->ID > 0 ? get_post_meta( $post->ID, '_fp_seo_meta_description', true ) : '';
@@ -2563,10 +2552,7 @@ class Metabox {
 	 * @return bool
 	 */
 	private function is_post_excluded( int $post_id ): bool {
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		
+		// DISABLED: Cache clearing interferes with WordPress's post object during page load
 		$excluded = get_post_meta( $post_id, self::META_EXCLUDE, true );
 		
 		// Fallback: query diretta al database se get_post_meta restituisce vuoto
@@ -2599,17 +2585,7 @@ class Metabox {
 			throw new \RuntimeException( 'ScoreEngine class not found' );
 		}
 		
-		// Clear cache before retrieving (for AJAX calls)
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
-
+		// DISABLED: Cache clearing interferes with WordPress's post object during page load
 		// Get SEO metadata using MetadataResolver (same pattern as BulkAuditPage)
 		$meta_description = MetadataResolver::resolve_meta_description( $post );
 		$canonical = MetadataResolver::resolve_canonical_url( $post );
