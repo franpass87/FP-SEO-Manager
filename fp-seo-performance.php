@@ -57,7 +57,7 @@ if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 require_once __DIR__ . '/src/Utils/Version.php';
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.20' ) );
+		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.21' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';
