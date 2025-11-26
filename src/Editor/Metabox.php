@@ -294,10 +294,10 @@ class Metabox {
 		// 	add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
 		// }
 		
-		// Hook shutdown come ultima risorsa per correggere lo status della homepage
-		if ( ! has_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ) ) ) {
-			add_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ), 999 );
-		}
+		// DISABLED - This was also causing issues with homepage
+		// if ( ! has_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ) ) ) {
+		// 	add_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ), 999 );
+		// }
 		
 		// DISABLED - Homepage status tracking was causing issues
 		// if ( ! has_action( 'init', array( $this, 'save_homepage_original_status' ) ) ) {
@@ -1643,117 +1643,9 @@ class Metabox {
 			return;
 		}
 		
-		// Use a local variable to avoid modifying the parameter
+		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
+		// All the previous "homepage protection" code was causing more problems than it solved
 		$current_post = $post;
-		
-		// Special handling for homepage: always try to get the real post if it's set as page_on_front
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		$is_homepage_edit = $page_on_front_id > 0 && (
-			( isset( $_GET['post'] ) && absint( $_GET['post'] ) === $page_on_front_id ) ||
-			( isset( $_POST['post_ID'] ) && absint( $_POST['post_ID'] ) === $page_on_front_id ) ||
-			( ! empty( $current_post->ID ) && $current_post->ID === $page_on_front_id )
-		);
-		
-		// If post has auto-draft status but we're editing an existing post, try to get the real post
-		// This happens when WordPress creates a new post object instead of loading the existing one
-		// This is especially common with the homepage
-		if ( ( empty( $current_post->ID ) || $current_post->ID <= 0 ) || 
-		     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' ) ||
-		     ( $is_homepage_edit && ( empty( $current_post->ID ) || $current_post->post_status === 'auto-draft' ) ) ) {
-			
-			// First, try to get post ID from request (most reliable for existing posts)
-			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
-			
-			// IMPORTANTE: Se stiamo modificando la homepage ma il post_id nella richiesta è diverso,
-			// potrebbe essere una pagina auto-draft orfana. Usa sempre l'ID della homepage.
-			if ( $is_homepage_edit && $page_on_front_id > 0 ) {
-				// Se il post_id nella richiesta non corrisponde alla homepage, potrebbe essere un problema
-				if ( $post_id > 0 && $post_id !== $page_on_front_id ) {
-					$requested_post = get_post( $post_id );
-					// Se il post richiesto è auto-draft, è probabilmente una pagina orfana
-					if ( $requested_post instanceof WP_Post && $requested_post->post_status === 'auto-draft' ) {
-						// Usa l'ID della homepage invece
-						$post_id = $page_on_front_id;
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::warning( 'FP SEO: Detected orphan auto-draft page, using homepage ID instead', array(
-								'requested_post_id' => $post_id,
-								'homepage_id' => $page_on_front_id,
-							) );
-						}
-					}
-				} elseif ( $post_id <= 0 ) {
-					// Se non c'è post_id nella richiesta ma stiamo modificando la homepage, usa l'ID della homepage
-					$post_id = $page_on_front_id;
-				}
-			}
-			
-			if ( $post_id > 0 ) {
-				// Pulisci la cache prima di recuperare il post
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'posts' );
-				
-				$retrieved_post = get_post( $post_id );
-				if ( $retrieved_post instanceof WP_Post && $retrieved_post->post_status !== 'auto-draft' ) {
-					$current_post = $retrieved_post;
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::debug( 'FP SEO: Retrieved existing post from request (was auto-draft)', array(
-							'post_id' => $current_post->ID,
-							'post_type' => $current_post->post_type,
-							'post_status' => $current_post->post_status,
-							'original_status' => $post->post_status ?? 'unknown',
-							'is_homepage' => $is_homepage_edit,
-						) );
-					}
-				} elseif ( $retrieved_post instanceof WP_Post && $retrieved_post->post_status === 'auto-draft' && $is_homepage_edit ) {
-					// Se il post recuperato è ancora auto-draft ma stiamo modificando la homepage,
-					// potrebbe essere una pagina orfana. Prova a recuperare direttamente la homepage dal database.
-					global $wpdb;
-					$homepage_post = $wpdb->get_row( $wpdb->prepare(
-						"SELECT * FROM {$wpdb->posts} WHERE ID = %d AND post_type = 'page'",
-						$page_on_front_id
-					), OBJECT );
-					
-					if ( $homepage_post && $homepage_post->post_status !== 'auto-draft' ) {
-						$current_post = get_post( $homepage_post->ID );
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::warning( 'FP SEO: Retrieved homepage directly from database (bypassed auto-draft)', array(
-								'post_id' => $current_post->ID,
-								'post_status' => $current_post->post_status,
-							) );
-						}
-					} else {
-						// Se anche dal database è auto-draft, mantieni il post originale
-						$current_post = $retrieved_post;
-					}
-				} elseif ( $retrieved_post instanceof WP_Post ) {
-					// Post exists but is auto-draft - this is a new post, keep it
-					$current_post = $retrieved_post;
-				}
-			}
-			
-			// If still no valid post, try global
-			if ( ( empty( $current_post->ID ) || $current_post->ID <= 0 ) || 
-			     ( isset( $current_post->post_status ) && $current_post->post_status === 'auto-draft' && $post_id <= 0 ) ) {
-				// Get global post without overwriting the parameter
-				$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
-				if ( isset( $global_post ) && $global_post instanceof WP_Post && 
-				     ! empty( $global_post->ID ) && $global_post->ID > 0 &&
-				     $global_post->post_status !== 'auto-draft' ) {
-					$current_post = $global_post;
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::debug( 'FP SEO: Using global post object in render', array(
-							'post_id' => $current_post->ID,
-							'post_type' => $current_post->post_type,
-							'post_status' => $current_post->post_status,
-							'is_homepage' => $is_homepage_edit,
-						) );
-					}
-				}
-			}
-		}
-		
-		// Use current_post for the rest of the method - don't modify the original $post parameter
-		// to avoid interfering with WordPress's post object handling
 		
 		// Output sempre il nonce e il campo nascosto, anche se il rendering fallisce
 		try {
