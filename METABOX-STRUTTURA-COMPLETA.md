@@ -217,3 +217,6 @@ $this->registry->register( new GEOServiceProvider() );
 **Struttura Finale: COMPLETA E MODULARE** ✅
 
 
+
+
+

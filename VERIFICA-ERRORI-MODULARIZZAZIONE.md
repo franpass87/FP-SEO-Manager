@@ -158,3 +158,6 @@ I seguenti servizi sono utility classes senza hook WordPress, quindi non devono 
 **Verificatore:** AI Assistant  
 **Risultato:** ✅ NESSUN ERRORE TROVATO
 
+
+
+

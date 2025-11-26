@@ -143,3 +143,6 @@ La modularizzazione batch registration è completata:
 **Codice semplificato:** ~95 righe  
 **Pattern estratti:** Batch operations
 
+
+
+

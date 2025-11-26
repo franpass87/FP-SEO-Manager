@@ -120,3 +120,6 @@ La modularizzazione finale è completata con successo:
 **Provider con trait:** 13 (12 boot + 1 Analysis che non boota)  
 **Codice duplicato eliminato:** ~500+ righe
 
+
+
+

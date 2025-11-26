@@ -58,42 +58,57 @@ abstract class AbstractAdminServiceProvider extends AbstractServiceProvider {
 	 * @return void
 	 */
 	final public function boot( Container $container ): void {
-		// Get class name with fallback for edge cases
-		// ErrorLoggingHelper::get_provider_class_name() always returns a non-empty string
 		$class_name = ErrorLoggingHelper::get_provider_class_name( $this );
 		
-		// Check if already booted
+		// Early return if already booted
 		if ( AdminHookManager::is_booted( $class_name ) ) {
 			return;
 		}
 
-		// Check if hooks are already registered for this class
-		$hooks_already_registered = AdminHookManager::are_hooks_registered( $class_name );
-		
-		// Try to boot immediately if we're already in admin context
-		// No need to register hooks since we can boot now
+		// Try immediate boot if already in admin context
 		if ( $this->is_admin_context() ) {
-			try {
-				$this->boot_admin( $container );
-				AdminHookManager::mark_booted( $class_name );
-			} catch ( \Throwable $e ) {
-				// Log error but don't set booted state, allowing retry
-				ErrorLoggingHelper::log_provider_error( $this, 'boot (immediate)', $e );
-				// Re-throw to allow error propagation
-				throw $e;
-			}
+			$this->boot_immediately( $container, $class_name );
 			return;
 		}
 
-		// If hooks are already registered, nothing more to do (we're not in admin context)
-		if ( $hooks_already_registered ) {
+		// If hooks are already registered, nothing more to do
+		if ( AdminHookManager::are_hooks_registered( $class_name ) ) {
 			return;
 		}
 
-		// Store reference to this instance for closures
+		// Register hooks for deferred boot
+		$this->register_deferred_boot( $container, $class_name );
+	}
+
+	/**
+	 * Boot immediately if already in admin context.
+	 *
+	 * @param Container $container The container instance.
+	 * @param string    $class_name The provider class name.
+	 * @return void
+	 */
+	private function boot_immediately( Container $container, string $class_name ): void {
+		try {
+			$this->boot_admin( $container );
+			AdminHookManager::mark_booted( $class_name );
+		} catch ( \Throwable $e ) {
+			// Log error but don't set booted state, allowing retry
+			ErrorLoggingHelper::log_provider_error( $this, 'boot (immediate)', $e );
+			// Re-throw to allow error propagation
+			throw $e;
+		}
+	}
+
+	/**
+	 * Register hooks for deferred boot when admin context becomes available.
+	 *
+	 * @param Container $container The container instance.
+	 * @param string    $class_name The provider class name.
+	 * @return void
+	 */
+	private function register_deferred_boot( Container $container, string $class_name ): void {
 		$provider = $this;
 
-		// Define boot callback once
 		$boot_callback = function() use ( $container, $provider, $class_name ) {
 			// Check if not already booted and in admin context
 			if ( ! AdminHookManager::is_booted( $class_name ) && $provider->is_admin_context() ) {
@@ -110,7 +125,6 @@ abstract class AbstractAdminServiceProvider extends AbstractServiceProvider {
 			}
 		};
 
-		// Register boot hooks using the hook manager
 		AdminHookManager::register_boot_hooks( $class_name, $boot_callback );
 	}
 

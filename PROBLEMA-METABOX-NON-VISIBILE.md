@@ -40,3 +40,6 @@ Il metabox SEO viene registrato correttamente e appare nella lista dei metabox, 
 3. Aggiungere un check per vedere se il contenuto viene generato correttamente
 
 
+
+
+

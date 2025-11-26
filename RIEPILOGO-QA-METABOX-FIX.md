@@ -132,3 +132,6 @@ Dopo queste modifiche:
 **Sessione QA completata** ✅
 
 
+
+
+

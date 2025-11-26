@@ -145,3 +145,6 @@ Il plugin ora ha:
 **Prossimo Passo:** Testare il metabox nell'editor WordPress per verificare che tutto funzioni correttamente.
 
 
+
+
+

@@ -80,3 +80,6 @@ Il plugin è pronto per:
 
 **Checklist completata:** 2025-01-XX
 
+
+
+

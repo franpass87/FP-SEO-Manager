@@ -163,3 +163,6 @@ La modularizzazione con classi base è completata:
 **Codice eliminato:** ~30 righe duplicate  
 **Pattern applicati:** Template Method, DRY
 
+
+
+

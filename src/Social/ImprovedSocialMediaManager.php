@@ -26,6 +26,7 @@ use function get_the_post_thumbnail_url;
 use function get_the_title;
 use function is_singular;
 use function trim;
+use function wp_get_attachment_image_url;
 use function wp_strip_all_tags;
 use function wp_trim_words;
 
@@ -76,10 +77,12 @@ class ImprovedSocialMediaManager {
 		add_action( 'admin_menu', array( $this, 'add_social_menu' ) );
 		add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
 		add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
+		add_action( 'wp_ajax_fp_seo_get_attachment_url', array( $this, 'ajax_get_attachment_url' ) );
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_social_metabox' ) );
 		add_action( 'save_post', array( $this, 'save_social_meta' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		// Use priority 5 to ensure wp.media is loaded early, before other plugins
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5 );
 	}
 
 	/**
@@ -101,7 +104,14 @@ class ImprovedSocialMediaManager {
 
 		if ( $is_fp_seo_page || $is_post_editor ) {
 			// Ensure wp.media is available for image uploads (including featured image)
+			// This must be called early to support WordPress core featured image button
 			wp_enqueue_media();
+			
+			// Also ensure set-post-thumbnail script is loaded (required for featured image button)
+			if ( function_exists( 'wp_enqueue_script' ) ) {
+				wp_enqueue_script( 'set-post-thumbnail' );
+			}
+			
 			wp_enqueue_style( 'fp-seo-ui-system' );
 			wp_enqueue_style( 'fp-seo-notifications' );
 			wp_enqueue_script( 'fp-seo-ui-system' );
@@ -146,10 +156,38 @@ class ImprovedSocialMediaManager {
 	 * @param WP_Post $post Current post.
 	 */
 	public function render_improved_social_metabox( $post ): void {
-		$social_meta = $this->get_social_meta( $post->ID );
-		$preview_data = $this->get_preview_data( $post );
-		
-		wp_nonce_field( 'fp_seo_social_meta', 'fp_seo_social_nonce' );
+		try {
+			// Validate post object
+			if ( ! $post || ! isset( $post->ID ) ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					\FP\SEO\Utils\Logger::error( 'FP SEO: Invalid post object in render_improved_social_metabox', array(
+						'post' => is_object( $post ) ? get_class( $post ) : gettype( $post ),
+					) );
+				}
+				return;
+			}
+
+			$social_meta = $this->get_social_meta( $post->ID );
+			$preview_data = $this->get_preview_data( $post );
+			
+			wp_nonce_field( 'fp_seo_social_meta', 'fp_seo_social_nonce' );
+		} catch ( \Throwable $e ) {
+			// Log error but don't break the page
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				\FP\SEO\Utils\Logger::error( 'FP SEO: Error initializing social metabox', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'post_id' => isset( $post->ID ) ? $post->ID : 0,
+				) );
+			}
+			// Show fallback message
+			echo '<div class="notice notice-warning"><p>';
+			echo esc_html__( 'Impossibile caricare la sezione Social Media. I campi SEO verranno comunque salvati.', 'fp-seo-performance' );
+			echo '</p></div>';
+			return;
+		}
 		?>
 		<div class="fp-seo-ui">
 			<div class="fp-seo-card">
@@ -356,12 +394,55 @@ class ImprovedSocialMediaManager {
 											esc_html__( '%s Image', 'fp-seo-performance' ), 
 											$platform_data['name'] 
 										); ?>
+										<span class="fp-seo-tooltip fp-seo-tooltip-trigger">
+											<span class="fp-seo-tooltip-icon">ℹ</span>
+											<div class="fp-seo-tooltip-content">
+												<?php esc_html_e( 'Se non specificata, verrà utilizzata l\'immagine in evidenza del post come placeholder.', 'fp-seo-performance' ); ?>
+											</div>
+										</span>
 									</label>
 									<div class="fp-seo-form-control-group">
 									<?php 
+									// Get featured image URL using multiple methods for robustness
+									$featured_image_url = '';
+									
+									try {
+										// Method 1: Standard WordPress function
+										$featured_image_url = get_the_post_thumbnail_url( $post->ID, 'full' );
+										
+										// Method 2: Direct meta query if standard method fails
+										if ( empty( $featured_image_url ) ) {
+											$thumbnail_id = get_post_meta( $post->ID, '_thumbnail_id', true );
+											if ( $thumbnail_id && function_exists( 'wp_get_attachment_image_url' ) ) {
+												$featured_image_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+											}
+										}
+										
+										// Method 3: Database query as last resort
+										if ( empty( $featured_image_url ) && function_exists( 'wp_get_attachment_image_url' ) ) {
+											global $wpdb;
+											if ( isset( $wpdb ) && is_object( $wpdb ) ) {
+												$thumbnail_id = $wpdb->get_var( $wpdb->prepare(
+													"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_thumbnail_id' LIMIT 1",
+													$post->ID
+												) );
+												if ( $thumbnail_id ) {
+													$featured_image_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+												}
+											}
+										}
+									} catch ( \Throwable $e ) {
+										// Silently fail - featured image is optional
+										if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+											\FP\SEO\Utils\Logger::debug( 'FP SEO: Error getting featured image', array(
+												'error' => $e->getMessage(),
+												'post_id' => $post->ID,
+											) );
+										}
+									}
+									
 									// Use featured image as default value if no social image is set
 									$image_value = $social_meta[ $platform_id . '_image' ] ?? '';
-									$featured_image_url = get_the_post_thumbnail_url( $post->ID, 'full' );
 									if ( empty( $image_value ) && $featured_image_url ) {
 										$image_value = $featured_image_url;
 									}
@@ -372,13 +453,24 @@ class ImprovedSocialMediaManager {
 										   class="fp-seo-form-control" 
 										   value="<?php echo esc_attr( $image_value ); ?>" 
 										   placeholder="<?php echo esc_attr( $featured_image_url ?: 'https://example.com/image.jpg' ); ?>"
-											   data-fallback-from="post-thumbnail">
+										   data-featured-image="<?php echo esc_attr( $featured_image_url ?: '' ); ?>"
+										   data-fallback-from="post-thumbnail">
 										<button type="button" 
 												class="fp-seo-btn fp-seo-btn-secondary fp-seo-image-select" 
 												data-target="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image"
 												data-preview="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image-preview">
 											<?php esc_html_e( 'Seleziona', 'fp-seo-performance' ); ?>
 										</button>
+										<?php if ( $featured_image_url ) : ?>
+										<button type="button" 
+												class="fp-seo-btn fp-seo-btn-secondary fp-seo-use-featured-image" 
+												data-target="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image"
+												data-preview="fp-seo-<?php echo esc_attr( $platform_id ); ?>-image-preview"
+												data-featured-url="<?php echo esc_attr( $featured_image_url ); ?>"
+												title="<?php esc_attr_e( 'Usa immagine in evidenza', 'fp-seo-performance' ); ?>">
+											<?php esc_html_e( 'Usa Immagine in Evidenza', 'fp-seo-performance' ); ?>
+										</button>
+										<?php endif; ?>
 									</div>
 								</div>
 							</div>
@@ -713,37 +805,89 @@ class ImprovedSocialMediaManager {
 				seoTitle = decodeHtmlEntities(seoTitle);
 				seoDescription = decodeHtmlEntities(seoDescription);
 				
-				// Get featured image URL - try multiple methods
+				// Get featured image URL - try multiple methods for robustness
 				let featuredImageUrl = '';
 				
-				// Method 1: Gutenberg editor
-				if (typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
-					const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
-					if (featuredImageId) {
-						const attachment = wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId);
-						if (attachment && attachment.source_url) {
-							featuredImageUrl = attachment.source_url;
+				// Method 1: Get from data attribute on input field (most reliable)
+				const firstImageInput = $('input[id*="-image"][data-featured-image]').first();
+				if (firstImageInput.length && firstImageInput.data('featured-image')) {
+					featuredImageUrl = firstImageInput.data('featured-image');
+				}
+				
+				// Method 2: Gutenberg editor
+				if (!featuredImageUrl && typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
+					try {
+						const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
+						if (featuredImageId) {
+							const attachment = wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId);
+							if (attachment && attachment.source_url) {
+								featuredImageUrl = attachment.source_url;
+							}
 						}
+					} catch(e) {
+						// Gutenberg not available or error, continue to next method
 					}
 				}
 				
-				// Method 2: Classic editor thumbnail input
+				// Method 3: Classic editor thumbnail input
 				if (!featuredImageUrl) {
 					const thumbnailInput = $('input[name="_thumbnail_id"]');
 					if (thumbnailInput.length && thumbnailInput.val()) {
+						const thumbnailId = thumbnailInput.val();
 						// Try to get from wp.media attachment
 						if (typeof wp !== 'undefined' && wp.media) {
-							const attachment = wp.media.attachment(thumbnailInput.val());
-							if (attachment && attachment.get('url')) {
-								featuredImageUrl = attachment.get('url');
+							try {
+								const attachment = wp.media.attachment(thumbnailId);
+								if (attachment && attachment.get('url')) {
+									featuredImageUrl = attachment.get('url');
+								}
+							} catch(e) {
+								// wp.media not available or error, try AJAX
+								if (typeof ajaxurl !== 'undefined') {
+									$.ajax({
+										url: ajaxurl,
+										type: 'POST',
+										data: {
+											action: 'fp_seo_get_attachment_url',
+											attachment_id: thumbnailId,
+											nonce: '<?php echo wp_create_nonce( 'fp_seo_get_attachment' ); ?>'
+										},
+										success: function(response) {
+											if (response && response.success && response.data && response.data.url) {
+												featuredImageUrl = response.data.url;
+												// Update all image inputs with featured image
+												$('input[id*="-image"]').each(function() {
+													if (!$(this).val()) {
+														$(this).val(featuredImageUrl).trigger('input');
+													}
+												});
+											}
+										}
+									});
+								}
 							}
 						}
 					}
 				}
 				
-				// Method 3: Direct PHP fallback (from initial page load)
+				// Method 4: Direct PHP fallback (from initial page load)
 				if (!featuredImageUrl) {
-					featuredImageUrl = '<?php echo esc_js( get_the_post_thumbnail_url( $post->ID, 'full' ) ?: '' ); ?>';
+					featuredImageUrl = '<?php 
+					// Get featured image using multiple methods
+					$featured_url = '';
+					try {
+						$featured_url = get_the_post_thumbnail_url( $post->ID, 'full' );
+						if ( empty( $featured_url ) && function_exists( 'wp_get_attachment_image_url' ) ) {
+							$thumbnail_id = get_post_meta( $post->ID, '_thumbnail_id', true );
+							if ( $thumbnail_id ) {
+								$featured_url = wp_get_attachment_image_url( (int) $thumbnail_id, 'full' );
+							}
+						}
+					} catch ( \Throwable $e ) {
+						// Silently fail
+					}
+					echo esc_js( $featured_url ?: '' ); 
+					?>';
 				}
 				
 				// Update all platform previews if their fields are empty
@@ -793,41 +937,120 @@ class ImprovedSocialMediaManager {
 				syncFromSerpToSocial();
 			});
 
-			// Listen to featured image changes (Gutenberg and Classic Editor)
+			// Enhanced featured image change detection - multiple methods for robustness
+			// Method 1: Classic editor thumbnail input change
 			$(document).on('change', 'input[name="_thumbnail_id"]', function() {
-				syncFromSerpToSocial();
+				setTimeout(function() {
+					syncFromSerpToSocial();
+				}, 100); // Small delay to ensure value is updated
 			});
 
-			// Also listen for Gutenberg featured image updates
+			// Method 2: Listen for post thumbnail changes via mutation observer (catches plugin interference)
+			if (typeof MutationObserver !== 'undefined') {
+				const thumbnailObserver = new MutationObserver(function(mutations) {
+					mutations.forEach(function(mutation) {
+						if (mutation.type === 'attributes' && mutation.attributeName === 'value') {
+							const target = mutation.target;
+							if (target && target.name === '_thumbnail_id') {
+								setTimeout(function() {
+									syncFromSerpToSocial();
+								}, 100);
+							}
+						}
+					});
+				});
+				
+				// Observe thumbnail input if it exists
+				const thumbnailInput = document.querySelector('input[name="_thumbnail_id"]');
+				if (thumbnailInput) {
+					thumbnailObserver.observe(thumbnailInput, {
+						attributes: true,
+						attributeFilter: ['value']
+					});
+				}
+			}
+
+			// Method 3: Gutenberg featured image updates
 			if (typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
 				let lastFeaturedImageId = null;
 				wp.data.subscribe(function() {
-					const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
-					if (featuredImageId !== lastFeaturedImageId) {
-						lastFeaturedImageId = featuredImageId;
-						if (featuredImageId) {
-							wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId).then(function(attachment) {
-								if (attachment && attachment.source_url) {
-									<?php foreach ( self::PLATFORMS as $platform_id => $platform_data ) : ?>
-									const <?php echo esc_js( $platform_id ); ?>Image = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val();
-									if (!<?php echo esc_js( $platform_id ); ?>Image) {
-										$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', attachment.source_url);
-										// Also update the input field if empty (auto-fill with featured image)
-										$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val(attachment.source_url);
+					try {
+						const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
+						if (featuredImageId !== lastFeaturedImageId) {
+							lastFeaturedImageId = featuredImageId;
+							if (featuredImageId) {
+								wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId).then(function(attachment) {
+									if (attachment && attachment.source_url) {
+										<?php foreach ( self::PLATFORMS as $platform_id => $platform_data ) : ?>
+										const <?php echo esc_js( $platform_id ); ?>Image = $('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val();
+										if (!<?php echo esc_js( $platform_id ); ?>Image) {
+											$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image-preview').attr('src', attachment.source_url);
+											// Also update the input field if empty (auto-fill with featured image)
+											$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').val(attachment.source_url);
+											// Update data attribute
+											$('#fp-seo-<?php echo esc_js( $platform_id ); ?>-image').data('featured-image', attachment.source_url);
+										}
+										<?php endforeach; ?>
 									}
-									<?php endforeach; ?>
-								}
-							}).catch(function() {
-								// Attachment not found, try sync anyway
+								}).catch(function() {
+									// Attachment not found, try sync anyway
+									syncFromSerpToSocial();
+								});
+							} else {
+								// Featured image removed, sync to update previews
 								syncFromSerpToSocial();
-							});
-						} else {
-							// Featured image removed, sync to update previews
-							syncFromSerpToSocial();
+							}
 						}
+					} catch(e) {
+						// Error accessing Gutenberg data, continue silently
 					}
 				});
 			}
+
+			// Method 4: Periodic check for featured image changes (fallback for plugin interference)
+			let lastFeaturedImageCheck = '';
+			setInterval(function() {
+				let currentFeaturedImage = '';
+				
+				// Check Gutenberg
+				if (typeof wp !== 'undefined' && wp.data && wp.data.select('core/editor')) {
+					try {
+						const featuredImageId = wp.data.select('core/editor').getEditedPostAttribute('featured_media');
+						if (featuredImageId) {
+							const attachment = wp.data.select('core').getEntityRecord('postType', 'attachment', featuredImageId);
+							if (attachment && attachment.source_url) {
+								currentFeaturedImage = attachment.source_url;
+							}
+						}
+					} catch(e) {
+						// Ignore errors
+					}
+				}
+				
+				// Check classic editor
+				if (!currentFeaturedImage) {
+					const thumbnailInput = $('input[name="_thumbnail_id"]');
+					if (thumbnailInput.length && thumbnailInput.val()) {
+						const thumbnailId = thumbnailInput.val();
+						if (typeof wp !== 'undefined' && wp.media) {
+							try {
+								const attachment = wp.media.attachment(thumbnailId);
+								if (attachment && attachment.get('url')) {
+									currentFeaturedImage = attachment.get('url');
+								}
+							} catch(e) {
+								// Ignore errors
+							}
+						}
+					}
+				}
+				
+				// If featured image changed, sync
+				if (currentFeaturedImage && currentFeaturedImage !== lastFeaturedImageCheck) {
+					lastFeaturedImageCheck = currentFeaturedImage;
+					syncFromSerpToSocial();
+				}
+			}, 1000); // Check every second
 
 			// Listen to social field changes to update previews
 			$('.fp-seo-character-counter').on('input', function() {
@@ -909,6 +1132,73 @@ class ImprovedSocialMediaManager {
 					});
 					
 					frame.open();
+				} else {
+					FPSeoUI.showNotification('Media library not available. Please refresh the page.', 'error');
+				}
+			});
+
+			// Handle "Cambia Immagine" button in live preview
+			$('.fp-seo-social-preview-image-overlay button').on('click', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				
+				// Find the parent preview card to get the platform
+				const $previewCard = $(this).closest('.fp-seo-social-preview-card');
+				if (!$previewCard.length) {
+					return;
+				}
+				
+				// Extract platform from class (e.g., fp-seo-social-preview-facebook -> facebook)
+				const platformMatch = $previewCard.attr('class').match(/fp-seo-social-preview-(\w+)/);
+				if (!platformMatch) {
+					return;
+				}
+				
+				const platform = platformMatch[1];
+				const targetField = `#fp-seo-${platform}-image`;
+				const previewTarget = `#fp-seo-${platform}-image-preview`;
+				
+				if (typeof wp !== 'undefined' && wp.media) {
+					const frame = wp.media({
+						title: 'Select Social Media Image',
+						button: {
+							text: 'Use Image'
+						},
+						multiple: false,
+						library: {
+							type: 'image'
+						}
+					});
+					
+					frame.on('select', function() {
+						const attachment = frame.state().get('selection').first().toJSON();
+						$(targetField).val(attachment.url).trigger('input');
+						$(previewTarget).attr('src', attachment.url);
+						
+						FPSeoUI.showNotification('Image updated successfully!', 'success');
+					});
+					
+					frame.open();
+				} else {
+					FPSeoUI.showNotification('Media library not available. Please refresh the page.', 'error');
+				}
+			});
+
+			// Use featured image button
+			$('.fp-seo-use-featured-image').on('click', function() {
+				const $button = $(this);
+				const targetField = $button.data('target');
+				const previewTarget = $button.data('preview');
+				const featuredUrl = $button.data('featured-url');
+				
+				if (featuredUrl) {
+					$(`#${targetField}`).val(featuredUrl).trigger('input');
+					$(`#${previewTarget}`).attr('src', featuredUrl);
+					FPSeoUI.showNotification('Featured image applied successfully!', 'success');
+				} else {
+					// Try to get featured image dynamically
+					syncFromSerpToSocial();
+					FPSeoUI.showNotification('Featured image synced!', 'success');
 				}
 			});
 
@@ -1008,34 +1298,62 @@ class ImprovedSocialMediaManager {
 	 * @return array<string, mixed>
 	 */
 	private function get_social_meta( int $post_id ): array {
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
-		}
-		
-		$cache_key = 'fp_seo_social_meta_' . $post_id;
-		
-		return Cache::remember( $cache_key, function() use ( $post_id ) {
-			$meta = get_post_meta( $post_id, '_fp_seo_social_meta', true );
-			
-			// Fallback: query diretta al database se get_post_meta restituisce vuoto
-			if ( empty( $meta ) ) {
-				global $wpdb;
-				$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_social_meta' ) );
-				if ( $db_value !== null ) {
-					$unserialized = maybe_unserialize( $db_value );
-					$meta = is_array( $unserialized ) ? $unserialized : array();
-				}
+		try {
+			// Clear cache before retrieving
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'post_meta' );
+			wp_cache_delete( $post_id, 'posts' );
+			if ( function_exists( 'wp_cache_flush_group' ) ) {
+				wp_cache_flush_group( 'post_meta' );
+			}
+			if ( function_exists( 'update_post_meta_cache' ) ) {
+				update_post_meta_cache( array( $post_id ) );
 			}
 			
-			return is_array( $meta ) ? $meta : array();
-		}, HOUR_IN_SECONDS );
+			$cache_key = 'fp_seo_social_meta_' . $post_id;
+			
+			return Cache::remember( $cache_key, function() use ( $post_id ) {
+				try {
+					$meta = get_post_meta( $post_id, '_fp_seo_social_meta', true );
+					
+					// Fallback: query diretta al database se get_post_meta restituisce vuoto
+					if ( empty( $meta ) ) {
+						global $wpdb;
+						if ( isset( $wpdb ) && is_object( $wpdb ) && method_exists( $wpdb, 'get_var' ) && method_exists( $wpdb, 'prepare' ) ) {
+							$db_value = $wpdb->get_var( $wpdb->prepare( 
+								"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", 
+								$post_id, 
+								'_fp_seo_social_meta' 
+							) );
+							if ( $db_value !== null ) {
+								$unserialized = maybe_unserialize( $db_value );
+								$meta = is_array( $unserialized ) ? $unserialized : array();
+							}
+						}
+					}
+					
+					return is_array( $meta ) ? $meta : array();
+				} catch ( \Throwable $e ) {
+					// Return empty array on error
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						\FP\SEO\Utils\Logger::debug( 'FP SEO: Error getting social meta', array(
+							'error' => $e->getMessage(),
+							'post_id' => $post_id,
+						) );
+					}
+					return array();
+				}
+			}, HOUR_IN_SECONDS );
+		} catch ( \Throwable $e ) {
+			// Return empty array on error
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				\FP\SEO\Utils\Logger::error( 'FP SEO: Fatal error getting social meta', array(
+					'error' => $e->getMessage(),
+					'post_id' => $post_id,
+				) );
+			}
+			return array();
+		}
 	}
 
 	/**
@@ -1045,39 +1363,77 @@ class ImprovedSocialMediaManager {
 	 * @return array<string, mixed>
 	 */
 	private function get_preview_data( $post ): array {
-		$social_meta = $this->get_social_meta( $post->ID );
-		
-		// Use social meta if available, otherwise use SEO title/description from SERP Optimization
-		// This ensures social preview automatically uses SERP Optimization values as fallback
-		$title = ! empty( $social_meta['facebook_title'] ) 
-			? wp_specialchars_decode( $social_meta['facebook_title'], ENT_QUOTES )
-			: MetadataResolver::resolve_seo_title( $post );
+		try {
+			$social_meta = $this->get_social_meta( $post->ID );
 			
-		// For description: use social meta, then SEO description from SERP Optimization
-		$description = ! empty( $social_meta['facebook_description'] )
-			? wp_specialchars_decode( $social_meta['facebook_description'], ENT_QUOTES )
-			: MetadataResolver::resolve_meta_description( $post );
-		
-		// For image: use social meta if available, then featured image as standard, then default
-		$image = '';
-		$featured_image = get_the_post_thumbnail_url( $post->ID, 'full' );
-		
-		if ( ! empty( $social_meta['facebook_image'] ) ) {
-			$image = esc_url_raw( $social_meta['facebook_image'] );
-		} elseif ( $featured_image ) {
-			// Use featured image as standard when no social image is set
-			$image = $featured_image;
-		} else {
-			// Final fallback to default social image
-			$image = get_option( 'fp_seo_social_default_image', '' );
+			// Use social meta if available, otherwise use SEO title/description from SERP Optimization
+			// This ensures social preview automatically uses SERP Optimization values as fallback
+			$title = '';
+			try {
+				$title = ! empty( $social_meta['facebook_title'] ) 
+					? wp_specialchars_decode( $social_meta['facebook_title'], ENT_QUOTES )
+					: MetadataResolver::resolve_seo_title( $post );
+			} catch ( \Throwable $e ) {
+				$title = get_the_title( $post->ID );
+			}
+			
+			// For description: use social meta, then SEO description from SERP Optimization
+			$description = '';
+			try {
+				$description = ! empty( $social_meta['facebook_description'] )
+					? wp_specialchars_decode( $social_meta['facebook_description'], ENT_QUOTES )
+					: MetadataResolver::resolve_meta_description( $post );
+			} catch ( \Throwable $e ) {
+				$description = get_the_excerpt( $post->ID ) ?: '';
+			}
+			
+			// For image: use social meta if available, then featured image as standard, then default
+			$image = '';
+			try {
+				$featured_image = get_the_post_thumbnail_url( $post->ID, 'full' );
+				
+				if ( ! empty( $social_meta['facebook_image'] ) ) {
+					$image = esc_url_raw( $social_meta['facebook_image'] );
+				} elseif ( $featured_image ) {
+					// Use featured image as standard when no social image is set
+					$image = $featured_image;
+				} else {
+					// Final fallback to default social image
+					$image = get_option( 'fp_seo_social_default_image', '' );
+				}
+			} catch ( \Throwable $e ) {
+				// Silently fail - image is optional
+				$image = '';
+			}
+			
+			$url = '';
+			try {
+				$url = get_permalink( $post->ID );
+			} catch ( \Throwable $e ) {
+				$url = '';
+			}
+			
+			return array(
+				'title' => $title ?: get_the_title( $post->ID ),
+				'description' => $description ?: '',
+				'url' => $url ?: '',
+				'image' => $image ?: '',
+			);
+		} catch ( \Throwable $e ) {
+			// Fallback to basic post data
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				\FP\SEO\Utils\Logger::error( 'FP SEO: Error getting preview data', array(
+					'error' => $e->getMessage(),
+					'post_id' => isset( $post->ID ) ? $post->ID : 0,
+				) );
+			}
+			return array(
+				'title' => get_the_title( $post->ID ),
+				'description' => get_the_excerpt( $post->ID ) ?: '',
+				'url' => get_permalink( $post->ID ) ?: '',
+				'image' => get_the_post_thumbnail_url( $post->ID, 'full' ) ?: '',
+			);
 		}
-		
-		return array(
-			'title' => $title,
-			'description' => $description,
-			'url' => get_permalink( $post->ID ),
-			'image' => $image,
-		);
 	}
 
 	/**
@@ -1446,6 +1802,28 @@ class ImprovedSocialMediaManager {
 		$optimized = $this->optimize_social_with_ai( $post, $platform );
 
 		wp_send_json_success( $optimized );
+	}
+
+	/**
+	 * AJAX handler to get attachment URL.
+	 * Used as fallback when wp.media is not available.
+	 */
+	public function ajax_get_attachment_url(): void {
+		check_ajax_referer( 'fp_seo_get_attachment', 'nonce' );
+
+		$attachment_id = (int) ( $_POST['attachment_id'] ?? 0 );
+
+		if ( ! $attachment_id ) {
+			wp_send_json_error( 'Invalid attachment ID' );
+		}
+
+		$url = wp_get_attachment_image_url( $attachment_id, 'full' );
+
+		if ( ! $url ) {
+			wp_send_json_error( 'Attachment not found' );
+		}
+
+		wp_send_json_success( array( 'url' => $url ) );
 	}
 
 	/**

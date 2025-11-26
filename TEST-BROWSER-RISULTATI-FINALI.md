@@ -71,3 +71,6 @@ Se `WP_DEBUG` è abilitato, cercare nei log:
 
 **NOTA:** Le correzioni sono state implementate. Potrebbe essere necessario ricaricare la pagina o verificare i log per confermare che il boot avvenga correttamente.
 
+
+
+

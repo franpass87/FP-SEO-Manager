@@ -88,3 +88,6 @@ if (function_exists('get_post_types')) {
 echo "<hr>";
 echo "<p><strong>Note:</strong> Questo è un test diagnostico. Verificare che tutto sia TRUE/verde per il corretto funzionamento.</p>";
 
+
+
+

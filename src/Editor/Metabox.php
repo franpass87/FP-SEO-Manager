@@ -318,7 +318,8 @@ class Metabox {
 			// Hook pre_post_update rimosso - usiamo solo save_post per evitare doppi salvataggi
 			// add_filter( 'pre_post_update', array( $this, 'save_meta_pre_update' ), 5, 2 );
 			
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+			// Use priority 5 to ensure wp.media is loaded early, before other plugins
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5, 0 );
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_IMAGES, array( $this, 'handle_save_images_ajax' ) );
@@ -419,7 +420,13 @@ class Metabox {
 		}
 
 		// Ensure wp.media is available for image uploads (including featured image)
+		// This must be called early to support WordPress core featured image button
 		wp_enqueue_media();
+		
+		// Also ensure set-post-thumbnail script is loaded (required for featured image button)
+		if ( function_exists( 'wp_enqueue_script' ) ) {
+			wp_enqueue_script( 'set-post-thumbnail' );
+		}
 		
 		wp_enqueue_style( 'fp-seo-performance-admin' );
 		wp_enqueue_script( 'fp-seo-performance-editor' );

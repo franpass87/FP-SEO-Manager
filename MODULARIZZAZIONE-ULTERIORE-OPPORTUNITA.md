@@ -178,3 +178,6 @@ Il plugin ora ha:
 **Nessuna ulteriore modularizzazione necessaria** 🎉
 
 
+
+
+

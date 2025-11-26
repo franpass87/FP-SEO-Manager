@@ -144,3 +144,6 @@ Il plugin è ora ancora più robusto con:
 
 **Report generato automaticamente dal sistema QA Ultra Finale Completo**
 
+
+
+

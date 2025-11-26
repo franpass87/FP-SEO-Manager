@@ -113,3 +113,6 @@ La modularizzazione ultra è completata:
 **Factory estratte:** 3 metodi privati  
 **Leggibilità:** +300% (register() molto più chiaro)
 
+
+
+

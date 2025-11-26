@@ -82,6 +82,8 @@ trait ServiceRegistrationTrait {
 			return; // Silently skip empty arrays
 		}
 
+		$valid_log_levels = array( 'debug', 'warning', 'error' );
+
 		foreach ( $services as $service_class => $config ) {
 			if ( ! is_string( $service_class ) || empty( $service_class ) ) {
 				continue; // Skip invalid entries
@@ -89,7 +91,11 @@ trait ServiceRegistrationTrait {
 			if ( ! is_array( $config ) ) {
 				continue; // Skip invalid config
 			}
-			$log_level     = $config['log_level'] ?? 'warning';
+			$log_level = $config['log_level'] ?? 'warning';
+			// Validate log_level to prevent invalid values
+			if ( ! in_array( $log_level, $valid_log_levels, true ) ) {
+				$log_level = 'warning'; // Default to warning for invalid values
+			}
 			$error_message = $config['error_message'] ?? '';
 			$this->boot_service( $container, $service_class, $log_level, $error_message );
 		}
@@ -102,7 +108,7 @@ trait ServiceRegistrationTrait {
 	 *
 	 * @param Container $container The container instance.
 	 * @param string[]  $service_classes Array of service class names.
-	 * @param string    $log_level Log level (default: 'warning').
+	 * @param string    $log_level Log level (default: 'warning'). Must be one of: 'debug', 'warning', 'error'.
 	 * @param string    $error_message_prefix Error message prefix (default: 'Failed to register').
 	 * @return void
 	 * @throws \RuntimeException If ServiceBooterTrait is not used.
@@ -114,6 +120,12 @@ trait ServiceRegistrationTrait {
 
 		if ( empty( $service_classes ) ) {
 			return; // Silently skip empty arrays
+		}
+
+		// Validate log_level to prevent invalid values
+		$valid_log_levels = array( 'debug', 'warning', 'error' );
+		if ( ! in_array( $log_level, $valid_log_levels, true ) ) {
+			$log_level = 'warning'; // Default to warning for invalid values
 		}
 
 		foreach ( $service_classes as $service_class ) {

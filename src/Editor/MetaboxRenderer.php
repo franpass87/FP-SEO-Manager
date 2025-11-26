@@ -1388,11 +1388,22 @@ class MetaboxRenderer {
 					</div>
 				<?php else : ?>
 					<div class="fp-seo-images-list" style="display: grid; gap: 16px;">
-						<?php foreach ( $images as $index => $image ) : ?>
-							<div class="fp-seo-image-item" 
+						<?php 
+						// Get featured image URL to identify it
+						$featured_image_url = '';
+						$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
+						if ( $featured_thumbnail_id ) {
+							$featured_image_url = wp_get_attachment_image_url( $featured_thumbnail_id, 'full' );
+						}
+						
+						foreach ( $images as $index => $image ) : 
+							$is_featured = ( ! empty( $featured_image_url ) && $image['src'] === $featured_image_url );
+						?>
+							<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
 								 data-image-index="<?php echo esc_attr( $index ); ?>"
 								 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-								 style="background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; transition: all 0.2s ease;">
+								 data-is-featured="<?php echo $is_featured ? '1' : '0'; ?>"
+								 style="background: #fff; border: <?php echo $is_featured ? '2px solid #10b981' : '1px solid #e5e7eb'; ?>; border-radius: 8px; padding: 16px; transition: all 0.2s ease; <?php echo $is_featured ? 'box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);' : ''; ?>">
 								
 								<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
 									<!-- Image Preview -->
@@ -1400,6 +1411,11 @@ class MetaboxRenderer {
 										<img src="<?php echo esc_url( $image['src'] ); ?>" 
 											 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
 											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px;">
+										<?php if ( $is_featured ) : ?>
+											<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
+												⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
+											</div>
+										<?php endif; ?>
 										<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
 											#<?php echo esc_html( $index + 1 ); ?>
 										</div>
@@ -1625,6 +1641,7 @@ class MetaboxRenderer {
 		// Get content - try both raw and processed
 		$content = $post->post_content;
 		$images = array();
+		$seen_srcs = array(); // Avoid duplicates
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'extract_images_from_content called', array(
@@ -1635,14 +1652,27 @@ class MetaboxRenderer {
 			) );
 		}
 		
+		// First, add featured image if available (most important for SEO)
+		$featured_image = $this->get_featured_image_data( $post->ID );
+		if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
+			$images[] = $featured_image;
+			$seen_srcs[ $featured_image['src'] ] = true;
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'extract_images_from_content - Featured image added', array(
+					'post_id' => $post->ID,
+					'featured_image_src' => $featured_image['src'],
+					'featured_image_id' => $featured_image['attachment_id'] ?? null,
+				) );
+			}
+		}
+		
 		if ( empty( $content ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'extract_images_from_content - Content is empty', array( 'post_id' => $post->ID ) );
 			}
 			return $images;
 		}
-		
-		$seen_srcs = array(); // Avoid duplicates
 		
 		// Check for WPBakery shortcodes
 		$has_wpbakery = strpos( $content, '[vc_' ) !== false 
@@ -2135,6 +2165,70 @@ class MetaboxRenderer {
 		}
 		
 		return null;
+	}
+
+	/**
+	 * Get featured image data for a post.
+	 *
+	 * Uses modern WordPress APIs to get featured image with all metadata.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array{src: string, alt: string, title: string, description: string, attachment_id: int|null}|null Featured image data or null if not set.
+	 */
+	private function get_featured_image_data( int $post_id ): ?array {
+		// Get featured image attachment ID using modern WordPress API
+		$thumbnail_id = get_post_thumbnail_id( $post_id );
+		
+		if ( ! $thumbnail_id || $thumbnail_id <= 0 ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'get_featured_image_data - No thumbnail ID', array( 'post_id' => $post_id ) );
+			}
+			return null;
+		}
+		
+		// Get full size image URL
+		$image_url = wp_get_attachment_image_url( $thumbnail_id, 'full' );
+		if ( ! $image_url ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'get_featured_image_data - No image URL', array( 
+					'post_id' => $post_id,
+					'thumbnail_id' => $thumbnail_id 
+				) );
+			}
+			return null;
+		}
+		
+		// Get attachment post for metadata
+		$attachment = get_post( $thumbnail_id );
+		
+		// Get alt text from attachment meta
+		$alt = get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) ?: '';
+		
+		// Get title from attachment post title
+		$title = $attachment ? $attachment->post_title : '';
+		
+		// Get description from attachment content or excerpt
+		$description = '';
+		if ( $attachment ) {
+			$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+		}
+		
+		// Check for saved custom data from post meta
+		$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+		if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+			$saved = $saved_images[ $image_url ];
+			$alt = $saved['alt'] ?? $alt;
+			$title = $saved['title'] ?? $title;
+			$description = $saved['description'] ?? $description;
+		}
+		
+		return array(
+			'src'           => $image_url,
+			'alt'           => $alt,
+			'title'         => $title,
+			'description'   => $description,
+			'attachment_id' => $thumbnail_id,
+		);
 	}
 }
 

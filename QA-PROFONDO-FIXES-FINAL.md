@@ -148,3 +148,6 @@ Il plugin è ora più robusto e gestisce correttamente i casi edge quando i dati
 
 **Report generato automaticamente dal sistema QA Profondo**
 
+
+
+

@@ -63,3 +63,6 @@ I servizi GEO devono essere bootati solo se GEO è abilitato (già gestito in GE
 - **GEOServiceProvider:** Tutti i servizi GEO inclusi quelli AI-related (7 servizi GEO AI + servizi GEO esistenti)
 
 
+
+
+
