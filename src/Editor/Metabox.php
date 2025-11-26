@@ -3261,19 +3261,31 @@ class Metabox {
 			if ( $updated_content !== $content ) {
 				// Update post content
 				// CRITICAL: Remove our save_post hooks temporarily to prevent recursion
-				remove_action( 'save_post', array( $this, 'save_meta' ), 10 );
-				remove_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10 );
-				remove_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10 );
+				// Use post-type-specific hooks only
+				$supported_types = $this->get_supported_post_types();
+				foreach ( $supported_types as $post_type ) {
+					remove_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10 );
+					remove_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10 );
+					remove_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10 );
+				}
 				
 				wp_update_post( array(
 					'ID'           => $post_id,
 					'post_content' => $updated_content,
 				) );
 				
-				// Re-add our hooks
-				add_action( 'save_post', array( $this, 'save_meta' ), 10, 3 );
-				add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10, 2 );
-				add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
+				// Re-add our hooks (post-type-specific only)
+				foreach ( $supported_types as $post_type ) {
+					if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
+						add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
+					}
+					if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
+						add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
+					}
+					if ( ! has_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ) ) ) {
+						add_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10, 3 );
+					}
+				}
 			}
 
 			// Also update attachment alt text if image is a WordPress attachment
