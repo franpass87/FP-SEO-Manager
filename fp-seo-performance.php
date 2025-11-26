@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.17
+ * Version: 0.9.0-pre.18
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -25,31 +25,29 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * CRITICAL: Completely disable plugin on media library pages to prevent interference.
  * This must be checked BEFORE any plugin code is loaded.
+ * NOTE: Using raw $_SERVER because WordPress functions may not be available yet.
  */
-if ( is_admin() ) {
-	// Check for media library page via $_GET parameters (available before admin_init)
-	$is_media_page = false;
-	
-	// Check request URI for upload.php or media pages
-	if ( isset( $_SERVER['REQUEST_URI'] ) ) {
-		$request_uri = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
-		$is_media_page = (
-			strpos( $request_uri, 'upload.php' ) !== false ||
-			strpos( $request_uri, 'media-upload.php' ) !== false ||
-			strpos( $request_uri, 'async-upload.php' ) !== false ||
-			strpos( $request_uri, 'media-new.php' ) !== false ||
-			( strpos( $request_uri, 'admin-ajax.php' ) !== false && 
-			  isset( $_REQUEST['action'] ) && 
-			  in_array( $_REQUEST['action'], array( 'query-attachments', 'get-attachment', 'send-attachment-to-editor', 'save-attachment', 'save-attachment-compat', 'save-attachment-order', 'upload-attachment', 'image-editor', 'set-attachment-thumbnail', 'delete-post', 'trash-post' ), true )
-			)
-		);
-	}
-	
-	// If on media library page, do NOT load the plugin at all
-	if ( $is_media_page ) {
-		return; // Exit early, plugin will not be loaded
-	}
+$fp_seo_request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
+$fp_seo_ajax_action = isset( $_REQUEST['action'] ) ? $_REQUEST['action'] : '';
+
+$fp_seo_is_media_page = (
+	strpos( $fp_seo_request_uri, 'upload.php' ) !== false ||
+	strpos( $fp_seo_request_uri, 'media-upload.php' ) !== false ||
+	strpos( $fp_seo_request_uri, 'async-upload.php' ) !== false ||
+	strpos( $fp_seo_request_uri, 'media-new.php' ) !== false ||
+	strpos( $fp_seo_request_uri, 'media-sync' ) !== false ||
+	( strpos( $fp_seo_request_uri, 'admin-ajax.php' ) !== false && 
+	  in_array( $fp_seo_ajax_action, array( 'query-attachments', 'get-attachment', 'send-attachment-to-editor', 'save-attachment', 'save-attachment-compat', 'save-attachment-order', 'upload-attachment', 'image-editor', 'set-attachment-thumbnail', 'delete-post', 'trash-post', 'get-post-thumbnail-html' ), true )
+	)
+);
+
+// If on media library page, do NOT load the plugin at all
+if ( $fp_seo_is_media_page ) {
+	return; // Exit early, plugin will not be loaded
 }
+
+// Clean up temporary variables
+unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_media_page );
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 		define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
@@ -58,7 +56,7 @@ if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 require_once __DIR__ . '/src/Utils/Version.php';
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.17' ) );
+		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.18' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';
