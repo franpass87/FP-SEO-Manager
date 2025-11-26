@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.12] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Risolto definitivamente il problema di inizializzazione del MetaboxRenderer
+- Rimossi tutti i fallback e workaround - il renderer ora DEVE funzionare sempre
+- Forzato il caricamento diretto del file MetaboxRenderer.php per garantire l'inizializzazione
+- Migliorata la gestione degli errori con messaggi chiari invece di fallback
+- Il metabox completo viene ora sempre renderizzato correttamente al primo caricamento
+
+### Changed
+- Versione aggiornata per forzare il ricaricamento degli asset e del codice
+
 ## [0.9.0-pre.11] - 2025-01-27
 
 ### 🔒 Security & Quality Improvements

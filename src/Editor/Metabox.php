@@ -75,8 +75,21 @@ class Metabox {
 		
 		// INIZIALIZZA IL RENDERER NEL COSTRUTTORE per garantire che sia sempre disponibile
 		// anche se register() non viene chiamato o fallisce
-		// NON usa try/catch - se fallisce, lancia eccezione per identificare il problema
-		$this->initialize_renderer();
+		// Usa try/catch per permettere la creazione dell'oggetto anche se il renderer fallisce
+		// Il renderer verrà reinizializzato quando necessario in render()
+		try {
+			$this->initialize_renderer();
+		} catch ( \Throwable $e ) {
+			// Log errore ma permette la creazione dell'oggetto
+			// Il renderer verrà reinizializzato quando necessario
+			Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer in constructor', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+			) );
+			$this->renderer = null;
+		}
 		
 		// Registra hook di salvataggio
 		$this->register_hooks();
@@ -184,13 +197,14 @@ class Metabox {
 			throw new \RuntimeException( $error_msg );
 		}
 
-		// Log successo in debug mode
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'FP SEO: MetaboxRenderer initialized successfully', array(
-				'renderer_class' => get_class( $this->renderer ),
-				'has_render_method' => method_exists( $this->renderer, 'render' ),
-			) );
-		}
+		// Log successo sempre (non solo in debug mode) per verificare che funzioni
+		Logger::info( 'FP SEO: MetaboxRenderer initialized successfully', array(
+			'version' => defined( 'FP_SEO_PERFORMANCE_VERSION' ) ? FP_SEO_PERFORMANCE_VERSION : 'unknown',
+			'renderer_class' => get_class( $this->renderer ),
+			'has_render_method' => method_exists( $this->renderer, 'render' ),
+			'renderer_file' => __DIR__ . '/MetaboxRenderer.php',
+			'file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
+		) );
 	}
 
 	/**
