@@ -1490,6 +1490,13 @@ class MetaboxRenderer {
 		Logger::info( 'FP SEO: render_images_section - images extracted', array(
 			'post_id' => $post->ID,
 			'images_count' => count( $images ),
+			'images_preview' => array_slice( array_map( function( $img ) {
+				return array(
+					'src' => substr( $img['src'] ?? '', 0, 100 ),
+					'has_attachment_id' => ! empty( $img['attachment_id'] ?? null ),
+					'attachment_id' => $img['attachment_id'] ?? null,
+				);
+			}, $images ), 0, 5 ), // Prime 5 immagini per debug
 		) );
 		
 		?>
@@ -1523,15 +1530,76 @@ class MetaboxRenderer {
 				<?php else : ?>
 					<div class="fp-seo-images-list" style="display: grid; gap: 16px;">
 						<?php 
+						// Log per debug
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::debug( 'FP SEO: Rendering images list', array(
+								'post_id' => $post->ID,
+								'total_images' => count( $images ),
+							) );
+						}
+						
 						// Get featured image URL to identify it
 						$featured_image_url = '';
+						$featured_image_urls = array(); // Array di URL possibili per la featured image
 						$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
 						if ( $featured_thumbnail_id ) {
 							$featured_image_url = wp_get_attachment_image_url( $featured_thumbnail_id, 'full' );
+							// Aggiungi anche altre varianti dell'URL per il confronto
+							$featured_image_urls[] = $featured_image_url;
+							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'large' );
+							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'medium' );
+							$featured_image_urls[] = wp_get_attachment_image_url( $featured_thumbnail_id, 'thumbnail' );
+							// Normalizza anche l'URL base
+							$featured_image_urls[] = str_replace( home_url(), '', $featured_image_url );
+							$featured_image_urls = array_filter( $featured_image_urls );
 						}
 						
-						foreach ( $images as $index => $image ) : 
-							$is_featured = ( ! empty( $featured_image_url ) && $image['src'] === $featured_image_url );
+						$rendered_count = 0;
+						$skipped_count = 0;
+						
+						// Render tutte le immagini trovate (nessun limite)
+						foreach ( $images as $index => $image ) :
+							// Verifica che l'immagine abbia almeno uno src valido
+							if ( empty( $image['src'] ) ) {
+								$skipped_count++;
+								if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+									Logger::debug( 'FP SEO: Skipping image with empty src', array(
+										'index' => $index,
+										'image' => $image,
+									) );
+								}
+								continue;
+							}
+							
+							// Normalizza l'URL dell'immagine per il confronto
+							$image_src_normalized = $image['src'];
+							if ( strpos( $image_src_normalized, 'http' ) !== 0 ) {
+								if ( strpos( $image_src_normalized, '/' ) === 0 ) {
+									$image_src_normalized = site_url( $image_src_normalized );
+								} else {
+									$image_src_normalized = content_url( $image_src_normalized );
+								}
+							}
+							
+							// Confronta con tutte le varianti della featured image
+							$is_featured = false;
+							if ( ! empty( $featured_image_urls ) ) {
+								foreach ( $featured_image_urls as $featured_url ) {
+									if ( $image['src'] === $featured_url || $image_src_normalized === $featured_url ) {
+										$is_featured = true;
+										break;
+									}
+									// Confronto anche senza query string e fragment
+									$image_src_clean = strtok( $image_src_normalized, '?' );
+									$featured_url_clean = strtok( $featured_url, '?' );
+									if ( $image_src_clean === $featured_url_clean ) {
+										$is_featured = true;
+										break;
+									}
+								}
+							}
+							
+							$rendered_count++;
 						?>
 							<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
 								 data-image-index="<?php echo esc_attr( $index ); ?>"
@@ -1542,9 +1610,35 @@ class MetaboxRenderer {
 								<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
 									<!-- Image Preview -->
 									<div style="position: relative;">
-										<img src="<?php echo esc_url( $image['src'] ); ?>" 
+										<?php
+										// Usa thumbnail WordPress se disponibile, altrimenti l'URL originale
+										$thumbnail_url = $image['src'];
+										$attachment_id = $image['attachment_id'] ?? null;
+										
+										if ( $attachment_id && $attachment_id > 0 ) {
+											// Prova a ottenere la thumbnail ottimizzata
+											$thumbnail = wp_get_attachment_image_url( $attachment_id, 'thumbnail' );
+											if ( $thumbnail ) {
+												$thumbnail_url = $thumbnail;
+											} else {
+												// Fallback a medium se thumbnail non disponibile
+												$medium = wp_get_attachment_image_url( $attachment_id, 'medium' );
+												if ( $medium ) {
+													$thumbnail_url = $medium;
+												}
+											}
+										}
+										
+										// Normalizza URL (assicura che sia assoluto)
+										if ( strpos( $thumbnail_url, 'http' ) !== 0 ) {
+											$thumbnail_url = site_url( $thumbnail_url );
+										}
+										?>
+										<img src="<?php echo esc_url( $thumbnail_url ); ?>" 
 											 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
-											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px;">
+											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
+											 onerror="this.onerror=null; this.src='<?php echo esc_js( $image['src'] ); ?>';"
+											 loading="lazy">
 										<?php if ( $is_featured ) : ?>
 											<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
 												⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
@@ -1641,6 +1735,18 @@ class MetaboxRenderer {
 							</div>
 						<?php endforeach; ?>
 					</div>
+					
+					<?php
+					// Log per debug
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::debug( 'FP SEO: Images rendering completed', array(
+							'post_id' => $post->ID,
+							'total_images' => count( $images ),
+							'rendered_count' => $rendered_count,
+							'skipped_count' => $skipped_count,
+						) );
+					}
+					?>
 					
 					<!-- Save Button -->
 					<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
@@ -1779,18 +1885,47 @@ class MetaboxRenderer {
 		}
 
 		// Get content - try both raw and processed
-		$content = $post->post_content;
+		// Forza il refresh del post per assicurarsi di avere il contenuto più recente
+		clean_post_cache( $post->ID );
+		wp_cache_delete( $post->ID, 'posts' );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		
+		// Recupera il post fresco dal database
+		$fresh_post = get_post( $post->ID );
+		if ( $fresh_post instanceof \WP_Post ) {
+			$post = $fresh_post;
+		}
+		
+		$content = $post->post_content ?? '';
+		
+		// Se il contenuto è vuoto, prova anche a recuperarlo direttamente dal database
+		if ( empty( $content ) && ! empty( $post->ID ) ) {
+			global $wpdb;
+			$db_content = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_content FROM {$wpdb->posts} WHERE ID = %d",
+				$post->ID
+			) );
+			if ( ! empty( $db_content ) ) {
+				$content = $db_content;
+				Logger::info( 'FP SEO: extract_images_from_content - Retrieved content from database', array(
+					'post_id' => $post->ID,
+					'content_length' => strlen( $content ),
+				) );
+			}
+		}
 		$images = array();
 		$seen_srcs = array(); // Avoid duplicates
 		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'extract_images_from_content called', array(
-				'post_id' => $post->ID,
-				'content_length' => strlen( $content ),
-				'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
-				'has_img_tags' => strpos( $content, '<img' ) !== false,
-			) );
-		}
+		// Log sempre (non solo in debug) per tracciare il problema
+		Logger::info( 'FP SEO: extract_images_from_content called', array(
+			'post_id' => $post->ID,
+			'content_length' => strlen( $content ),
+			'content_preview' => substr( $content, 0, 500 ),
+			'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
+			'has_img_tags' => strpos( $content, '<img' ) !== false,
+			'has_img_shortcode' => strpos( $content, '[img' ) !== false || strpos( $content, '[image' ) !== false,
+			'content_empty' => empty( $content ),
+		) );
 		
 		// First, add featured image if available (most important for SEO)
 		try {
@@ -1858,10 +1993,23 @@ class MetaboxRenderer {
 		// For WPBakery, we need to ensure shortcodes are fully processed
 		$processed_content = do_shortcode( $content );
 		
+		Logger::info( 'FP SEO: extract_images_from_content - After do_shortcode', array(
+			'post_id' => $post->ID,
+			'original_length' => strlen( $content ),
+			'processed_length' => strlen( $processed_content ),
+			'has_img_in_processed' => strpos( $processed_content, '<img' ) !== false,
+		) );
+		
 		// If WPBakery is active, try to process shortcodes more thoroughly
 		if ( $has_wpbakery ) {
 			// Try using the_content filter which processes all shortcodes including WPBakery
 			$processed_content = apply_filters( 'the_content', $content );
+			
+			Logger::info( 'FP SEO: extract_images_from_content - After the_content filter', array(
+				'post_id' => $post->ID,
+				'processed_length' => strlen( $processed_content ),
+				'has_img_in_processed' => strpos( $processed_content, '<img' ) !== false,
+			) );
 			
 			// Also try WPBakery's own shortcode processor if available
 			if ( class_exists( 'Vc_Manager' ) ) {
@@ -1870,6 +2018,13 @@ class MetaboxRenderer {
 					$wpbakery_rendered = vc_do_shortcode( $content );
 					if ( ! empty( $wpbakery_rendered ) && $wpbakery_rendered !== $content ) {
 						$processed_content = $wpbakery_rendered . "\n" . $processed_content;
+						
+						Logger::info( 'FP SEO: extract_images_from_content - After vc_do_shortcode', array(
+							'post_id' => $post->ID,
+							'wpbakery_rendered_length' => strlen( $wpbakery_rendered ),
+							'final_processed_length' => strlen( $processed_content ),
+							'has_img_in_processed' => strpos( $processed_content, '<img' ) !== false,
+						) );
 					}
 				}
 			}
@@ -1877,6 +2032,13 @@ class MetaboxRenderer {
 		
 		// Then, extract images from HTML img tags (from both raw and processed content)
 		$content_to_parse = $processed_content . "\n" . $content; // Combine both to catch all images
+		
+		Logger::info( 'FP SEO: extract_images_from_content - Content to parse prepared', array(
+			'post_id' => $post->ID,
+			'content_to_parse_length' => strlen( $content_to_parse ),
+			'has_img_in_content_to_parse' => strpos( $content_to_parse, '<img' ) !== false,
+			'img_count_in_content' => substr_count( $content_to_parse, '<img' ),
+		) );
 		
 		// Usa try/catch per gestire errori di parsing HTML
 		try {
@@ -1894,20 +2056,54 @@ class MetaboxRenderer {
 		}
 		
 		$img_tags = $dom->getElementsByTagName( 'img' );
+		$total_img_tags = $img_tags->length;
+		
+		Logger::info( 'FP SEO: extract_images_from_content - Found img tags in DOM', array(
+			'post_id' => $post->ID,
+			'total_img_tags' => $total_img_tags,
+			'images_before_parsing' => count( $images ),
+		) );
 		
 		foreach ( $img_tags as $index => $img ) {
 			try {
 				$src = $img->getAttribute( 'src' );
 				
-				// Skip if empty or already seen
-				if ( empty( $src ) || isset( $seen_srcs[ $src ] ) ) {
+				// Skip if empty
+				if ( empty( $src ) ) {
 					continue;
 				}
 				
+				// Normalizza URL PRIMA del controllo duplicati
+				$original_src = $src;
+				$normalized_src = $src;
+				if ( strpos( $src, 'http' ) !== 0 ) {
+					// URL relativo - converti in assoluto
+					if ( strpos( $src, '/' ) === 0 ) {
+						// URL assoluto relativo al dominio
+						$normalized_src = site_url( $src );
+					} else {
+						// URL relativo al contenuto
+						$normalized_src = content_url( $src );
+					}
+				}
+				
+				// Controlla duplicati con entrambi gli URL (originale e normalizzato)
+				if ( isset( $seen_srcs[ $src ] ) || isset( $seen_srcs[ $normalized_src ] ) ) {
+					continue;
+				}
+				
+				// Usa l'URL normalizzato come principale
+				$src = $normalized_src;
+				
 				$seen_srcs[ $src ] = true;
+				$seen_srcs[ $original_src ] = true; // Anche l'originale per evitare duplicati
 				
 				// Get attachment ID from URL if it's a WordPress attachment
 				$attachment_id = $this->get_attachment_id_from_url( $src );
+				// Se non trovato con URL normalizzato, prova con l'originale
+				if ( ! $attachment_id && $original_src !== $src ) {
+					$attachment_id = $this->get_attachment_id_from_url( $original_src );
+				}
 				
 				// Get existing alt, title
 				$alt = $img->getAttribute( 'alt' ) ?: '';
@@ -1955,17 +2151,126 @@ class MetaboxRenderer {
 			}
 		}
 		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'extract_images_from_content - Final images count', array(
+		Logger::info( 'FP SEO: extract_images_from_content - After parsing HTML img tags', array(
+			'post_id' => $post->ID,
+			'total_img_tags' => $total_img_tags,
+			'images_after_parsing' => count( $images ),
+			'images_added_from_html' => count( $images ) - ( count( $wpbakery_images ) + ( ! empty( $featured_image ) ? 1 : 0 ) ),
+		) );
+		
+		// Se non abbiamo trovato immagini con DOMDocument ma ci sono tag <img> nel contenuto,
+		// prova a estrarle con regex come fallback
+		if ( $total_img_tags === 0 && strpos( $content_to_parse, '<img' ) !== false ) {
+			Logger::info( 'FP SEO: extract_images_from_content - DOMDocument found no images but content has <img> tags, trying regex extraction', array(
 				'post_id' => $post->ID,
-				'total_images' => count( $images ),
-				'wpbakery_images' => count( $wpbakery_images ),
-				'html_images' => count( $images ) - count( $wpbakery_images ),
-				'has_wpbakery' => $has_wpbakery,
-				'processed_content_length' => strlen( $processed_content ?? '' ),
-				'content_preview' => substr( $content, 0, 500 ),
+				'img_count_in_content' => substr_count( $content_to_parse, '<img' ),
 			) );
+			
+			// Estrai immagini con regex come fallback
+			preg_match_all( '/<img[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $content_to_parse, $regex_matches, PREG_SET_ORDER );
+			
+			if ( ! empty( $regex_matches ) ) {
+				Logger::info( 'FP SEO: extract_images_from_content - Regex found images', array(
+					'post_id' => $post->ID,
+					'regex_matches_count' => count( $regex_matches ),
+				) );
+				
+				foreach ( $regex_matches as $match ) {
+					if ( empty( $match[1] ) ) {
+						continue;
+					}
+					
+					$src = $match[1];
+					
+					// Normalizza URL
+					$original_src = $src;
+					if ( strpos( $src, 'http' ) !== 0 ) {
+						if ( strpos( $src, '/' ) === 0 ) {
+							$src = site_url( $src );
+						} else {
+							$src = content_url( $src );
+						}
+					}
+					
+					// Controlla duplicati
+					if ( isset( $seen_srcs[ $src ] ) || isset( $seen_srcs[ $original_src ] ) ) {
+						continue;
+					}
+					
+					$seen_srcs[ $src ] = true;
+					$seen_srcs[ $original_src ] = true;
+					
+					// Get attachment ID
+					$attachment_id = $this->get_attachment_id_from_url( $src );
+					if ( ! $attachment_id && $original_src !== $src ) {
+						$attachment_id = $this->get_attachment_id_from_url( $original_src );
+					}
+					
+					// Estrai alt e title dal tag completo
+					$full_tag = $match[0];
+					$alt = '';
+					$title = '';
+					if ( preg_match( '/alt=["\']([^"\']*)["\']/i', $full_tag, $alt_match ) ) {
+						$alt = $alt_match[1];
+					}
+					if ( preg_match( '/title=["\']([^"\']*)["\']/i', $full_tag, $title_match ) ) {
+						$title = $title_match[1];
+					}
+					
+					// Get description from attachment
+					$description = '';
+					if ( $attachment_id ) {
+						$attachment = get_post( $attachment_id );
+						if ( $attachment ) {
+							$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+							if ( empty( $alt ) ) {
+								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							}
+						}
+					}
+					
+					// Get saved custom data
+					$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
+					if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
+						$saved = $saved_images[ $src ];
+						$alt = $saved['alt'] ?? $alt;
+						$title = $saved['title'] ?? $title;
+						$description = $saved['description'] ?? $description;
+					}
+					
+					$images[] = array(
+						'src'           => $src,
+						'alt'           => $alt,
+						'title'         => $title,
+						'description'   => $description,
+						'attachment_id' => $attachment_id,
+					);
+				}
+				
+				Logger::info( 'FP SEO: extract_images_from_content - After regex extraction', array(
+					'post_id' => $post->ID,
+					'total_images_after_regex' => count( $images ),
+					'images_added_by_regex' => count( $images ) - ( count( $wpbakery_images ) + ( ! empty( $featured_image ) ? 1 : 0 ) + $total_img_tags ),
+				) );
+			}
 		}
+		
+		// Log sempre (non solo in debug) per tracciare il problema
+		Logger::info( 'FP SEO: extract_images_from_content - Final images count', array(
+			'post_id' => $post->ID,
+			'total_images' => count( $images ),
+			'wpbakery_images' => count( $wpbakery_images ),
+			'html_images' => count( $images ) - count( $wpbakery_images ),
+			'has_wpbakery' => $has_wpbakery,
+			'processed_content_length' => strlen( $processed_content ?? '' ),
+			'images_srcs' => array_map( function( $img ) {
+				return array(
+					'src' => substr( $img['src'] ?? '', 0, 150 ),
+					'has_attachment_id' => ! empty( $img['attachment_id'] ?? null ),
+					'attachment_id' => $img['attachment_id'] ?? null,
+				);
+			}, array_slice( $images, 0, 20 ) ), // Prime 20 immagini per debug
+		) );
 		
 		return $images;
 	}

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.16] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Risolto il problema delle immagini non trovate anche se presenti nel contenuto
+- Aggiunto recupero del contenuto direttamente dal database se risulta vuoto dal post object
+- Aggiunto metodo alternativo di estrazione immagini con regex se DOMDocument non trova immagini
+- Forzato refresh completo della cache del post prima dell'estrazione
+- Aggiunto logging dettagliato per ogni fase del processo (do_shortcode, the_content, vc_do_shortcode, DOM parsing, regex)
+- Aggiunto logging per tracciare quante immagini vengono trovate in ogni fase
+
+### Changed
+- Il contenuto viene ora recuperato anche direttamente dal database se il post object non lo contiene
+- Se DOMDocument non trova immagini ma ci sono tag <img> nel contenuto, viene usato regex come fallback
+- Aggiunto logging sempre attivo (non solo in debug) per tracciare tutto il processo di estrazione
+- Versione aggiornata per forzare il ricaricamento degli asset e del codice
+
+## [0.9.0-pre.15] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Migliorata la normalizzazione degli URL - ora viene fatta PRIMA del controllo duplicati per evitare di perdere immagini
+- Migliorato il confronto per identificare la featured image (confronta con tutte le varianti di dimensione)
+- Aggiunto logging dettagliato per tracciare quante immagini vengono trovate nel DOM vs quante vengono aggiunte
+- Aggiunto logging per tracciare quante immagini vengono renderizzate vs quante vengono saltate
+- Migliorata la gestione degli URL relativi e assoluti durante l'estrazione
+
+### Changed
+- La normalizzazione degli URL ora avviene prima del controllo duplicati per evitare falsi positivi
+- Il confronto featured image ora usa un array di varianti URL invece di un singolo confronto
+- Aggiunto logging sempre attivo (non solo in debug) per tracciare il processo completo
+- Versione aggiornata per forzare il ricaricamento degli asset e del codice
+
+## [0.9.0-pre.14] - 2025-01-27
+
+### Fixed
+- **CRITICAL**: Risolto il problema delle anteprime immagini che non si caricavano o si vedevano solo alcune
+- Le anteprime ora usano le dimensioni ottimizzate di WordPress (thumbnail/medium) invece dell'immagine full-size
+- Normalizzati tutti gli URL delle immagini per assicurare che siano sempre assoluti
+- Aggiunto fallback automatico se l'anteprima non si carica (usa l'immagine originale)
+- Aggiunto controllo per saltare immagini con src vuoto durante il rendering
+- Migliorata la normalizzazione degli URL durante l'estrazione (gestione URL relativi e assoluti)
+- Aggiunto logging dettagliato per tracciare quante immagini vengono trovate e renderizzate
+
+### Changed
+- Le anteprime ora usano `wp_get_attachment_image_url()` con size 'thumbnail' o 'medium' per performance migliori
+- Aggiunto attributo `loading="lazy"` per il lazy loading delle immagini
+- Aggiunto `onerror` handler per fallback automatico se l'anteprima fallisce
+- Versione aggiornata per forzare il ricaricamento degli asset e del codice
+
 ## [0.9.0-pre.13] - 2025-01-27
 
 ### Fixed
