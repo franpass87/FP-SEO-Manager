@@ -266,19 +266,20 @@ class Metabox {
 	 */
 	private function register_hooks(): void {
 		// Hook save_post con priorità 10 (standard WordPress)
-		// Il controllo interno previene esecuzioni multiple tramite static $saved
-		// Priorità 10 garantisce che venga eseguito dopo i controlli di base ma prima della fine
+		// CRITICAL: The save_meta method checks post type FIRST and exits immediately if not supported
+		// This prevents ANY interference with unsupported post types (attachments, Nectar Sliders, etc.)
 		if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
 			add_action( 'save_post', array( $this, 'save_meta' ), 10, 3 );
 		}
 		
 		// Hook aggiuntivo per edit_post (chiamato anche in Gutenberg)
-		// Una sola registrazione è sufficiente grazie al controllo interno
+		// CRITICAL: The save_meta_edit_post method checks post type FIRST and exits immediately if not supported
 		if ( ! has_action( 'edit_post', array( $this, 'save_meta_edit_post' ) ) ) {
 			add_action( 'edit_post', array( $this, 'save_meta_edit_post' ), 10, 2 );
 		}
 		
 		// Hook wp_insert_post per catturare anche questo
+		// CRITICAL: The save_meta_insert_post method checks post type FIRST and exits immediately if not supported
 		if ( ! has_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ) ) ) {
 			add_action( 'wp_insert_post', array( $this, 'save_meta_insert_post' ), 10, 3 );
 		}

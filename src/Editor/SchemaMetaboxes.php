@@ -420,6 +420,16 @@ class SchemaMetaboxes {
 	 * @param \WP_Post $post    Post object.
 	 */
 	public function save_faq_schema( int $post_id, \WP_Post $post ): void {
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		
+		// If not a supported post type, return immediately without any processing
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		// Security checks
 		if ( ! isset( $_POST['fp_seo_faq_schema_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_faq_schema_nonce'] ) ), 'fp_seo_faq_schema_nonce' ) ) {
 			return;
@@ -479,6 +489,16 @@ class SchemaMetaboxes {
 	 * @param \WP_Post $post    Post object.
 	 */
 	public function save_howto_schema( int $post_id, \WP_Post $post ): void {
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		
+		// If not a supported post type, return immediately without any processing
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		// Security checks
 		if ( ! isset( $_POST['fp_seo_howto_schema_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_howto_schema_nonce'] ) ), 'fp_seo_howto_schema_nonce' ) ) {
 			return;

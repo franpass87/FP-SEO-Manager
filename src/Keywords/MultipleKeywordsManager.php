@@ -92,6 +92,16 @@ class MultipleKeywordsManager {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_keywords_meta( int $post_id ): void {
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
+		
+		// If not a supported post type, return immediately without any processing
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			return; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		if ( ! isset( $_POST['fp_seo_keywords_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_keywords_nonce'] ) ), 'fp_seo_keywords_meta' ) ) {
 			return;
 		}
