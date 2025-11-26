@@ -121,19 +121,6 @@ export function initEditorMetabox(config) {
 			}
 
 			ui.applyAnalysis(result, state.isExcluded(), state.isEnabled());
-			
-			// Se il metabox è in modalità fallback, prova a ricaricarlo dopo l'analisi
-			// Questo risolve il problema quando il renderer non è inizializzato all'inizio
-			const isFallbackMode = container.querySelector('.notice-warning') !== null && 
-				container.querySelector('.notice-warning').textContent.includes('Modalità Fallback');
-			
-			if (isFallbackMode) {
-				// Dopo un'analisi riuscita, il renderer dovrebbe essere disponibile
-				// Prova a ricaricare il metabox per mostrare la versione completa
-				setTimeout(() => {
-					checkAndReloadMetabox();
-				}, 1000);
-			}
 		} catch (error) {
 			state.setBusy(false);
 			ui.showError(error.message);
@@ -156,25 +143,4 @@ export function initEditorMetabox(config) {
 		}
 	}
 	
-	/**
-	 * Verifica se il metabox è in modalità fallback e prova a ricaricarlo
-	 */
-	function checkAndReloadMetabox() {
-		const metaboxContainer = document.querySelector('#fp-seo-performance-metabox');
-		if (!metaboxContainer) {
-			return;
-		}
-		
-		const isFallbackMode = metaboxContainer.querySelector('.notice-warning') !== null && 
-			metaboxContainer.querySelector('.notice-warning').textContent.includes('Modalità Fallback');
-		
-		if (isFallbackMode) {
-			// Il metabox è in modalità fallback - prova a ricaricare la pagina per forzare il re-render
-			// Nota: questo è un workaround temporaneo. La soluzione migliore è che il renderer
-			// venga inizializzato correttamente fin dall'inizio (già implementato nel PHP)
-			console.log('FP SEO: Metabox in modalità fallback rilevata. Il renderer dovrebbe essere disponibile ora.');
-			// Non ricarichiamo automaticamente la pagina per non perdere le modifiche dell'utente
-			// L'utente può ricaricare manualmente se necessario
-		}
-	}
 }

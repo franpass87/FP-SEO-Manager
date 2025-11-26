@@ -75,6 +75,7 @@ class Metabox {
 		
 		// INIZIALIZZA IL RENDERER NEL COSTRUTTORE per garantire che sia sempre disponibile
 		// anche se register() non viene chiamato o fallisce
+		// NON usa try/catch - se fallisce, lancia eccezione per identificare il problema
 		$this->initialize_renderer();
 		
 		// Registra hook di salvataggio
@@ -115,83 +116,80 @@ class Metabox {
 			return;
 		}
 
+		// FORZA IL CARICAMENTO DIRETTO DEL FILE - nessun fallback, deve funzionare
+		$renderer_file = __DIR__ . '/MetaboxRenderer.php';
+		
+		if ( ! file_exists( $renderer_file ) ) {
+			$error_msg = sprintf(
+				'FP SEO: MetaboxRenderer file not found at %s',
+				$renderer_file
+			);
+			Logger::error( $error_msg );
+			throw new \RuntimeException( $error_msg );
+		}
+
+		// Carica il file direttamente se la classe non esiste
+		if ( ! class_exists( MetaboxRenderer::class, false ) ) {
+			require_once $renderer_file;
+		}
+
+		// Verifica che la classe esista dopo il caricamento
+		if ( ! class_exists( MetaboxRenderer::class, false ) ) {
+			$error_msg = sprintf(
+				'FP SEO: MetaboxRenderer class not found after loading file. Expected: %s',
+				MetaboxRenderer::class
+			);
+			Logger::error( $error_msg, array(
+				'file' => $renderer_file,
+				'file_exists' => file_exists( $renderer_file ),
+				'is_readable' => is_readable( $renderer_file ),
+			) );
+			throw new \RuntimeException( $error_msg );
+		}
+
+		// Istanzia il renderer - DEVE funzionare
 		try {
-			// Verifica che la classe esista prima di istanziarla (per debug)
-			if ( ! class_exists( MetaboxRenderer::class ) ) {
-				// Prova a forzare il caricamento del file se l'autoloader non l'ha fatto
-				$renderer_file = __DIR__ . '/MetaboxRenderer.php';
-				if ( file_exists( $renderer_file ) ) {
-					require_once $renderer_file;
-				}
-				
-				// Verifica di nuovo se la classe esiste
-				if ( ! class_exists( MetaboxRenderer::class ) ) {
-					throw new \RuntimeException( 'MetaboxRenderer class not found - autoloader may not be working' );
-				}
-			}
-			
-			// Verifica che l'autoloader sia registrato
-			$autoloaders = spl_autoload_functions();
-			if ( empty( $autoloaders ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'FP SEO: No autoloaders registered when initializing MetaboxRenderer' );
-			}
-			
-			// Prova a istanziare direttamente - l'autoloader PSR-4 dovrebbe caricarla automaticamente
 			$this->renderer = new MetaboxRenderer();
-			
-			// Verifica che il renderer sia stato creato correttamente
-			if ( ! $this->renderer instanceof MetaboxRenderer ) {
-				throw new \RuntimeException( 'MetaboxRenderer instance invalid - wrong type returned' );
-			}
-			
-			// Verifica che il renderer abbia il metodo render()
-			if ( ! method_exists( $this->renderer, 'render' ) ) {
-				throw new \RuntimeException( 'MetaboxRenderer instance missing render() method' );
-			}
-			
-			// Log successo in debug mode
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: MetaboxRenderer initialized successfully in __construct()', array(
-					'renderer_class' => get_class( $this->renderer ),
-					'has_render_method' => method_exists( $this->renderer, 'render' ),
-					'autoloaders_count' => is_array( $autoloaders ) ? count( $autoloaders ) : 0,
-				) );
-			}
-		} catch ( \Error $e ) {
-			// Cattura errori fatali (class not found, etc.)
-			Logger::error( 'FP SEO: Fatal error initializing MetaboxRenderer in __construct() (Error)', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'file' => $e->getFile(),
-				'line' => $e->getLine(),
-				'class_exists' => class_exists( MetaboxRenderer::class ),
-				'autoloader_registered' => spl_autoload_functions() !== false,
-				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
-			) );
-			$this->renderer = null;
-		} catch ( \Exception $e ) {
-			// Log errore ma continua - useremo fallback rendering
-			Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer in __construct() (Exception)', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'file' => $e->getFile(),
-				'line' => $e->getLine(),
-				'class_exists' => class_exists( MetaboxRenderer::class ),
-				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
-			) );
-			$this->renderer = null;
 		} catch ( \Throwable $e ) {
-			// Catch-all per qualsiasi altro tipo di errore
-			Logger::error( 'FP SEO: Unexpected error initializing MetaboxRenderer in __construct() (Throwable)', array(
+			$error_msg = sprintf(
+				'FP SEO: Failed to instantiate MetaboxRenderer: %s',
+				$e->getMessage()
+			);
+			Logger::error( $error_msg, array(
 				'error' => $e->getMessage(),
-				'type' => get_class( $e ),
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
 				'line' => $e->getLine(),
-				'class_exists' => class_exists( MetaboxRenderer::class ),
-				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
 			) );
-			$this->renderer = null;
+			throw new \RuntimeException( $error_msg, 0, $e );
+		}
+
+		// Verifica che il renderer sia stato creato correttamente
+		if ( ! $this->renderer instanceof MetaboxRenderer ) {
+			$error_msg = sprintf(
+				'FP SEO: MetaboxRenderer instance invalid. Expected: %s, Got: %s',
+				MetaboxRenderer::class,
+				get_class( $this->renderer )
+			);
+			Logger::error( $error_msg );
+			throw new \RuntimeException( $error_msg );
+		}
+
+		// Verifica che il renderer abbia il metodo render()
+		if ( ! method_exists( $this->renderer, 'render' ) ) {
+			$error_msg = 'FP SEO: MetaboxRenderer instance missing render() method';
+			Logger::error( $error_msg, array(
+				'methods' => get_class_methods( $this->renderer ),
+			) );
+			throw new \RuntimeException( $error_msg );
+		}
+
+		// Log successo in debug mode
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'FP SEO: MetaboxRenderer initialized successfully', array(
+				'renderer_class' => get_class( $this->renderer ),
+				'has_render_method' => method_exists( $this->renderer, 'render' ),
+			) );
 		}
 	}
 
@@ -274,7 +272,16 @@ class Metabox {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::warning( 'FP SEO: Renderer is null in register(), attempting to reinitialize' );
 			}
-			$this->initialize_renderer();
+			try {
+				$this->initialize_renderer();
+			} catch ( \Throwable $e ) {
+				// Se l'inizializzazione fallisce, logga l'errore ma non bloccare register()
+				// Il renderer verrà reinizializzato quando necessario in render()
+				Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in register()', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+			}
 		}
 		
 		// Log stato finale del renderer
@@ -1688,69 +1695,39 @@ class Metabox {
 			}
 		}
 
-		// Se il renderer non è disponibile, prova a reinizializzarlo o mostra fallback
+		// Se il renderer non è disponibile, FORZA la reinizializzazione - nessun fallback
 		if ( ! $this->renderer ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: MetaboxRenderer is null in render(), attempting reinitialization', array(
-					'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
-					'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
+			Logger::error( 'FP SEO: MetaboxRenderer is null in render(), forcing reinitialization', array(
+				'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
+				'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
+			) );
+			
+			// Forza la reinizializzazione - DEVE funzionare
+			try {
+				$this->initialize_renderer();
+			} catch ( \Throwable $e ) {
+				// Se l'inizializzazione fallisce, logga e mostra errore
+				Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
 				) );
+				echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Errore critico: impossibile inizializzare il metabox SEO.', 'fp-seo-performance' ) . '</strong></p>';
+				echo '<p>' . esc_html__( 'Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
+				}
+				echo '</div>';
+				return;
 			}
 			
-			// Tenta di reinizializzare il renderer con verifica delle dipendenze
-			try {
-				// Verifica che la classe esista prima di istanziarla
-				if ( ! class_exists( MetaboxRenderer::class ) ) {
-					// Prova a forzare il caricamento del file se l'autoloader non l'ha fatto
-					$renderer_file = __DIR__ . '/MetaboxRenderer.php';
-					if ( file_exists( $renderer_file ) ) {
-						require_once $renderer_file;
-					}
-					
-					// Verifica di nuovo se la classe esiste
-					if ( ! class_exists( MetaboxRenderer::class ) ) {
-						throw new \RuntimeException( 'MetaboxRenderer class not found after manual load attempt' );
-					}
-				}
-				
-				// Verifica che l'autoloader sia registrato
-				$autoloaders = spl_autoload_functions();
-				if ( empty( $autoloaders ) ) {
-					Logger::error( 'FP SEO: No autoloaders registered when trying to initialize MetaboxRenderer' );
-				}
-				
-				// Tenta di istanziare il renderer
-				$this->renderer = new MetaboxRenderer();
-				
-				// Verifica che il renderer sia stato creato correttamente
-				if ( ! $this->renderer instanceof MetaboxRenderer ) {
-					throw new \RuntimeException( 'MetaboxRenderer instance invalid - wrong type returned' );
-				}
-				
-				// Verifica che il renderer abbia il metodo render()
-				if ( ! method_exists( $this->renderer, 'render' ) ) {
-					throw new \RuntimeException( 'MetaboxRenderer instance missing render() method' );
-				}
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: MetaboxRenderer reinitialized successfully in render()', array(
-						'renderer_class' => get_class( $this->renderer ),
-						'has_render_method' => method_exists( $this->renderer, 'render' ),
-					) );
-				}
-			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
-						'error' => $e->getMessage(),
-						'trace' => $e->getTraceAsString(),
-						'file' => $e->getFile(),
-						'line' => $e->getLine(),
-						'class_exists' => class_exists( MetaboxRenderer::class ),
-						'autoloaders' => spl_autoload_functions() !== false,
-					) );
-				}
-				// Se anche il tentativo fallisce, mostra fallback con campi essenziali
-				$this->render_fallback_fields( $current_post );
+			// Se ancora null dopo la reinizializzazione, è un errore critico
+			if ( ! $this->renderer ) {
+				$error_msg = 'FP SEO: MetaboxRenderer is still null after reinitialization in render()';
+				Logger::error( $error_msg );
+				echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Errore critico: impossibile inizializzare il metabox SEO.', 'fp-seo-performance' ) . '</strong></p>';
+				echo '<p>' . esc_html__( 'Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p></div>';
 				return;
 			}
 		}
@@ -1821,77 +1798,48 @@ class Metabox {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'FP SEO: Metabox rendering completed successfully' );
 			}
-		} catch ( \Error $e ) {
-			// Cattura errori fatali
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Fatal error rendering metabox (Error)', array(
-					'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-					'renderer_null' => is_null( $this->renderer ),
-					'error_type' => get_class( $e ),
-				) );
-			}
-			// Fallback: show basic error message con campi essenziali - FORZA VISIBILITÀ
-			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
-			echo '<p><strong>' . esc_html__( 'Errore fatale nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
-			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				echo '<p><small>Errore: ' . esc_html( $e->getMessage() ) . '</small></p>';
-			}
-			echo '</div>';
-		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Error rendering metabox (Exception)', array(
-					'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-					'renderer_null' => is_null( $this->renderer ),
-					'exception_type' => get_class( $e ),
-				) );
-			}
-			// Fallback: show basic error message con campi essenziali - FORZA VISIBILITÀ
-			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
-			echo '<p><strong>' . esc_html__( 'Errore nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
-			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				echo '<p><small>Errore: ' . esc_html( $e->getMessage() ) . '</small></p>';
-			}
-			echo '</div>';
-			
-			// Mostra almeno i campi essenziali per il salvataggio
-			$this->render_fallback_fields( $current_post );
 		} catch ( \Throwable $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Fatal error rendering metabox', array(
-					'post_id' => $current_post->ID,
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-				) );
-			}
-			// Fallback: show basic error message con campi essenziali
-			echo '<div class="notice notice-error">';
-			echo '<p><strong>' . esc_html__( 'Errore critico nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
-			echo '<p>' . esc_html__( 'I campi SEO verranno comunque salvati. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
-			echo '</div>';
+			// Errore critico - logga e mostra messaggio chiaro
+			Logger::error( 'FP SEO: Critical error rendering metabox', array(
+				'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'renderer_null' => is_null( $this->renderer ),
+				'error_type' => get_class( $e ),
+			) );
 			
-			// Mostra almeno i campi essenziali per il salvataggio
-			$this->render_fallback_fields( $post );
+			// Mostra errore chiaro - nessun fallback
+			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
+			echo '<p><strong>' . esc_html__( 'Errore critico nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'Impossibile caricare il metabox completo. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
+				echo '<p><small><strong>File:</strong> ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
+			}
+			echo '</div>';
 		}
 	}
 	
 	/**
-	 * Render fallback fields quando il renderer principale fallisce.
+	 * DEPRECATED: Render fallback fields - NON PIÙ UTILIZZATO
+	 * Il renderer DEVE funzionare sempre, nessun fallback.
 	 *
 	 * @param WP_Post $post Current post instance.
+	 * @deprecated Questo metodo non dovrebbe mai essere chiamato. Se viene chiamato, c'è un problema critico.
 	 */
 	private function render_fallback_fields( WP_Post $post ): void {
+		// NON RENDERE NULLA - se questo metodo viene chiamato, è un errore critico
+		Logger::error( 'FP SEO: render_fallback_fields() called - this should never happen!', array(
+			'post_id' => $post->ID ?? 0,
+			'backtrace' => wp_debug_backtrace_summary(),
+		) );
+		
+		echo '<div class="notice notice-error">';
+		echo '<p><strong>' . esc_html__( 'ERRORE CRITICO: Il metabox non può essere renderizzato.', 'fp-seo-performance' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'Contatta il supporto tecnico con i dettagli dell\'errore.', 'fp-seo-performance' ) . '</p>';
+		echo '</div>';
 		// Clear cache before retrieving
 		if ( ! empty( $post->ID ) && $post->ID > 0 ) {
 			clean_post_cache( $post->ID );
@@ -2755,6 +2703,7 @@ class Metabox {
 		
 		wp_send_json_success( $payload );
 	}
+
 
 	/**
 	 * Get supported post types for the metabox.
