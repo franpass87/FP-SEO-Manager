@@ -304,10 +304,11 @@ class Metabox {
 			add_action( 'init', array( $this, 'save_homepage_original_status' ), 1 );
 		}
 		
-		// Previeni la creazione di nuove pagine auto-draft quando si modifica la homepage
-		if ( ! has_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ) ) ) {
-			add_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ), 1 );
-		}
+		// DISABLED - Was causing redirects when creating new sliders/CPTs
+		// See prevent_homepage_auto_draft_creation() for details
+		// if ( ! has_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ) ) ) {
+		// 	add_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ), 1 );
+		// }
 		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -2600,67 +2601,14 @@ class Metabox {
 	/**
 	 * Prevents creation of new auto-draft pages when editing homepage.
 	 * Hook: admin_init (priority 1)
+	 * 
+	 * NOTE: This function is DISABLED to prevent interference with other post types.
+	 * The auto-draft detection was causing issues when creating new sliders and other CPTs.
 	 */
 	public function prevent_homepage_auto_draft_creation(): void {
-		// Solo in admin e quando si sta modificando un post
-		if ( ! is_admin() ) {
-			return;
-		}
-		
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		// Verifica se stiamo modificando la homepage
-		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
-		
-		// Se stiamo modificando la homepage, verifica se WordPress sta creando una nuova pagina auto-draft
-		$post_type = isset( $_GET['post_type'] ) ? sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) : '';
-		if ( $post_id === $page_on_front_id || ( $post_id === 0 && $post_type === 'page' ) ) {
-			// Se c'è un post_id nella richiesta ma è 0 o non corrisponde alla homepage, potrebbe essere un problema
-			if ( isset( $_GET['post'] ) && absint( $_GET['post'] ) !== $page_on_front_id && absint( $_GET['post'] ) > 0 ) {
-				$requested_post = get_post( absint( $_GET['post'] ) );
-				// Se il post richiesto è auto-draft e non è la homepage, potrebbe essere una pagina orfana
-				if ( $requested_post instanceof WP_Post && $requested_post->post_status === 'auto-draft' && $requested_post->ID !== $page_on_front_id ) {
-					// Reindirizza alla homepage corretta
-					wp_safe_redirect( admin_url( 'post.php?post=' . $page_on_front_id . '&action=edit' ) );
-					exit;
-				}
-			}
-		}
-		
-		// Verifica se ci sono pagine auto-draft orfane e le elimina (solo se non sono la homepage)
-		global $wpdb;
-		$orphan_auto_drafts = $wpdb->get_results( $wpdb->prepare(
-			"SELECT ID, post_title FROM {$wpdb->posts} 
-			WHERE post_type = 'page' 
-			AND post_status = 'auto-draft' 
-			AND ID != %d
-			AND post_date < DATE_SUB(NOW(), INTERVAL 1 HOUR)
-			LIMIT 10",
-			$page_on_front_id
-		) );
-		
-		if ( ! empty( $orphan_auto_drafts ) ) {
-			foreach ( $orphan_auto_drafts as $orphan ) {
-				// Verifica se la pagina ha contenuto o meta fields - se è completamente vuota, è probabilmente orfana
-				$has_content = ! empty( get_post_field( 'post_content', $orphan->ID ) );
-				$has_meta = ! empty( get_post_meta( $orphan->ID, '_fp_seo_title', true ) );
-				
-				// Se non ha contenuto e non ha meta SEO, è probabilmente una pagina orfana creata per errore
-				if ( ! $has_content && ! $has_meta ) {
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::warning( 'Metabox::prevent_homepage_auto_draft_creation - Found orphan auto-draft page', array(
-							'post_id' => $orphan->ID,
-							'post_title' => $orphan->post_title,
-						) );
-					}
-					// Non eliminiamo automaticamente - l'utente può farlo manualmente
-					// Ma possiamo aggiungere un avviso se necessario
-				}
-			}
-		}
+		// DISABLED - This was causing redirects when creating new sliders/CPTs
+		// The original code was too aggressive and redirected any auto-draft to homepage
+		return;
 	}
 	
 	/**
