@@ -1643,6 +1643,27 @@ class Metabox {
 			return;
 		}
 		
+		// CRITICAL FIX: If we receive an auto-draft but the URL has a specific post ID, 
+		// WordPress is loading the wrong post. Force reload the correct post from the URL.
+		$requested_post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
+		if ( $requested_post_id > 0 && $requested_post_id !== $post->ID ) {
+			// WordPress is passing us the wrong post - reload the correct one
+			$wrong_post_id = $post->ID;
+			$wrong_post_title = $post->post_title;
+			$correct_post = get_post( $requested_post_id );
+			if ( $correct_post instanceof WP_Post ) {
+				$post = $correct_post;
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'FP SEO: WordPress passed wrong post object, corrected', array(
+						'wrong_post_id' => $wrong_post_id,
+						'correct_post_id' => $requested_post_id,
+						'wrong_post_title' => $wrong_post_title,
+						'correct_post_title' => $correct_post->post_title,
+					) );
+				}
+			}
+		}
+		
 		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
 		// All the previous "homepage protection" code was causing more problems than it solved
 		$current_post = $post;
