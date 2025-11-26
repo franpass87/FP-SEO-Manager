@@ -1898,8 +1898,48 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
+		// CRITICAL: Check post type FIRST, before any static tracking
+		// This ensures we don't interfere with unsupported post types at all
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		
+		// DEBUG: Always log when save_meta is called (even for unsupported types)
+		// This helps diagnose why posts aren't saving
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'Metabox::save_meta called', array(
+				'post_id' => $post_id,
+				'post_type' => $post_type,
+				'supported' => in_array( $post_type, $supported_types, true ) ? 'yes' : 'no',
+				'supported_types' => $supported_types,
+				'update' => $update ? 'yes' : 'no',
+				'hook' => current_filter(),
+				'request_uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
+				'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+			) );
+		}
+		
+		// If not a supported post type, return immediately without any processing
+		// This prevents ANY interference with Nectar Sliders, attachments, or other custom post types
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			// Log only once per post type per request to avoid spam
+			static $logged_types = array();
+			if ( ! isset( $logged_types[ $post_type ] ) ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'Metabox::save_meta skipped - unsupported post type (exiting immediately)', array(
+						'post_id' => $post_id,
+						'post_type' => $post_type,
+						'supported_types' => $supported_types,
+						'hook' => current_filter(),
+					) );
+				}
+				$logged_types[ $post_type ] = true;
+			}
+			return; // Exit immediately - no interference with WordPress core saving
+		}
+		
 		// Prevent multiple calls - usa un array statico per tracciare per post_id
 		// Questo previene esecuzioni multiple anche se lo stesso hook viene chiamato più volte
+		// IMPORTANT: This check happens AFTER post type validation
 		static $saved = array();
 		$post_key = (string) $post_id;
 		
@@ -1908,24 +1948,10 @@ class Metabox {
 				Logger::debug( 'Metabox::save_meta already processed for post_id', array(
 					'hook' => current_filter(),
 					'post_id' => $post_id,
+					'post_type' => $post_type,
 				) );
 			}
 			return;
-		}
-		
-		// CRITICAL FIX: Only process supported post types to avoid interfering with other post types
-		// This prevents the plugin from interfering with Nectar Sliders and other custom post types
-		$post_type = get_post_type( $post_id );
-		$supported_types = $this->get_supported_post_types();
-		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta skipped - unsupported post type', array(
-					'post_id' => $post_id,
-					'post_type' => $post_type,
-					'supported_types' => $supported_types,
-				) );
-			}
-			return; // Don't process unsupported post types
 		}
 		
 		// Marca questo post come processato per tutta la request
@@ -1991,16 +2017,33 @@ class Metabox {
 	 * @param WP_Post $post    Post object (ignored).
 	 */
 	public function save_meta_edit_post( int $post_id, $post = null ): void {
-		// CRITICAL FIX: Only process supported post types
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types at all
 		$post_type = get_post_type( $post_id );
 		$supported_types = $this->get_supported_post_types();
+		
+		// If not a supported post type, return immediately without any processing
 		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			return; // Don't process unsupported post types
+			// Log only in debug mode and only once per post type to avoid spam
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				static $logged_types = array();
+				if ( ! isset( $logged_types[ $post_type ] ) ) {
+					Logger::debug( 'Metabox::save_meta_edit_post skipped - unsupported post type', array(
+						'post_id' => $post_id,
+						'post_type' => $post_type,
+						'supported_types' => $supported_types,
+						'hook' => 'edit_post',
+					) );
+					$logged_types[ $post_type ] = true;
+				}
+			}
+			return; // Exit immediately - no interference with WordPress core saving
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta_edit_post called', array(
 				'post_id' => $post_id,
+				'post_type' => $post_type,
 				'hook' => 'edit_post',
 			) );
 		}
@@ -2167,16 +2210,34 @@ class Metabox {
 	 * @param bool     $update  Whether this is an existing post being updated.
 	 */
 	public function save_meta_insert_post( int $post_id, $post, bool $update ): void {
-		// CRITICAL FIX: Only process supported post types
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types at all
 		$post_type = get_post_type( $post_id );
 		$supported_types = $this->get_supported_post_types();
+		
+		// If not a supported post type, return immediately without any processing
 		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			return; // Don't process unsupported post types
+			// Log only in debug mode and only once per post type to avoid spam
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				static $logged_types = array();
+				if ( ! isset( $logged_types[ $post_type ] ) ) {
+					Logger::debug( 'Metabox::save_meta_insert_post skipped - unsupported post type', array(
+						'post_id' => $post_id,
+						'post_type' => $post_type,
+						'supported_types' => $supported_types,
+						'update' => $update ? 'yes' : 'no',
+						'hook' => 'wp_insert_post',
+					) );
+					$logged_types[ $post_type ] = true;
+				}
+			}
+			return; // Exit immediately - no interference with WordPress core saving
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox::save_meta_insert_post called', array(
 				'post_id' => $post_id,
+				'post_type' => $post_type,
 				'update' => $update ? 'yes' : 'no',
 				'hook' => 'wp_insert_post',
 			) );
@@ -2209,7 +2270,21 @@ class Metabox {
 	 * @return array Modified post data.
 	 */
 	public function save_meta_pre_insert( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
+		// NOTE: This method is currently DISABLED (hook is commented out in register_hooks())
+		// It's kept here for reference but should NOT be called
+		// If it's called, we need to check post type FIRST to avoid interference
+		
 		$post_id = isset( $postarr['ID'] ) ? absint( $postarr['ID'] ) : 0;
+		$post_type = isset( $postarr['post_type'] ) ? $postarr['post_type'] : '';
+		
+		// CRITICAL: Check post type FIRST - if not supported, return data unchanged immediately
+		if ( ! empty( $post_type ) ) {
+			$supported_types = $this->get_supported_post_types();
+			if ( ! in_array( $post_type, $supported_types, true ) ) {
+				// Return data unchanged - no interference with unsupported post types
+				return $data;
+			}
+		}
 		
 		// IMPORTANTE: Non modificare lo status del post - questo potrebbe causare che WordPress tratti
 		// un post esistente come nuovo (auto-draft)
