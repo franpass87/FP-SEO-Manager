@@ -118,7 +118,22 @@ class Metabox {
 		try {
 			// Verifica che la classe esista prima di istanziarla (per debug)
 			if ( ! class_exists( MetaboxRenderer::class ) ) {
-				throw new \RuntimeException( 'MetaboxRenderer class not found - autoloader may not be working' );
+				// Prova a forzare il caricamento del file se l'autoloader non l'ha fatto
+				$renderer_file = __DIR__ . '/MetaboxRenderer.php';
+				if ( file_exists( $renderer_file ) ) {
+					require_once $renderer_file;
+				}
+				
+				// Verifica di nuovo se la classe esiste
+				if ( ! class_exists( MetaboxRenderer::class ) ) {
+					throw new \RuntimeException( 'MetaboxRenderer class not found - autoloader may not be working' );
+				}
+			}
+			
+			// Verifica che l'autoloader sia registrato
+			$autoloaders = spl_autoload_functions();
+			if ( empty( $autoloaders ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'FP SEO: No autoloaders registered when initializing MetaboxRenderer' );
 			}
 			
 			// Prova a istanziare direttamente - l'autoloader PSR-4 dovrebbe caricarla automaticamente
@@ -139,6 +154,7 @@ class Metabox {
 				Logger::debug( 'FP SEO: MetaboxRenderer initialized successfully in __construct()', array(
 					'renderer_class' => get_class( $this->renderer ),
 					'has_render_method' => method_exists( $this->renderer, 'render' ),
+					'autoloaders_count' => is_array( $autoloaders ) ? count( $autoloaders ) : 0,
 				) );
 			}
 		} catch ( \Error $e ) {
@@ -150,6 +166,7 @@ class Metabox {
 				'line' => $e->getLine(),
 				'class_exists' => class_exists( MetaboxRenderer::class ),
 				'autoloader_registered' => spl_autoload_functions() !== false,
+				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
 			) );
 			$this->renderer = null;
 		} catch ( \Exception $e ) {
@@ -160,6 +177,7 @@ class Metabox {
 				'file' => $e->getFile(),
 				'line' => $e->getLine(),
 				'class_exists' => class_exists( MetaboxRenderer::class ),
+				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
 			) );
 			$this->renderer = null;
 		} catch ( \Throwable $e ) {
@@ -171,6 +189,7 @@ class Metabox {
 				'file' => $e->getFile(),
 				'line' => $e->getLine(),
 				'class_exists' => class_exists( MetaboxRenderer::class ),
+				'renderer_file_exists' => file_exists( __DIR__ . '/MetaboxRenderer.php' ),
 			) );
 			$this->renderer = null;
 		}
@@ -1678,16 +1697,56 @@ class Metabox {
 				) );
 			}
 			
-			// Tenta di reinizializzare il renderer
+			// Tenta di reinizializzare il renderer con verifica delle dipendenze
 			try {
+				// Verifica che la classe esista prima di istanziarla
+				if ( ! class_exists( MetaboxRenderer::class ) ) {
+					// Prova a forzare il caricamento del file se l'autoloader non l'ha fatto
+					$renderer_file = __DIR__ . '/MetaboxRenderer.php';
+					if ( file_exists( $renderer_file ) ) {
+						require_once $renderer_file;
+					}
+					
+					// Verifica di nuovo se la classe esiste
+					if ( ! class_exists( MetaboxRenderer::class ) ) {
+						throw new \RuntimeException( 'MetaboxRenderer class not found after manual load attempt' );
+					}
+				}
+				
+				// Verifica che l'autoloader sia registrato
+				$autoloaders = spl_autoload_functions();
+				if ( empty( $autoloaders ) ) {
+					Logger::error( 'FP SEO: No autoloaders registered when trying to initialize MetaboxRenderer' );
+				}
+				
+				// Tenta di istanziare il renderer
 				$this->renderer = new MetaboxRenderer();
+				
+				// Verifica che il renderer sia stato creato correttamente
+				if ( ! $this->renderer instanceof MetaboxRenderer ) {
+					throw new \RuntimeException( 'MetaboxRenderer instance invalid - wrong type returned' );
+				}
+				
+				// Verifica che il renderer abbia il metodo render()
+				if ( ! method_exists( $this->renderer, 'render' ) ) {
+					throw new \RuntimeException( 'MetaboxRenderer instance missing render() method' );
+				}
+				
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: MetaboxRenderer reinitialized successfully in render()' );
+					Logger::debug( 'FP SEO: MetaboxRenderer reinitialized successfully in render()', array(
+						'renderer_class' => get_class( $this->renderer ),
+						'has_render_method' => method_exists( $this->renderer, 'render' ),
+					) );
 				}
 			} catch ( \Throwable $e ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
 						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+						'file' => $e->getFile(),
+						'line' => $e->getLine(),
+						'class_exists' => class_exists( MetaboxRenderer::class ),
+						'autoloaders' => spl_autoload_functions() !== false,
 					) );
 				}
 				// Se anche il tentativo fallisce, mostra fallback con campi essenziali
@@ -1882,6 +1941,7 @@ class Metabox {
 		echo '<div class="notice notice-warning" style="margin: 0 0 15px 0; padding: 12px;">';
 		echo '<p><strong>' . esc_html__( 'FP SEO Manager - Modalità Fallback', 'fp-seo-performance' ) . '</strong></p>';
 		echo '<p>' . esc_html__( 'Il metabox completo non è disponibile, ma i campi SEO essenziali sono disponibili qui sotto.', 'fp-seo-performance' ) . '</p>';
+		echo '<p><small>' . esc_html__( 'Suggerimento: dopo aver eseguito l\'analisi SEO, ricarica la pagina per vedere il metabox completo.', 'fp-seo-performance' ) . '</small></p>';
 		echo '</div>';
 		
 		// SEO Title

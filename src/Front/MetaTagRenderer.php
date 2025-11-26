@@ -19,6 +19,8 @@ use function esc_url;
 use function get_permalink;
 use function get_post;
 use function get_queried_object_id;
+use function get_site_icon_url;
+use function has_site_icon;
 use function html_entity_decode;
 use function is_admin;
 use function is_feed;
@@ -39,6 +41,8 @@ class MetaTagRenderer {
 	 */
 	public function register(): void {
 		add_action( 'wp_head', array( $this, 'render_meta_tags' ), 0 );
+		// Output favicon for SERP compatibility (priority 2 to run after WordPress default)
+		add_action( 'wp_head', array( $this, 'render_favicon' ), 2 );
 		// Filter document title to use SEO title if different from post title
 		add_filter( 'pre_get_document_title', array( $this, 'filter_document_title' ), 10, 1 );
 		add_filter( 'document_title_parts', array( $this, 'filter_document_title_parts' ), 10, 1 );
@@ -91,6 +95,39 @@ class MetaTagRenderer {
 		}
 
 		echo "<!-- End FP SEO Performance Meta Tags -->\n";
+	}
+
+	/**
+	 * Render favicon links for SERP compatibility.
+	 * 
+	 * Ensures favicon is properly outputted for Google Search Results.
+	 * Google requires favicon to be accessible and properly sized.
+	 * 
+	 * Note: WordPress outputs site icon with priority 99 via wp_site_icon().
+	 * This function runs earlier (priority 2) to add fallback if no site icon is configured.
+	 */
+	public function render_favicon(): void {
+		// Skip in admin, feeds, and previews
+		if ( is_admin() || is_feed() || is_preview() ) {
+			return;
+		}
+
+		// If WordPress has a site icon configured, it will be outputted by wp_site_icon() 
+		// with priority 99, so we don't need to duplicate it here.
+		// We only add a fallback if no site icon is configured.
+		if ( has_site_icon() ) {
+			// WordPress will handle it, but we can enhance it via filter if needed
+			return;
+		}
+
+		// No site icon configured - provide fallback for SERP compatibility
+		// Try to use default favicon.ico in root
+		$default_favicon = home_url( '/favicon.ico' );
+		
+		echo "\n<!-- FP SEO Performance Favicon (Fallback) -->\n";
+		echo '<link rel="icon" href="' . esc_url( $default_favicon ) . '" sizes="32x32">' . "\n";
+		echo '<link rel="icon" href="' . esc_url( $default_favicon ) . '" sizes="192x192">' . "\n";
+		echo "<!-- End FP SEO Performance Favicon -->\n";
 	}
 
 	/**
