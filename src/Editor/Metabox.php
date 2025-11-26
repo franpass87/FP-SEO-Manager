@@ -2928,6 +2928,19 @@ class Metabox {
 			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
 		}
 
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		
+		// If not a supported post type, return error immediately
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			wp_send_json_error( array( 
+				'message' => __( 'This post type is not supported for SEO optimization.', 'fp-seo-performance' ),
+				'post_type' => $post_type,
+			), 400 );
+		}
+
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
 		}
@@ -3180,6 +3193,19 @@ class Metabox {
 
 		if ( $post_id <= 0 ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
+		}
+
+		// CRITICAL: Check post type FIRST, before any processing
+		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		
+		// If not a supported post type, return error immediately
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			wp_send_json_error( array( 
+				'message' => __( 'This post type is not supported for image optimization.', 'fp-seo-performance' ),
+				'post_type' => $post_type,
+			), 400 );
 		}
 
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
