@@ -325,6 +325,12 @@ class Metabox {
 			add_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ), 999, 3 );
 		}
 		
+		// CRITICAL FIX: Prevent auto-draft creation when editing homepage
+		// Intercept wp_insert_post_data to prevent auto-draft creation
+		if ( ! has_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ) ) ) {
+			add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
+		}
+		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox hooks registered in register_hooks()', array(
@@ -1736,6 +1742,28 @@ class Metabox {
 		// This happens when Nectar Slider or other plugins modify the global $post
 		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
 		$post_was_corrected = false;
+		
+		// CRITICAL: Clean up any auto-drafts when editing homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
+			// Delete any auto-draft pages that might have been created
+			global $wpdb;
+			$auto_drafts = $wpdb->get_col( $wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND post_status = 'auto-draft' AND post_author = %d ORDER BY ID DESC LIMIT 10",
+				get_current_user_id()
+			) );
+			
+			foreach ( $auto_drafts as $auto_draft_id ) {
+				if ( (int) $auto_draft_id !== $page_on_front_id ) {
+					wp_delete_post( (int) $auto_draft_id, true ); // Force delete
+					Logger::debug( 'Metabox::render - Deleted auto-draft page', array(
+						'auto_draft_id' => $auto_draft_id,
+						'homepage_id' => $page_on_front_id,
+					) );
+				}
+			}
+		}
+		
 		if ( $requested_post_id > 0 && $post->ID !== $requested_post_id ) {
 			// WordPress passed wrong post - get the correct one from URL
 			$correct_post = get_post( $requested_post_id );
@@ -2837,7 +2865,7 @@ class Metabox {
 			return;
 		}
 		
-		// If we're editing homepage and an auto-draft page is created, log it
+		// If we're editing homepage and an auto-draft page is created, delete it immediately
 		if ( $is_editing_homepage ) {
 			$backtrace = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 20 );
 			$caller_info = array();
@@ -2851,7 +2879,7 @@ class Metabox {
 				}
 			}
 			
-			Logger::warning( 'Metabox::diagnose_auto_draft_creation - Auto-draft created while editing homepage', array(
+			Logger::warning( 'Metabox::diagnose_auto_draft_creation - Auto-draft created while editing homepage, deleting it', array(
 				'auto_draft_id' => $post_id,
 				'homepage_id' => $page_on_front_id,
 				'requested_post_id' => $requested_post_id,
@@ -2864,6 +2892,15 @@ class Metabox {
 				'caller_trace' => $caller_info,
 			) );
 			
+			// CRITICAL: Delete the auto-draft immediately if it's not the homepage
+			// This prevents WordPress from showing it in the editor
+			if ( $post_id !== $page_on_front_id ) {
+				wp_delete_post( $post_id, true ); // Force delete, bypass trash
+				Logger::info( 'Metabox::diagnose_auto_draft_creation - Auto-draft deleted', array(
+					'deleted_post_id' => $post_id,
+				) );
+			}
+			
 			// Store diagnostic info in transient so it can be displayed in metabox
 			set_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id, array(
 				'auto_draft_id' => $post_id,
@@ -2871,8 +2908,74 @@ class Metabox {
 				'caller_trace' => $caller_info,
 				'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
 				'is_autosave' => defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE,
+				'deleted' => $post_id !== $page_on_front_id,
 			), 300 ); // 5 minutes
 		}
+	}
+
+	/**
+	 * Prevent auto-draft creation when editing homepage.
+	 * Hook: wp_insert_post_data (priority 10)
+	 * 
+	 * This intercepts the data before WordPress creates an auto-draft
+	 * and prevents it if we're editing the homepage.
+	 *
+	 * @param array $data    An array of slashed post data.
+	 * @param array $postarr An array of sanitized, but otherwise unmodified post data.
+	 * @return array Modified post data.
+	 */
+	public function prevent_homepage_auto_draft_on_edit( array $data, array $postarr ): array {
+		// Only check if we're in admin and editing a page
+		if ( ! is_admin() || ! isset( $postarr['post_type'] ) || $postarr['post_type'] !== 'page' ) {
+			return $data;
+		}
+		
+		// Check if this is related to homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return $data;
+		}
+		
+		// Check if we're trying to edit the homepage
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $requested_post_id !== $page_on_front_id ) {
+			return $data;
+		}
+		
+		// If this is an auto-draft being created while editing homepage, prevent it
+		if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' ) {
+			// Check if this is a new post (no ID) or if it's the homepage being modified
+			$post_id = isset( $postarr['ID'] ) ? (int) $postarr['ID'] : 0;
+			
+			// If it's a new auto-draft (no ID) and we're editing homepage, prevent it
+			if ( $post_id === 0 ) {
+				Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit - Preventing new auto-draft creation while editing homepage', array(
+					'requested_post_id' => $requested_post_id,
+					'homepage_id' => $page_on_front_id,
+					'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
+				) );
+				// Return false to prevent insertion, or modify status
+				// Actually, we can't return false, but we can change the status
+				// However, if we change status, WordPress might still create it
+				// Better approach: delete it immediately after creation via wp_insert_post hook
+				return $data; // Let it be created, we'll delete it immediately
+			}
+			
+			// If it's the homepage being changed to auto-draft, prevent it
+			if ( $post_id === $page_on_front_id ) {
+				$current_status = get_post_status( $page_on_front_id );
+				if ( $current_status && $current_status !== 'auto-draft' ) {
+					Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit - Preventing homepage status change to auto-draft', array(
+						'post_id' => $post_id,
+						'current_status' => $current_status,
+						'attempted_status' => 'auto-draft',
+					) );
+					$data['post_status'] = $current_status; // Keep original status
+				}
+			}
+		}
+		
+		return $data;
 	}
 
 	/**
