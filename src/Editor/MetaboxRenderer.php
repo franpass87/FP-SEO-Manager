@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Editor;
 
+use FP\SEO\Editor\ImageExtractor;
 use FP\SEO\Integrations\GscData;
 use FP\SEO\Utils\Logger;
 use FP\SEO\Utils\Options;
@@ -1442,34 +1443,17 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_images_section( WP_Post $post ): void {
-		// Log sempre (non solo in debug) per tracciare se viene chiamato
-		Logger::info( 'FP SEO: render_images_section called', array(
+		// CRITICAL: Do NOT extract images during initial rendering
+		// Images will be loaded lazily via AJAX to avoid any interference
+		Logger::info( 'FP SEO: render_images_section called (lazy-loaded)', array(
 			'post_id' => $post->ID,
 			'has_content' => ! empty( $post->post_content ),
 		) );
-
-		try {
-		$images = $this->extract_images_from_content( $post );
-		} catch ( \Throwable $e ) {
-			Logger::error( 'FP SEO: Error extracting images from content', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'post_id' => $post->ID,
-			) );
-			$images = array(); // Continua con array vuoto invece di fallire completamente
-		}
 		
-		Logger::info( 'FP SEO: render_images_section - images extracted', array(
-				'post_id' => $post->ID,
-				'images_count' => count( $images ),
-			'images_preview' => array_slice( array_map( function( $img ) {
-				return array(
-					'src' => substr( $img['src'] ?? '', 0, 100 ),
-					'has_attachment_id' => ! empty( $img['attachment_id'] ?? null ),
-					'attachment_id' => $img['attachment_id'] ?? null,
-				);
-			}, $images ), 0, 5 ), // Prime 5 immagini per debug
-		) );
+		// Get AJAX URL and nonce for lazy loading
+		$ajax_url = admin_url( 'admin-ajax.php' );
+		$nonce = wp_create_nonce( Metabox::NONCE_ACTION );
+		$post_id = $post->ID;
 		
 		?>
 		<!-- Section: Images Optimization -->
@@ -1490,201 +1474,33 @@ class MetaboxRenderer {
 					Aggiungi alt text descrittivi, titoli e descrizioni per tutte le immagini presenti nel contenuto. Questo migliora l'accessibilità e aiuta Google a comprendere meglio le tue immagini.
 				</p>
 				
-				<?php if ( empty( $images ) ) : ?>
+				<!-- Lazy-loaded images container -->
+				<div id="fp-seo-images-container-<?php echo esc_attr( $post_id ); ?>" 
+					 class="fp-seo-images-container"
+					 data-post-id="<?php echo esc_attr( $post_id ); ?>"
+					 data-ajax-url="<?php echo esc_url( $ajax_url ); ?>"
+					 data-nonce="<?php echo esc_attr( $nonce ); ?>"
+					 style="min-height: 100px;">
 					<div style="padding: 24px; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb;">
+						<div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #8b5cf6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px;"></div>
 						<p style="margin: 0; color: #6b7280; font-size: 14px;">
-							<?php esc_html_e( 'Nessuna immagine trovata nel contenuto.', 'fp-seo-performance' ); ?>
+							<?php esc_html_e( 'Caricamento immagini...', 'fp-seo-performance' ); ?>
 						</p>
 						<p style="margin: 8px 0 0; color: #9ca3af; font-size: 12px;">
-							<?php esc_html_e( 'Aggiungi immagini al contenuto per ottimizzarle qui.', 'fp-seo-performance' ); ?>
+							<?php esc_html_e( 'Le immagini vengono estratte in modo sicuro senza interferenze.', 'fp-seo-performance' ); ?>
 						</p>
 					</div>
-				<?php else : ?>
-					<div class="fp-seo-images-list" style="display: grid; gap: 16px;">
-						<?php 
-						// Log per debug
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							Logger::debug( 'FP SEO: Rendering images list', array(
-								'post_id' => $post->ID,
-								'total_images' => count( $images ),
-							) );
-						}
-						
-						// Get featured image ID to identify it - NON usare wp_get_attachment_image_url per evitare interferenze
-						$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
-						
-						$rendered_count = 0;
-						$skipped_count = 0;
-						
-						// Render tutte le immagini trovate (nessun limite)
-						foreach ( $images as $index => $image ) : 
-							// Verifica che l'immagine abbia almeno uno src valido
-							if ( empty( $image['src'] ) ) {
-								$skipped_count++;
-								if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-									Logger::debug( 'FP SEO: Skipping image with empty src', array(
-										'index' => $index,
-										'image' => $image,
-									) );
-								}
-								continue;
-							}
-							
-							// Confronta usando SOLO l'ID dell'attachment - NON interferire con URL o dimensioni
-							$is_featured = false;
-							if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
-								$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
-							}
-							
-							$rendered_count++;
-						?>
-							<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
-								 data-image-index="<?php echo esc_attr( $index ); ?>"
-								 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-								 data-is-featured="<?php echo $is_featured ? '1' : '0'; ?>"
-								 style="background: #fff; border: <?php echo $is_featured ? '2px solid #10b981' : '1px solid #e5e7eb'; ?>; border-radius: 8px; padding: 16px; transition: all 0.2s ease; <?php echo $is_featured ? 'box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);' : ''; ?>">
-								
-								<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
-									<!-- Image Preview -->
-									<div style="position: relative;">
-										<?php
-										// Usa SOLO l'URL originale dell'immagine - NON interferire con WordPress image sizes
-										$preview_url = $image['src'];
-										
-										// Normalizza URL (assicura che sia assoluto)
-										if ( strpos( $preview_url, 'http' ) !== 0 ) {
-											if ( strpos( $preview_url, '/' ) === 0 ) {
-												$preview_url = site_url( $preview_url );
-											} else {
-												$preview_url = content_url( $preview_url );
-											}
-										}
-										?>
-										<img src="<?php echo esc_url( $preview_url ); ?>" 
-											 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
-											 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
-											 loading="lazy">
-										<?php if ( $is_featured ) : ?>
-											<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
-												⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
-											</div>
-										<?php endif; ?>
-										<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-											#<?php echo esc_html( $index + 1 ); ?>
-										</div>
-									</div>
-									
-									<!-- Image Fields -->
-									<div style="display: grid; gap: 12px; flex: 1;">
-										<!-- Image URL (read-only) -->
-										<div>
-											<label style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-												<?php esc_html_e( 'URL Immagine', 'fp-seo-performance' ); ?>
-											</label>
-											<input type="text" 
-												   value="<?php echo esc_attr( $image['src'] ); ?>" 
-												   readonly
-												   style="width: 100%; padding: 6px 10px; font-size: 11px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; font-family: monospace;">
-										</div>
-										
-										<!-- Alt Text -->
-										<div>
-											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
-												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-												<?php esc_html_e( 'Alt Text', 'fp-seo-performance' ); ?>
-												<span style="color: #ef4444;">*</span>
-												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Testo alternativo per accessibilità e SEO. Descrivi l\'immagine in modo chiaro e conciso.', 'fp-seo-performance' ); ?>">ℹ️</span>
-											</label>
-											<input type="text" 
-												   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
-												   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][alt]" 
-												   value="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
-												   placeholder="<?php esc_attr_e( 'es: Foto del B&B Dimora Verde a Mentana', 'fp-seo-performance' ); ?>"
-												   maxlength="125"
-												   data-image-field="alt"
-												   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-												   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 6px; transition: all 0.2s ease;">
-											<div style="display: flex; justify-content: space-between; margin-top: 4px;">
-												<span style="font-size: 10px; color: #9ca3af;">
-													<?php esc_html_e( 'Raccomandato: 5-15 parole descrittive', 'fp-seo-performance' ); ?>
-												</span>
-												<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt-count" 
-													  style="font-size: 10px; font-weight: 600; color: #6b7280;">
-													<?php echo esc_html( mb_strlen( $image['alt'] ?? '' ) ); ?>/125
-												</span>
-											</div>
-										</div>
-										
-										<!-- Title -->
-										<div>
-											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
-												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-												<?php esc_html_e( 'Title', 'fp-seo-performance' ); ?>
-												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Titolo dell\'immagine (attributo title). Appare al passaggio del mouse.', 'fp-seo-performance' ); ?>">ℹ️</span>
-											</label>
-											<input type="text" 
-												   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
-												   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][title]" 
-												   value="<?php echo esc_attr( $image['title'] ?? '' ); ?>"
-												   placeholder="<?php esc_attr_e( 'es: Dimora Verde B&B - Vista esterna', 'fp-seo-performance' ); ?>"
-												   maxlength="200"
-												   data-image-field="title"
-												   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-												   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease;">
-										</div>
-										
-										<!-- Description -->
-										<div>
-											<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
-												   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-												<?php esc_html_e( 'Description', 'fp-seo-performance' ); ?>
-												<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Descrizione estesa dell\'immagine. Utile per contesto aggiuntivo.', 'fp-seo-performance' ); ?>">ℹ️</span>
-											</label>
-											<textarea id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
-													  name="fp_seo_images[<?php echo esc_attr( $index ); ?>][description]" 
-													  rows="2"
-													  maxlength="500"
-													  data-image-field="description"
-													  data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-													  placeholder="<?php esc_attr_e( 'es: Vista panoramica del B&B Dimora Verde situato a Mentana, vicino Roma. Struttura immersa nel verde con giardino e piscina.', 'fp-seo-performance' ); ?>"
-													  style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical; transition: all 0.2s ease; font-family: inherit;"><?php echo esc_textarea( $image['description'] ?? '' ); ?></textarea>
-											<div style="text-align: right; margin-top: 4px;">
-												<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description-count" 
-													  style="font-size: 10px; font-weight: 600; color: #6b7280;">
-													<?php echo esc_html( mb_strlen( $image['description'] ?? '' ) ); ?>/500
-												</span>
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						<?php endforeach; ?>
-					</div>
-					
-					<?php
-					// Log per debug
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::debug( 'FP SEO: Images rendering completed', array(
-							'post_id' => $post->ID,
-							'total_images' => count( $images ),
-							'rendered_count' => $rendered_count,
-							'skipped_count' => $skipped_count,
-						) );
-					}
-					?>
-					
-					<!-- Save Button -->
-					<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
-						<button type="button" 
-								id="fp-seo-save-images" 
-								class="button button-primary">
-							<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>
-						</button>
-						<span id="fp-seo-images-save-status" style="margin-left: 12px; font-size: 12px; color: #10b981; display: none;">
-							✅ <?php esc_html_e( 'Salvato!', 'fp-seo-performance' ); ?>
-						</span>
-					</div>
-				<?php endif; ?>
+				</div>
+				
+				<!-- Images list will be populated here via AJAX -->
+				<div class="fp-seo-images-list" id="fp-seo-images-list-<?php echo esc_attr( $post_id ); ?>" style="display: none; grid; gap: 16px;">
+					<!-- Content will be loaded via AJAX -->
+				</div>
+				
+				<!-- Template for rendering images (used by render_images_section_content) -->
+				<script type="text/template" id="fp-seo-images-template">
+					<!-- This template is used by render_images_section_content when called via AJAX -->
+				</script>
 			</div>
 		</div>
 		
@@ -1699,10 +1515,75 @@ class MetaboxRenderer {
 			border-color: #8b5cf6 !important;
 			box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 		}
+		@keyframes spin {
+			to { transform: rotate(360deg); }
+		}
 		</style>
 		
 		<script>
 		jQuery(document).ready(function($) {
+			// Lazy-load images via AJAX (completely non-interfering)
+			(function() {
+				const containers = document.querySelectorAll('.fp-seo-images-container');
+				containers.forEach(function(container) {
+					const postId = container.dataset.postId;
+					const ajaxUrl = container.dataset.ajaxUrl;
+					const nonce = container.dataset.nonce;
+					const listContainer = document.getElementById('fp-seo-images-list-' + postId);
+					
+					if (!postId || !ajaxUrl || !nonce) {
+						return;
+					}
+					
+					// Load images via AJAX
+					jQuery.ajax({
+						url: ajaxUrl,
+						type: 'POST',
+						data: {
+							action: 'fp_seo_extract_images',
+							post_id: postId,
+							fp_seo_performance_nonce: nonce,
+							force_refresh: false
+						},
+						success: function(response) {
+							if (response.success && response.data && response.data.images && response.data.images.length > 0) {
+								// Hide loading indicator
+								container.style.display = 'none';
+								
+								// Show images list and reload section content
+								if (listContainer) {
+									jQuery.ajax({
+										url: ajaxUrl,
+										type: 'POST',
+										data: {
+											action: 'fp_seo_reload_images_section',
+											post_id: postId,
+											fp_seo_performance_nonce: nonce
+										},
+										success: function(reloadResponse) {
+											if (reloadResponse.success && reloadResponse.data && reloadResponse.data.html) {
+												listContainer.innerHTML = reloadResponse.data.html;
+												listContainer.style.display = 'grid';
+											} else {
+												container.innerHTML = '<div style="padding: 24px; text-align: center; color: #6b7280;">Nessuna immagine trovata.</div>';
+											}
+										},
+										error: function() {
+											container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444;">Errore nel caricamento delle immagini.</div>';
+										}
+									});
+								}
+							} else {
+								container.innerHTML = '<div style="padding: 24px; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb;"><p style="margin: 0; color: #6b7280; font-size: 14px;">Nessuna immagine trovata nel contenuto.</p><p style="margin: 8px 0 0; color: #9ca3af; font-size: 12px;">Aggiungi immagini al contenuto per ottimizzarle qui.</p></div>';
+							}
+						},
+						error: function() {
+							container.innerHTML = '<div style="padding: 24px; text-align: center; color: #ef4444;">Errore nel caricamento delle immagini.</div>';
+						}
+					});
+				});
+			})();
+			
 			// Initialize character counters on page load
 			$('[id*="-alt"]').each(function() {
 				const $field = $(this);
@@ -1755,33 +1636,33 @@ class MetaboxRenderer {
 					const index = $item.data('image-index');
 					const src = $item.data('image-src');
 					
-					imagesData[src] = {
-						alt: $item.find('[name*="[alt]"]').val() || '',
-						title: $item.find('[name*="[title]"]').val() || '',
-						description: $item.find('[name*="[description]"]').val() || '',
-					};
+					if (src) {
+						imagesData[src] = {
+							alt: $item.find('[name*="[alt]"]').val() || '',
+							title: $item.find('[name*="[title]"]').val() || '',
+							description: $item.find('[name*="[description]"]').val() || ''
+						};
+					}
 				});
 				
-				// Show loading
-				$btn.prop('disabled', true).text('<?php esc_html_e( '⏳ Salvataggio...', 'fp-seo-performance' ); ?>');
+				$btn.prop('disabled', true).text('<?php esc_html_e( 'Salvataggio...', 'fp-seo-performance' ); ?>');
 				$status.hide();
 				
-				// Save via AJAX
-				$.ajax({
+				jQuery.ajax({
 					url: ajaxurl,
 					type: 'POST',
 					data: {
 						action: 'fp_seo_save_images_data',
 						post_id: postId,
-						images: imagesData,
-						nonce: '<?php echo wp_create_nonce( 'fp_seo_images_nonce' ); ?>'
+						images_data: imagesData,
+						fp_seo_performance_nonce: '<?php echo esc_js( wp_create_nonce( Metabox::NONCE_ACTION ) ); ?>'
 					},
 					success: function(response) {
 						if (response.success) {
-							$status.fadeIn().delay(2000).fadeOut();
+							$status.show().fadeOut(3000);
 							$btn.prop('disabled', false).text('<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>');
 						} else {
-							alert('Errore: ' + (response.data || 'Errore sconosciuto'));
+							alert('<?php esc_html_e( 'Errore durante il salvataggio. Riprova.', 'fp-seo-performance' ); ?>');
 							$btn.prop('disabled', false).text('<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>');
 						}
 					},
@@ -1793,6 +1674,165 @@ class MetaboxRenderer {
 			});
 		});
 		</script>
+		<?php
+	}
+	
+	/**
+	 * Legacy method to render image items (used by render_images_section_content).
+	 * 
+	 * This is kept separate to avoid interference with lazy loading.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @param array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}> $images Images array.
+	 * @return void
+	 */
+	private function render_image_items_legacy( WP_Post $post, array $images ): void {
+		if ( empty( $images ) ) {
+			return;
+		}
+		
+		// Get featured image ID
+		$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
+		
+		foreach ( $images as $index => $image ) :
+			if ( empty( $image['src'] ) ) {
+				continue;
+			}
+			
+			$is_featured = false;
+			if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
+				$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
+			}
+			
+			$preview_url = $image['src'];
+			if ( strpos( $preview_url, 'http' ) !== 0 ) {
+				if ( strpos( $preview_url, '/' ) === 0 ) {
+					$preview_url = site_url( $preview_url );
+				} else {
+					$preview_url = content_url( $preview_url );
+				}
+			}
+			?>
+			<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
+				 data-image-index="<?php echo esc_attr( $index ); ?>"
+				 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+				 data-is-featured="<?php echo $is_featured ? '1' : '0'; ?>"
+				 style="background: #fff; border: <?php echo $is_featured ? '2px solid #10b981' : '1px solid #e5e7eb'; ?>; border-radius: 8px; padding: 16px; transition: all 0.2s ease; <?php echo $is_featured ? 'box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);' : ''; ?>">
+				
+				<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
+					<!-- Image Preview -->
+					<div style="position: relative;">
+						<img src="<?php echo esc_url( $preview_url ); ?>" 
+							 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+							 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
+							 loading="lazy">
+						<?php if ( $is_featured ) : ?>
+							<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
+								⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
+							</div>
+						<?php endif; ?>
+						<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+							#<?php echo esc_html( $index + 1 ); ?>
+						</div>
+					</div>
+					
+					<!-- Image Fields -->
+					<div style="display: grid; gap: 12px; flex: 1;">
+						<!-- Image URL (read-only) -->
+						<div>
+							<label style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'URL Immagine', 'fp-seo-performance' ); ?>
+							</label>
+							<input type="text" 
+								   value="<?php echo esc_attr( $image['src'] ); ?>" 
+								   readonly
+								   style="width: 100%; padding: 6px 10px; font-size: 11px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; font-family: monospace;">
+						</div>
+						
+						<!-- Alt Text -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Alt Text', 'fp-seo-performance' ); ?>
+								<span style="color: #ef4444;">*</span>
+								<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Testo alternativo per accessibilità e SEO. Descrivi l\'immagine in modo chiaro e conciso.', 'fp-seo-performance' ); ?>">ℹ️</span>
+							</label>
+							<input type="text" 
+								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][alt]" 
+								   value="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+								   placeholder="<?php esc_attr_e( 'es: Foto del B&B Dimora Verde a Mentana', 'fp-seo-performance' ); ?>"
+								   maxlength="125"
+								   data-image-field="alt"
+								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 6px; transition: all 0.2s ease;">
+							<div style="display: flex; justify-content: space-between; margin-top: 4px;">
+								<span style="font-size: 10px; color: #9ca3af;">
+									<?php esc_html_e( 'Raccomandato: 5-15 parole descrittive', 'fp-seo-performance' ); ?>
+								</span>
+								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt-count" 
+									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+									<?php echo esc_html( mb_strlen( $image['alt'] ?? '' ) ); ?>/125
+								</span>
+							</div>
+						</div>
+						
+						<!-- Title -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Title', 'fp-seo-performance' ); ?>
+								<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Titolo dell\'immagine (attributo title). Appare al passaggio del mouse.', 'fp-seo-performance' ); ?>">ℹ️</span>
+							</label>
+							<input type="text" 
+								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][title]" 
+								   value="<?php echo esc_attr( $image['title'] ?? '' ); ?>"
+								   placeholder="<?php esc_attr_e( 'es: Dimora Verde B&B - Vista esterna', 'fp-seo-performance' ); ?>"
+								   maxlength="200"
+								   data-image-field="title"
+								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease;">
+						</div>
+						
+						<!-- Description -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Description', 'fp-seo-performance' ); ?>
+								<span class="fp-seo-tooltip-trigger" style="margin-left: 4px; cursor: help;" title="<?php esc_attr_e( 'Descrizione estesa dell\'immagine. Utile per contesto aggiuntivo.', 'fp-seo-performance' ); ?>">ℹ️</span>
+							</label>
+							<textarea id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+									  name="fp_seo_images[<?php echo esc_attr( $index ); ?>][description]" 
+									  rows="2"
+									  maxlength="500"
+									  data-image-field="description"
+									  data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+									  placeholder="<?php esc_attr_e( 'es: Vista panoramica del B&B Dimora Verde situato a Mentana, vicino Roma. Struttura immersa nel verde con giardino e piscina.', 'fp-seo-performance' ); ?>"
+									  style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; resize: vertical; transition: all 0.2s ease; font-family: inherit;"><?php echo esc_textarea( $image['description'] ?? '' ); ?></textarea>
+							<div style="text-align: right; margin-top: 4px;">
+								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description-count" 
+									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+									<?php echo esc_html( mb_strlen( $image['description'] ?? '' ) ); ?>/500
+								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		<?php endforeach; ?>
+		
+		<!-- Save Button -->
+		<div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+			<button type="button" 
+					id="fp-seo-save-images" 
+					class="button button-primary">
+				<?php esc_html_e( '💾 Salva Modifiche Immagini', 'fp-seo-performance' ); ?>
+			</button>
+			<span id="fp-seo-images-save-status" style="margin-left: 12px; font-size: 12px; color: #10b981; display: none;">
+				✅ <?php esc_html_e( 'Salvato!', 'fp-seo-performance' ); ?>
+			</span>
+		</div>
 		<?php
 	}
 
@@ -2349,10 +2389,21 @@ class MetaboxRenderer {
 		// CRITICAL: Extract images from post meta (WPBakery, Nectar Slider, and other plugins store images in post meta)
 		// This is essential for pages that use page builders or sliders that don't store images in post_content
 		try {
-			// CRITICAL: Always check for Nectar Slider images, even if no shortcode is found
-			// Some pages might use sliders without the shortcode in content
-			$is_homepage_check = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
-			if ( $is_homepage_check || strpos( $content, 'nectar' ) !== false || strpos( $content, 'slider' ) !== false ) {
+			// CRITICAL: Skip processing for auto-draft posts to prevent interference with homepage editing
+			// Auto-drafts should not trigger Nectar Slider image extraction
+			if ( $post->post_status === 'auto-draft' ) {
+				Logger::info( 'FP SEO: extract_images_from_content - Skipping Nectar Slider extraction for auto-draft', array(
+					'post_id' => $post->ID,
+					'post_status' => $post->post_status,
+				) );
+			} else {
+				// CRITICAL: Only check for Nectar Slider images if content contains slider references
+				// OR if this is a published homepage (not auto-draft)
+				$is_homepage_check = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
+				$is_published_homepage = $is_homepage_check && $post->post_status === 'publish';
+				$has_slider_references = strpos( $content, 'nectar' ) !== false || strpos( $content, 'slider' ) !== false;
+				
+				if ( $is_published_homepage || $has_slider_references ) {
 				// Try to find all published Nectar Slider posts
 				$all_sliders = get_posts( array(
 					'post_type' => 'nectar_slider',
@@ -2404,7 +2455,8 @@ class MetaboxRenderer {
 						}
 					}
 				}
-			}
+				} // End if ( $is_published_homepage || $has_slider_references )
+			} // End else (not auto-draft)
 			
 			$all_meta = get_post_meta( $post->ID );
 			$image_meta_keys = array();
@@ -2440,21 +2492,26 @@ class MetaboxRenderer {
 
 			// CRITICAL: Also check for Nectar Slider shortcodes and extract images from associated slider posts
 			// Pattern: [nectar_slider location="location_name"] or [nectar_slider location=""]
-			// ALSO: If this is the homepage, always check for sliders even if no shortcode is found
+			// IMPORTANT: Only process if there's an actual shortcode OR if this is a published homepage (not auto-draft)
 			$is_homepage = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
+			$is_published_homepage = $is_homepage && $post->post_status === 'publish';
 			$has_nectar_slider_shortcode = preg_match_all( '/\[nectar_slider[^\]]*\]/i', $content, $slider_shortcode_matches, PREG_SET_ORDER );
 			
-			if ( $has_nectar_slider_shortcode || $is_homepage ) {
-				Logger::info( 'FP SEO: extract_images_from_content - Found Nectar Slider shortcode or homepage', array(
+			// Only process if there's a shortcode OR if it's a published homepage (skip auto-drafts)
+			if ( $has_nectar_slider_shortcode || $is_published_homepage ) {
+				Logger::info( 'FP SEO: extract_images_from_content - Found Nectar Slider shortcode or published homepage', array(
 					'post_id' => $post->ID,
 					'has_shortcode' => $has_nectar_slider_shortcode,
 					'is_homepage' => $is_homepage,
+					'is_published_homepage' => $is_published_homepage,
+					'post_status' => $post->post_status,
 					'shortcode_count' => $has_nectar_slider_shortcode ? count( $slider_shortcode_matches ) : 0,
 					'shortcodes' => $has_nectar_slider_shortcode ? $slider_shortcode_matches : array(),
 				) );
 				
-				// If no shortcode matches but this is homepage, process as if there's an empty shortcode
-				if ( ! $has_nectar_slider_shortcode && $is_homepage ) {
+				// If no shortcode matches but this is a published homepage, process as if there's an empty shortcode
+				// BUT only if it's published, not auto-draft
+				if ( ! $has_nectar_slider_shortcode && $is_published_homepage ) {
 					$slider_shortcode_matches = array( array( 0 => '[nectar_slider]' ) );
 				}
 				
@@ -3145,34 +3202,40 @@ class MetaboxRenderer {
 	 * @param WP_Post $post Current post.
 	 * @param array   $images Images array (optional, will extract if not provided).
 	 */
+	/**
+	 * Render only the content of the images section (without header/wrapper).
+	 * 
+	 * This method uses the new isolated ImageExtractor for safe, non-interfering extraction.
+	 *
+	 * @param WP_Post $post Current post.
+	 * @param array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}> $images Optional pre-extracted images. If empty, will extract using ImageExtractor.
+	 * @return void
+	 */
 	public function render_images_section_content( WP_Post $post, array $images = array() ): void {
-		// If images not provided, extract them
+		// Use new isolated ImageExtractor (ONLY way to extract images - completely safe)
 		if ( empty( $images ) ) {
 			try {
-				$images = $this->extract_images_from_content( $post );
+				$extractor = new ImageExtractor();
+				$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
+				$images = $extractor->extract( $post, $force_refresh );
+				
+				Logger::info( 'FP SEO: render_images_section_content - Images extracted via ImageExtractor', array(
+					'post_id' => $post->ID,
+					'image_count' => count( $images ),
+					'force_refresh' => $force_refresh,
+				) );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Error extracting images from content in render_images_section_content', array(
+				Logger::error( 'FP SEO: Error extracting images using ImageExtractor', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'post_id' => $post->ID,
 				) );
-				$images = array(); // Continue with empty array instead of failing completely
+				$images = array();
 			}
 		}
 		
-		Logger::info( 'FP SEO: render_images_section_content - images extracted', array(
-			'post_id' => $post->ID,
-			'images_count' => count( $images ),
-			'images_preview' => array_slice( array_map( function( $img ) {
-				return array(
-					'src' => substr( $img['src'] ?? '', 0, 100 ),
-					'has_attachment_id' => ! empty( $img['attachment_id'] ?? null ),
-					'attachment_id' => $img['attachment_id'] ?? null,
-				);
-			}, $images ), 0, 5 ), // First 5 images for debug
-		) );
-		
-		if ( empty( $images ) ) : ?>
+		if ( empty( $images ) ) {
+			?>
 			<div style="padding: 24px; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb;">
 				<p style="margin: 0; color: #6b7280; font-size: 14px;">
 					<?php esc_html_e( 'Nessuna immagine trovata nel contenuto.', 'fp-seo-performance' ); ?>
@@ -3181,153 +3244,17 @@ class MetaboxRenderer {
 					<?php esc_html_e( 'Aggiungi immagini al contenuto per ottimizzarle qui.', 'fp-seo-performance' ); ?>
 				</p>
 			</div>
-		<?php else :
-			// Get featured image ID to identify it
-			$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
-			
-			$rendered_count = 0;
-			$skipped_count = 0;
-			
-			// Render all found images
-			foreach ( $images as $index => $image ) :
-				if ( empty( $image['src'] ) ) {
-					$skipped_count++;
-					continue;
-				}
-				
-				// Compare using ONLY attachment ID
-				$is_featured = false;
-				if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
-					$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
-				}
-				
-				$rendered_count++;
-			?>
-			<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
-				 data-image-index="<?php echo esc_attr( $index ); ?>"
-				 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-				 data-is-featured="<?php echo $is_featured ? '1' : '0'; ?>"
-				 style="background: #fff; border: <?php echo $is_featured ? '2px solid #10b981' : '1px solid #e5e7eb'; ?>; border-radius: 8px; padding: 16px; transition: all 0.2s ease; <?php echo $is_featured ? 'box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);' : ''; ?>">
-				
-				<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
-					<!-- Image Preview -->
-					<div style="position: relative;">
-						<?php
-						$preview_url = $image['src'];
-						if ( strpos( $preview_url, 'http' ) !== 0 ) {
-							if ( strpos( $preview_url, '/' ) === 0 ) {
-								$preview_url = site_url( $preview_url );
-							} else {
-								$preview_url = content_url( $preview_url );
-							}
-						}
-						?>
-						<img src="<?php echo esc_url( $preview_url ); ?>" 
-							 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
-							 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
-							 loading="lazy"
-							 onerror="this.onerror=null; this.src='<?php echo esc_js( $preview_url ); ?>';">
-						<?php if ( $is_featured ) : ?>
-							<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
-								⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
-							</div>
-						<?php endif; ?>
-						<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
-							#<?php echo esc_html( $index + 1 ); ?>
-						</div>
-					</div>
-					
-					<!-- Image Fields -->
-					<div style="display: grid; gap: 12px; flex: 1;">
-						<!-- Image URL (read-only) -->
-						<div>
-							<label style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-								<?php esc_html_e( 'URL Immagine', 'fp-seo-performance' ); ?>
-							</label>
-							<input type="text" 
-								   value="<?php echo esc_attr( $image['src'] ); ?>" 
-								   readonly
-								   style="width: 100%; padding: 6px 10px; font-size: 11px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; font-family: monospace;">
-						</div>
-						
-						<!-- Alt Text -->
-						<div>
-							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
-								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-								<?php esc_html_e( 'Alt Text', 'fp-seo-performance' ); ?>
-								<span style="color: #ef4444;">*</span>
-							</label>
-							<input type="text" 
-								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
-								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][alt]" 
-								   value="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
-								   placeholder="<?php esc_attr_e( 'es: Foto del B&B Dimora Verde a Mentana', 'fp-seo-performance' ); ?>"
-								   maxlength="125"
-								   data-image-field="alt"
-								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 6px; transition: all 0.2s ease;">
-							<div style="display: flex; justify-content: space-between; margin-top: 4px;">
-								<span style="font-size: 10px; color: #9ca3af;">
-									<?php esc_html_e( 'Raccomandato: 5-15 parole descrittive', 'fp-seo-performance' ); ?>
-								</span>
-								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt-count" 
-									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
-									<?php echo esc_html( mb_strlen( $image['alt'] ?? '' ) ); ?>/125
-								</span>
-							</div>
-						</div>
-						
-						<!-- Title -->
-						<div>
-							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
-								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-								<?php esc_html_e( 'Title', 'fp-seo-performance' ); ?>
-							</label>
-							<input type="text" 
-								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
-								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][title]" 
-								   value="<?php echo esc_attr( $image['title'] ?? '' ); ?>"
-								   placeholder="<?php esc_attr_e( 'es: Dimora Verde B&B - Vista esterna', 'fp-seo-performance' ); ?>"
-								   maxlength="200"
-								   data-image-field="title"
-								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease;">
-						</div>
-						
-						<!-- Description -->
-						<div>
-							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
-								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
-								<?php esc_html_e( 'Description', 'fp-seo-performance' ); ?>
-							</label>
-							<textarea id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
-									  name="fp_seo_images[<?php echo esc_attr( $index ); ?>][description]" 
-									  placeholder="<?php esc_attr_e( 'Descrizione estesa dell\'immagine...', 'fp-seo-performance' ); ?>"
-									  maxlength="500"
-									  data-image-field="description"
-									  data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
-									  rows="3"
-									  style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease; resize: vertical; font-family: inherit;"><?php echo esc_textarea( $image['description'] ?? '' ); ?></textarea>
-							<div style="display: flex; justify-content: flex-end; margin-top: 4px;">
-								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description-count" 
-									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
-									<?php echo esc_html( mb_strlen( $image['description'] ?? '' ) ); ?>/500
-								</span>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
 			<?php
-			endforeach;
-			
-			Logger::info( 'FP SEO: render_images_section_content - Rendering complete', array(
-				'post_id' => $post->ID,
-				'total_images' => count( $images ),
-				'rendered_count' => $rendered_count,
-				'skipped_count' => $skipped_count,
-			) );
-		endif;
+			return;
+		}
+		
+		// Use helper method to render images (avoids code duplication)
+		$this->render_image_items_legacy( $post, $images );
+		
+		Logger::info( 'FP SEO: render_images_section_content - Rendering complete', array(
+			'post_id' => $post->ID,
+			'total_images' => count( $images ),
+		) );
 	}
 
 	/**

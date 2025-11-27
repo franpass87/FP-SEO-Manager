@@ -56,6 +56,7 @@ class Metabox {
 	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
 	private const AJAX_SAVE_IMAGES = 'fp_seo_save_images_data';
 	private const AJAX_RELOAD_IMAGES_SECTION = 'fp_seo_reload_images_section';
+	private const AJAX_EXTRACT_IMAGES = 'fp_seo_extract_images';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
@@ -425,7 +426,8 @@ class Metabox {
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_IMAGES, array( $this, 'handle_save_images_ajax' ) );
-		add_action( 'wp_ajax_' . self::AJAX_RELOAD_IMAGES_SECTION, array( $this, 'handle_reload_images_section_ajax' ) );
+			add_action( 'wp_ajax_' . self::AJAX_RELOAD_IMAGES_SECTION, array( $this, 'handle_reload_images_section_ajax' ) );
+			add_action( 'wp_ajax_' . self::AJAX_EXTRACT_IMAGES, array( $this, 'handle_extract_images_ajax' ) );
 			add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
 		} catch ( \Throwable $e ) {
 			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
@@ -3446,12 +3448,16 @@ class Metabox {
 			wp_send_json_error( array( 'message' => __( 'Renderer not available.', 'fp-seo-performance' ) ), 500 );
 		}
 
-		// Extract images
+		// Extract images using new isolated ImageExtractor
 		try {
-			$images = $this->renderer->extract_images_from_content( $post );
-			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Images extracted', array(
+			$extractor = new ImageExtractor();
+			$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
+			$images = $extractor->extract( $post, $force_refresh );
+			
+			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Images extracted via ImageExtractor', array(
 				'post_id' => $post_id,
 				'images_count' => count( $images ),
+				'force_refresh' => $force_refresh,
 			) );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'FP SEO: Error extracting images in reload handler', array(
@@ -3596,6 +3602,59 @@ class Metabox {
 		}
 		
 		return null;
+	}
+
+	/**
+	 * Handle AJAX request for lazy-loaded image extraction.
+	 * 
+	 * This is the ONLY way images should be extracted - completely isolated and non-interfering.
+	 *
+	 * @return void
+	 */
+	public function handle_extract_images_ajax(): void {
+		check_ajax_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+		
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
+		}
+		
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+		if ( $post_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
+			return;
+		}
+		
+		$post = get_post( $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
+			return;
+		}
+		
+		// Use the new isolated ImageExtractor
+		$extractor = new ImageExtractor();
+		$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
+		
+		try {
+			$images = $extractor->extract( $post, $force_refresh );
+			
+			wp_send_json_success( array(
+				'images' => $images,
+				'count' => count( $images ),
+				'post_id' => $post_id,
+			) );
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error in handle_extract_images_ajax', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'post_id' => $post_id,
+			) );
+			
+			wp_send_json_error( array(
+				'message' => __( 'Error extracting images.', 'fp-seo-performance' ),
+				'error' => $e->getMessage(),
+			), 500 );
+		}
 	}
 
 }
