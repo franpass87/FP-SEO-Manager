@@ -138,6 +138,88 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
+		// DIAGNOSTIC: Show diagnostic info directly in metabox for homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
+			$correct_post = get_post( $page_on_front_id );
+			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
+			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
+			
+			global $wp_query;
+			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+			$global_post_id = $global_post instanceof WP_Post ? $global_post->ID : 0;
+			$global_post_status = $global_post instanceof WP_Post ? $global_post->post_status : 'none';
+			
+			$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
+			$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
+			$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+			$screen_id = $current_screen ? $current_screen->id : 'unknown';
+			
+			$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
+			$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
+			$icon = $is_wrong_post ? '🔍' : 'ℹ️';
+			
+			echo '<div class="notice ' . esc_attr( $notice_class ) . '" style="border-left-color: ' . esc_attr( $notice_color ) . '; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid ' . esc_attr( $notice_color ) . '; border-radius: 4px;">';
+			echo '<h3 style="margin: 0 0 8px 0; color: ' . esc_attr( $notice_color ) . ';">' . esc_html( $icon ) . ' FP SEO: Diagnostica Homepage</h3>';
+			if ( $is_wrong_post ) {
+				echo '<p style="margin: 0 0 8px 0; color: #dc2626;"><strong>⚠️ PROBLEMA RILEVATO:</strong> WordPress ha passato un post sbagliato!</p>';
+			} else {
+				echo '<p style="margin: 0 0 8px 0;"><strong>✓ Post corretto:</strong> WordPress ha passato la homepage corretta.</p>';
+			}
+			echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
+			echo '<li><strong>URL richiesto:</strong> <code>post=' . esc_html( $requested_post_id ) . '&action=edit</code></li>';
+			echo '<li><strong>Post ricevuto (parametro render):</strong> ID ' . esc_html( $post->ID ) . ' - Status: <code>' . esc_html( $post->post_status ) . '</code> - Type: <code>' . esc_html( $post->post_type ) . '</code></li>';
+			echo '<li><strong>Post globale ($GLOBALS[\'post\']):</strong> ID ' . esc_html( $global_post_id ) . ' - Status: <code>' . esc_html( $global_post_status ) . '</code></li>';
+			echo '<li><strong>Homepage corretta (dal DB):</strong> ID ' . esc_html( $page_on_front_id ) . ' - Status: <code>' . esc_html( $correct_status ) . '</code></li>';
+			echo '<li><strong>Corrispondenza:</strong> ' . ( ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>' ) . '</li>';
+			echo '<li><strong>Contesto:</strong> Screen: <code>' . esc_html( $screen_id ) . '</code> | AJAX: ' . ( $is_ajax ? 'Sì' : 'No' ) . ' | Autosave: ' . ( $is_autosave ? 'Sì' : 'No' ) . '</li>';
+			echo '</ul>';
+			if ( $is_wrong_post ) {
+				echo '<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">';
+				echo '<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID ' . esc_html( $post->ID ) . ') invece di caricare la homepage esistente (ID ' . esc_html( $page_on_front_id ) . ').<br>';
+				echo '<strong>Quando succede:</strong> Quando apri l\'editor della homepage, WordPress dovrebbe passarti il post ID ' . esc_html( $page_on_front_id ) . ', ma invece ti sta passando il post ID ' . esc_html( $post->ID ) . ' con status auto-draft.<br>';
+				if ( $global_post_id !== $post->ID ) {
+					echo '<strong>⚠️ DISCREPANZA:</strong> Il post globale (ID ' . esc_html( $global_post_id ) . ') è diverso dal post passato al metabox (ID ' . esc_html( $post->ID ) . '). Questo indica che qualcosa sta modificando il post durante il rendering.';
+				}
+				echo '</p>';
+			}
+			echo '</div>';
+			
+			// Check for auto-draft diagnosis info
+			$auto_draft_diagnosis = get_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id );
+			if ( $auto_draft_diagnosis && is_array( $auto_draft_diagnosis ) ) {
+				echo '<div class="notice notice-warning" style="border-left-color: #f59e0b; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid #f59e0b; border-radius: 4px;">';
+				echo '<h3 style="margin: 0 0 8px 0; color: #f59e0b;">🔍 Auto-draft Creato Recentemente</h3>';
+				echo '<p style="margin: 0 0 8px 0;"><strong>Un auto-draft è stato creato mentre stavi editando la homepage.</strong></p>';
+				echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
+				echo '<li><strong>Auto-draft ID:</strong> ' . esc_html( $auto_draft_diagnosis['auto_draft_id'] ?? 'unknown' ) . '</li>';
+				echo '<li><strong>Timestamp:</strong> ' . esc_html( date( 'Y-m-d H:i:s', $auto_draft_diagnosis['timestamp'] ?? 0 ) ) . '</li>';
+				if ( ! empty( $auto_draft_diagnosis['caller_trace'] ) ) {
+					echo '<li><strong>Chiamata da:</strong><br><code style="font-size: 11px; background: #f3f4f6; padding: 4px; border-radius: 2px;">';
+					echo esc_html( implode( '<br>', array_slice( $auto_draft_diagnosis['caller_trace'], 0, 5 ) ) );
+					echo '</code></li>';
+				}
+				echo '</ul>';
+				echo '</div>';
+			}
+			
+			if ( $is_wrong_post ) {
+				Logger::warning( 'MetaboxRenderer::render - WordPress passed wrong post when opening homepage editor', array(
+					'requested_post_id' => $requested_post_id,
+					'received_post_id' => $post->ID,
+					'received_post_status' => $post->post_status,
+					'global_post_id' => $global_post_id,
+					'global_post_status' => $global_post_status,
+					'correct_homepage_id' => $page_on_front_id,
+					'correct_homepage_status' => $correct_status,
+					'is_ajax' => $is_ajax,
+					'is_autosave' => $is_autosave,
+					'screen_id' => $screen_id,
+				) );
+			}
+		}
+		
 		// Verifica che tutte le dipendenze siano caricate prima di iniziare
 		$required_classes = array(
 			'FP\\SEO\\Utils\\Logger',

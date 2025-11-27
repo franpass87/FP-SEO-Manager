@@ -319,6 +319,12 @@ class Metabox {
 		// 	add_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ), 1 );
 		// }
 		
+		// DIAGNOSTIC: Hook to detect when auto-draft is created for homepage
+		// This helps identify what's creating the auto-draft
+		if ( ! has_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ) ) ) {
+			add_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ), 999, 3 );
+		}
+		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox hooks registered in register_hooks()', array(
@@ -2767,6 +2773,75 @@ class Metabox {
 					'attempted_status' => $new_status,
 				) );
 			}
+		}
+	}
+
+	/**
+	 * Diagnose when auto-draft is created - helps identify what's creating it.
+	 * Hook: wp_insert_post (priority 999)
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param WP_Post  $post    Post object.
+	 * @param bool     $update  Whether this is an update.
+	 */
+	public function diagnose_auto_draft_creation( int $post_id, $post, bool $update ): void {
+		// Only check if this is related to homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		// Get post status
+		$post_status = get_post_status( $post_id );
+		if ( $post_status !== 'auto-draft' ) {
+			return;
+		}
+		
+		// Check if we're trying to edit the homepage
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		$is_editing_homepage = $requested_post_id === $page_on_front_id;
+		
+		// Check if this auto-draft is a page (not a post or other type)
+		$post_type = get_post_type( $post_id );
+		if ( $post_type !== 'page' ) {
+			return;
+		}
+		
+		// If we're editing homepage and an auto-draft page is created, log it
+		if ( $is_editing_homepage ) {
+			$backtrace = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 20 );
+			$caller_info = array();
+			foreach ( $backtrace as $index => $trace ) {
+				if ( $index > 5 ) { // Skip first few frames (this function, WordPress core)
+					break;
+				}
+				if ( isset( $trace['file'] ) && isset( $trace['line'] ) ) {
+					$file = str_replace( ABSPATH, '', $trace['file'] );
+					$caller_info[] = $file . ':' . $trace['line'] . ( isset( $trace['function'] ) ? ' -> ' . $trace['function'] : '' );
+				}
+			}
+			
+			Logger::warning( 'Metabox::diagnose_auto_draft_creation - Auto-draft created while editing homepage', array(
+				'auto_draft_id' => $post_id,
+				'homepage_id' => $page_on_front_id,
+				'requested_post_id' => $requested_post_id,
+				'is_update' => $update,
+				'post_type' => $post_type,
+				'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
+				'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
+				'is_autosave' => defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE,
+				'has_post_data' => ! empty( $_POST ),
+				'caller_trace' => $caller_info,
+			) );
+			
+			// Store diagnostic info in transient so it can be displayed in metabox
+			set_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id, array(
+				'auto_draft_id' => $post_id,
+				'timestamp' => time(),
+				'caller_trace' => $caller_info,
+				'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
+				'is_autosave' => defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE,
+			), 300 ); // 5 minutes
 		}
 	}
 
