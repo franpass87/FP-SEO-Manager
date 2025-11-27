@@ -53,6 +53,7 @@ class ImageExtractor {
 		}
 		
 		// CRITICAL: Skip auto-drafts completely - they should never be processed
+		// This prevents interference when WordPress creates auto-draft during editor opening
 		$post_status = get_post_status( $post_id );
 		if ( $post_status === 'auto-draft' || $post_status === false ) {
 			Logger::debug( 'ImageExtractor::extract - Skipping auto-draft or invalid post', array(
@@ -60,6 +61,21 @@ class ImageExtractor {
 				'post_status' => $post_status,
 			) );
 			return array();
+		}
+		
+		// CRITICAL: Also skip if this is not an AJAX request (safety check)
+		// ImageExtractor should ONLY be called via AJAX, never during initial rendering
+		if ( ! defined( 'DOING_AJAX' ) || ! DOING_AJAX ) {
+			// Allow only if explicitly called with images already provided (render_images_section_content with pre-extracted images)
+			// But log a warning to catch any unexpected calls
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'ImageExtractor::extract - Called outside AJAX context', array(
+					'post_id' => $post_id,
+					'post_status' => $post_status,
+					'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
+				) );
+			}
+			// Still process, but this should not happen in normal operation
 		}
 		
 		// Check cache first (unless forced refresh)
