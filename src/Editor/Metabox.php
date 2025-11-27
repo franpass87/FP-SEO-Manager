@@ -1735,8 +1735,23 @@ class Metabox {
 			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
 			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
 			
+			// Get global post for comparison
+			global $wp_query, $pagenow;
+			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+			$global_post_id = $global_post instanceof WP_Post ? $global_post->ID : 0;
+			$global_post_status = $global_post instanceof WP_Post ? $global_post->post_status : 'none';
+			
+			// Check if this is AJAX
+			$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
+			$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
+			
+			// Get current screen info
+			$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+			$screen_id = $current_screen ? $current_screen->id : 'unknown';
+			$screen_base = $current_screen ? $current_screen->base : 'unknown';
+			
 			// Always show diagnostic notice when editing homepage
-			add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post ) {
+			add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post, $global_post_id, $global_post_status, $is_ajax, $is_autosave, $screen_id, $screen_base ) {
 				$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
 				$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
 				$icon = $is_wrong_post ? '🔍' : 'ℹ️';
@@ -1750,14 +1765,19 @@ class Metabox {
 					<?php } ?>
 					<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">
 						<li><strong>URL richiesto:</strong> <code>post=<?php echo esc_html( $requested_post_id ); ?>&action=edit</code></li>
-						<li><strong>Post ricevuto da WordPress:</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
+						<li><strong>Post ricevuto da WordPress (parametro render):</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
+						<li><strong>Post globale ($GLOBALS['post']):</strong> ID <?php echo esc_html( $global_post_id ); ?> - Status: <code><?php echo esc_html( $global_post_status ); ?></code></li>
 						<li><strong>Homepage corretta (dal DB):</strong> ID <?php echo esc_html( $page_on_front_id ); ?> - Status: <code><?php echo esc_html( $correct_status ); ?></code></li>
 						<li><strong>Corrispondenza:</strong> <?php echo ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>'; ?></li>
+						<li><strong>Contesto:</strong> Screen: <code><?php echo esc_html( $screen_id ); ?></code> (<?php echo esc_html( $screen_base ); ?>) | AJAX: <?php echo $is_ajax ? 'Sì' : 'No'; ?> | Autosave: <?php echo $is_autosave ? 'Sì' : 'No'; ?></li>
 					</ul>
 					<?php if ( $is_wrong_post ) { ?>
 						<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">
 							<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID <?php echo esc_html( $post->ID ); ?>) invece di caricare la homepage esistente (ID <?php echo esc_html( $page_on_front_id ); ?>).<br>
-							<strong>Quando succede:</strong> Quando apri l'editor della homepage, WordPress dovrebbe passarti il post ID <?php echo esc_html( $page_on_front_id ); ?>, ma invece ti sta passando il post ID <?php echo esc_html( $post->ID ); ?> con status auto-draft.
+							<strong>Quando succede:</strong> Quando apri l'editor della homepage, WordPress dovrebbe passarti il post ID <?php echo esc_html( $page_on_front_id ); ?>, ma invece ti sta passando il post ID <?php echo esc_html( $post->ID ); ?> con status auto-draft.<br>
+							<?php if ( $global_post_id !== $post->ID ) { ?>
+								<strong>⚠️ DISCREPANZA:</strong> Il post globale (ID <?php echo esc_html( $global_post_id ); ?>) è diverso dal post passato al metabox (ID <?php echo esc_html( $post->ID ); ?>). Questo indica che qualcosa sta modificando il post durante il rendering.
+							<?php } ?>
 						</p>
 					<?php } ?>
 				</div>
@@ -1770,8 +1790,14 @@ class Metabox {
 					'requested_post_id' => $requested_post_id,
 					'received_post_id' => $post->ID,
 					'received_post_status' => $post->post_status,
+					'global_post_id' => $global_post_id,
+					'global_post_status' => $global_post_status,
 					'correct_homepage_id' => $page_on_front_id,
 					'correct_homepage_status' => $correct_status,
+					'is_ajax' => $is_ajax,
+					'is_autosave' => $is_autosave,
+					'screen_id' => $screen_id,
+					'screen_base' => $screen_base,
 				) );
 			}
 		}
