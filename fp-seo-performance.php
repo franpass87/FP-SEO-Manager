@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.48
+ * Version: 0.9.0-pre.72
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -42,49 +42,17 @@ $fp_seo_is_pure_media_library = (
 	)
 );
 
-// CRITICAL: Block plugin on Nectar Slider pages to prevent interference with slider image saving
-// Check if we're on a post.php or post-new.php page and verify post type after WordPress loads
-$fp_seo_is_post_edit_page = (
-	strpos( $fp_seo_request_uri, 'post.php' ) !== false ||
-	strpos( $fp_seo_request_uri, 'post-new.php' ) !== false
-);
+// NOTE: Nectar Slider is now excluded from supported post types in PostTypes::analyzable()
+// so no hooks will be registered for it. The global block below is kept as a safety measure
+// but is no longer strictly necessary. It can be removed in the future if desired.
 
-// If on post edit page, we'll check post type after WordPress loads (see hook below)
-$fp_seo_is_nectar_slider_page = false;
-if ( $fp_seo_is_post_edit_page ) {
-	// Check post type from GET parameter or will check after WordPress loads
-	$fp_seo_post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
-	if ( $fp_seo_post_id > 0 ) {
-		// Try to get post type from database directly (before WordPress is fully loaded)
-		// This is a minimal check - we'll do a more thorough check after WordPress loads
-		global $wpdb;
-		if ( isset( $wpdb ) && is_object( $wpdb ) ) {
-			$fp_seo_post_type = $wpdb->get_var( $wpdb->prepare(
-				"SELECT post_type FROM {$wpdb->posts} WHERE ID = %d LIMIT 1",
-				$fp_seo_post_id
-			) );
-			if ( $fp_seo_post_type === 'nectar_slider' ) {
-				$fp_seo_is_nectar_slider_page = true;
-			}
-		}
-	} elseif ( isset( $_GET['post_type'] ) && $_GET['post_type'] === 'nectar_slider' ) {
-		// New post page with post_type parameter
-		$fp_seo_is_nectar_slider_page = true;
-	}
-}
-
-// Also check edit.php list page
-if ( strpos( $fp_seo_request_uri, 'edit.php' ) !== false && strpos( $fp_seo_request_uri, 'post_type=nectar_slider' ) !== false ) {
-	$fp_seo_is_nectar_slider_page = true;
-}
-
-// If on pure media library page or Nectar Slider page, do NOT load the plugin
-if ( $fp_seo_is_pure_media_library || $fp_seo_is_nectar_slider_page ) {
+// If on pure media library page, do NOT load the plugin
+if ( $fp_seo_is_pure_media_library ) {
 	return; // Exit early, plugin will not be loaded
 }
 
 // Clean up temporary variables
-unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_pure_media_library, $fp_seo_is_nectar_slider_page );
+unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_pure_media_library );
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 		define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
@@ -93,7 +61,7 @@ if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
 require_once __DIR__ . '/src/Utils/Version.php';
 
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.48' ) );
+		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.57' ) );
 }
 
 $autoload = __DIR__ . '/vendor/autoload.php';

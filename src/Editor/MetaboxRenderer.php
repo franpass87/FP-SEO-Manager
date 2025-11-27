@@ -1056,8 +1056,8 @@ class MetaboxRenderer {
 		}
 
 		try {
-			$gsc_data = new GscData();
-			$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
+		$gsc_data = new GscData();
+		$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
 		} catch ( \Throwable $e ) {
 			// Se GscData fallisce, logga ma continua senza mostrare la sezione
 			Logger::error( 'FP SEO: Error loading GSC data', array(
@@ -1449,7 +1449,7 @@ class MetaboxRenderer {
 		) );
 
 		try {
-			$images = $this->extract_images_from_content( $post );
+		$images = $this->extract_images_from_content( $post );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'FP SEO: Error extracting images from content', array(
 				'error' => $e->getMessage(),
@@ -1460,8 +1460,8 @@ class MetaboxRenderer {
 		}
 		
 		Logger::info( 'FP SEO: render_images_section - images extracted', array(
-			'post_id' => $post->ID,
-			'images_count' => count( $images ),
+				'post_id' => $post->ID,
+				'images_count' => count( $images ),
 			'images_preview' => array_slice( array_map( function( $img ) {
 				return array(
 					'src' => substr( $img['src'] ?? '', 0, 100 ),
@@ -1517,7 +1517,7 @@ class MetaboxRenderer {
 						$skipped_count = 0;
 						
 						// Render tutte le immagini trovate (nessun limite)
-						foreach ( $images as $index => $image ) :
+						foreach ( $images as $index => $image ) : 
 							// Verifica che l'immagine abbia almeno uno src valido
 							if ( empty( $image['src'] ) ) {
 								$skipped_count++;
@@ -1813,51 +1813,69 @@ class MetaboxRenderer {
 		// WordPress manages its own cache, we should not clear it during rendering
 		// This was causing WordPress to load the wrong post (auto-draft instead of homepage)
 		
-		$content = $post->post_content ?? '';
-		
-		// Se il contenuto è vuoto, prova anche a recuperarlo direttamente dal database
-		if ( empty( $content ) && ! empty( $post->ID ) ) {
+		// CRITICAL: Always retrieve content directly from database to ensure we have the latest version
+		// WordPress's global $post or passed $post object might be stale, especially after AJAX calls or when editing
+		// This is essential for finding images that were just added or modified
+		$content = '';
+		if ( ! empty( $post->ID ) ) {
 			global $wpdb;
 			$db_content = $wpdb->get_var( $wpdb->prepare(
-				"SELECT post_content FROM {$wpdb->posts} WHERE ID = %d",
+				"SELECT post_content FROM {$wpdb->posts} WHERE ID = %d AND post_status != 'inherit'",
 				$post->ID
 			) );
 			if ( ! empty( $db_content ) ) {
 				$content = $db_content;
+				// Update the post object so it's consistent for any subsequent operations
+				$post->post_content = $db_content;
 				Logger::info( 'FP SEO: extract_images_from_content - Retrieved content from database', array(
 					'post_id' => $post->ID,
 					'content_length' => strlen( $content ),
+					'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
+					'has_img_tags' => strpos( $content, '<img' ) !== false,
+					'img_count' => substr_count( $content, '<img' ),
+				) );
+			} else {
+				// Fallback to post object if database query fails or returns empty
+				$content = $post->post_content ?? '';
+				Logger::warning( 'FP SEO: extract_images_from_content - Database content is empty, using post object', array(
+					'post_id' => $post->ID,
+					'post_type' => $post->post_type ?? 'unknown',
+					'post_status' => $post->post_status ?? 'unknown',
+					'post_object_content_length' => strlen( $content ),
 				) );
 			}
+		} else {
+			// Fallback if no post ID
+			$content = $post->post_content ?? '';
 		}
 		$images = array();
 		$seen_srcs = array(); // Avoid duplicates
 		
 		// Log sempre (non solo in debug) per tracciare il problema
 		Logger::info( 'FP SEO: extract_images_from_content called', array(
-			'post_id' => $post->ID,
-			'content_length' => strlen( $content ),
+				'post_id' => $post->ID,
+				'content_length' => strlen( $content ),
 			'content_preview' => substr( $content, 0, 500 ),
-			'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
-			'has_img_tags' => strpos( $content, '<img' ) !== false,
+				'has_wpbakery' => strpos( $content, '[vc_' ) !== false,
+				'has_img_tags' => strpos( $content, '<img' ) !== false,
 			'has_img_shortcode' => strpos( $content, '[img' ) !== false || strpos( $content, '[image' ) !== false,
 			'content_empty' => empty( $content ),
-		) );
+			) );
 		
 		// First, add featured image if available (most important for SEO)
 		try {
-			$featured_image = $this->get_featured_image_data( $post->ID );
-			if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
-				$images[] = $featured_image;
-				$seen_srcs[ $featured_image['src'] ] = true;
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'extract_images_from_content - Featured image added', array(
-						'post_id' => $post->ID,
-						'featured_image_src' => $featured_image['src'],
-						'featured_image_id' => $featured_image['attachment_id'] ?? null,
-					) );
-				}
+		$featured_image = $this->get_featured_image_data( $post->ID );
+		if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
+			$images[] = $featured_image;
+			$seen_srcs[ $featured_image['src'] ] = true;
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'extract_images_from_content - Featured image added', array(
+					'post_id' => $post->ID,
+					'featured_image_src' => $featured_image['src'],
+					'featured_image_id' => $featured_image['attachment_id'] ?? null,
+				) );
+			}
 			}
 		} catch ( \Throwable $e ) {
 			Logger::error( 'FP SEO: Error getting featured image data', array(
@@ -1884,19 +1902,19 @@ class MetaboxRenderer {
 		// First, extract images from WPBakery shortcodes (from raw content)
 		$wpbakery_images = array();
 		try {
-			$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'extract_images_from_content - WPBakery images found', array(
-					'post_id' => $post->ID,
-					'count' => count( $wpbakery_images ),
-					'has_wpbakery' => $has_wpbakery,
-				) );
+		$wpbakery_images = $this->extract_wpbakery_images( $content, $post->ID );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'extract_images_from_content - WPBakery images found', array(
+				'post_id' => $post->ID,
+				'count' => count( $wpbakery_images ),
+				'has_wpbakery' => $has_wpbakery,
+			) );
+		}
+		foreach ( $wpbakery_images as $image ) {
+			if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
+				$seen_srcs[ $image['src'] ] = true;
+				$images[] = $image;
 			}
-			foreach ( $wpbakery_images as $image ) {
-				if ( ! empty( $image['src'] ) && ! isset( $seen_srcs[ $image['src'] ] ) ) {
-					$seen_srcs[ $image['src'] ] = true;
-					$images[] = $image;
-				}
 			}
 		} catch ( \Throwable $e ) {
 			Logger::error( 'FP SEO: Error extracting WPBakery images', array(
@@ -1928,41 +1946,45 @@ class MetaboxRenderer {
 				'has_img_in_processed' => strpos( $processed_content, '<img' ) !== false,
 			) );
 			
-			// Also try WPBakery's own shortcode processor if available
-			if ( class_exists( 'Vc_Manager' ) ) {
-				// WPBakery might need to be initialized first
-				if ( function_exists( 'vc_do_shortcode' ) ) {
-					$wpbakery_rendered = vc_do_shortcode( $content );
-					if ( ! empty( $wpbakery_rendered ) && $wpbakery_rendered !== $content ) {
-						$processed_content = $wpbakery_rendered . "\n" . $processed_content;
-						
-						Logger::info( 'FP SEO: extract_images_from_content - After vc_do_shortcode', array(
-							'post_id' => $post->ID,
-							'wpbakery_rendered_length' => strlen( $wpbakery_rendered ),
-							'final_processed_length' => strlen( $processed_content ),
-							'has_img_in_processed' => strpos( $processed_content, '<img' ) !== false,
-						) );
-					}
-				}
-			}
+			// DISABLED: vc_do_shortcode() causes "Element must be mapped in system" error
+			// WPBakery shortcodes are already processed by do_shortcode() and apply_filters('the_content')
+			// We extract images directly from shortcode attributes in extract_wpbakery_images()
+			// No need to call vc_do_shortcode() which requires full WPBakery initialization
 		}
 		
 		// Then, extract images from HTML img tags (from both raw and processed content)
-		$content_to_parse = $processed_content . "\n" . $content; // Combine both to catch all images
+		// CRITICAL: Combine both raw and processed content to catch all images
+		// Some images might only appear in processed content (WPBakery), others only in raw (direct HTML)
+		$content_to_parse = $processed_content;
+		if ( $processed_content !== $content ) {
+			// Only combine if they're different to avoid duplicates
+			$content_to_parse = $processed_content . "\n" . $content;
+		}
+		
+		// CRITICAL: If we still have no content to parse, log a warning
+		if ( empty( $content_to_parse ) ) {
+			Logger::warning( 'FP SEO: extract_images_from_content - Content to parse is empty after processing', array(
+				'post_id' => $post->ID,
+				'original_content_length' => strlen( $content ),
+				'processed_content_length' => strlen( $processed_content ),
+			) );
+		}
 		
 		Logger::info( 'FP SEO: extract_images_from_content - Content to parse prepared', array(
 			'post_id' => $post->ID,
 			'content_to_parse_length' => strlen( $content_to_parse ),
 			'has_img_in_content_to_parse' => strpos( $content_to_parse, '<img' ) !== false,
 			'img_count_in_content' => substr_count( $content_to_parse, '<img' ),
+			'has_wpbakery_shortcodes' => strpos( $content_to_parse, '[vc_' ) !== false,
+			'content_preview' => substr( $content_to_parse, 0, 200 ), // First 200 chars for debugging
 		) );
 		
 		// Usa try/catch per gestire errori di parsing HTML
 		try {
-			$dom = new \DOMDocument();
-			libxml_use_internal_errors( true );
-			$dom->loadHTML( '<?xml encoding="UTF-8">' . $content_to_parse );
-			libxml_clear_errors();
+		$dom = new \DOMDocument();
+		libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content_to_parse );
+		libxml_clear_errors();
 		} catch ( \Throwable $e ) {
 			Logger::error( 'FP SEO: Error parsing HTML for image extraction', array(
 				'error' => $e->getMessage(),
@@ -1983,12 +2005,12 @@ class MetaboxRenderer {
 		
 		foreach ( $img_tags as $index => $img ) {
 			try {
-				$src = $img->getAttribute( 'src' );
-				
+			$src = $img->getAttribute( 'src' );
+			
 				// Skip if empty
 				if ( empty( $src ) ) {
-					continue;
-				}
+				continue;
+			}
 				
 				// Normalizza URL PRIMA del controllo duplicati
 				$original_src = $src;
@@ -2011,52 +2033,52 @@ class MetaboxRenderer {
 				
 				// Usa l'URL normalizzato come principale
 				$src = $normalized_src;
-				
-				$seen_srcs[ $src ] = true;
+			
+			$seen_srcs[ $src ] = true;
 				$seen_srcs[ $original_src ] = true; // Anche l'originale per evitare duplicati
-				
-				// Get attachment ID from URL if it's a WordPress attachment
-				$attachment_id = $this->get_attachment_id_from_url( $src );
+			
+			// Get attachment ID from URL if it's a WordPress attachment
+			$attachment_id = $this->get_attachment_id_from_url( $src );
 				// Se non trovato con URL normalizzato, prova con l'originale
 				if ( ! $attachment_id && $original_src !== $src ) {
 					$attachment_id = $this->get_attachment_id_from_url( $original_src );
 				}
-				
-				// Get existing alt, title
-				$alt = $img->getAttribute( 'alt' ) ?: '';
-				$title = $img->getAttribute( 'title' ) ?: '';
-				
-				// Get description from attachment if available
-				$description = '';
-				if ( $attachment_id ) {
-					$attachment = get_post( $attachment_id );
-					if ( $attachment ) {
-						// Use attachment description or content
-						$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
-						
-						// If alt is empty, try to get from attachment
-						if ( empty( $alt ) ) {
-							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
-						}
+			
+			// Get existing alt, title
+			$alt = $img->getAttribute( 'alt' ) ?: '';
+			$title = $img->getAttribute( 'title' ) ?: '';
+			
+			// Get description from attachment if available
+			$description = '';
+			if ( $attachment_id ) {
+				$attachment = get_post( $attachment_id );
+				if ( $attachment ) {
+					// Use attachment description or content
+					$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+					
+					// If alt is empty, try to get from attachment
+					if ( empty( $alt ) ) {
+						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
 					}
 				}
-				
-				// Get saved custom data from post meta
-				$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
-				if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
-					$saved = $saved_images[ $src ];
-					$alt = $saved['alt'] ?? $alt;
-					$title = $saved['title'] ?? $title;
-					$description = $saved['description'] ?? $description;
-				}
-				
-				$images[] = array(
-					'src'           => $src,
-					'alt'           => $alt,
-					'title'         => $title,
-					'description'   => $description,
-					'attachment_id' => $attachment_id,
-				);
+			}
+			
+			// Get saved custom data from post meta
+			$saved_images = get_post_meta( $post->ID, '_fp_seo_images_data', true );
+			if ( is_array( $saved_images ) && isset( $saved_images[ $src ] ) ) {
+				$saved = $saved_images[ $src ];
+				$alt = $saved['alt'] ?? $alt;
+				$title = $saved['title'] ?? $title;
+				$description = $saved['description'] ?? $description;
+			}
+			
+			$images[] = array(
+				'src'           => $src,
+				'alt'           => $alt,
+				'title'         => $title,
+				'description'   => $description,
+				'attachment_id' => $attachment_id,
+			);
 			} catch ( \Throwable $e ) {
 				// Log errore ma continua con le altre immagini
 				Logger::error( 'FP SEO: Error processing image in extract_images_from_content', array(
@@ -2074,6 +2096,158 @@ class MetaboxRenderer {
 			'images_after_parsing' => count( $images ),
 			'images_added_from_html' => count( $images ) - ( count( $wpbakery_images ) + ( ! empty( $featured_image ) ? 1 : 0 ) ),
 		) );
+		
+		// CRITICAL: Extract images from background-image CSS and data attributes in processed content
+		// WPBakery often uses background-image CSS instead of <img> tags
+		if ( ! empty( $processed_content ) && $processed_content !== $content ) {
+			try {
+				$dom_processed = new \DOMDocument();
+				libxml_use_internal_errors( true );
+				$dom_processed->loadHTML( '<?xml encoding="UTF-8">' . $processed_content );
+				libxml_clear_errors();
+				
+				// Extract from style="background-image: url(...)"
+				$xpath = new \DOMXPath( $dom_processed );
+				$elements_with_bg = $xpath->query( '//*[@style]' );
+				foreach ( $elements_with_bg as $element ) {
+					$style = $element->getAttribute( 'style' );
+					if ( preg_match_all( '/background-image\s*:\s*url\(["\']?([^"\')]+)["\']?\)/i', $style, $bg_matches, PREG_SET_ORDER ) ) {
+						foreach ( $bg_matches as $bg_match ) {
+							$bg_url = $bg_match[1];
+							if ( ! empty( $bg_url ) && ! isset( $seen_srcs[ $bg_url ] ) ) {
+								// Normalize URL
+								if ( strpos( $bg_url, 'http' ) !== 0 ) {
+									if ( strpos( $bg_url, '/' ) === 0 ) {
+										$bg_url = site_url( $bg_url );
+									} else {
+										$bg_url = content_url( $bg_url );
+									}
+								}
+								
+								$seen_srcs[ $bg_url ] = true;
+								$attachment_id = $this->get_attachment_id_from_url( $bg_url );
+								
+								$alt = '';
+								$title = '';
+								$description = '';
+								
+								if ( $attachment_id ) {
+									$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+									$attachment = get_post( $attachment_id );
+									$title = $attachment ? $attachment->post_title : '';
+									$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+								}
+								
+								$images[] = array(
+									'src'           => $bg_url,
+									'alt'           => $alt,
+									'title'         => $title,
+									'description'   => $description,
+									'attachment_id' => $attachment_id,
+								);
+							}
+						}
+					}
+				}
+				
+				// Extract from data-bg-image, data-image, data-background-image attributes
+				$data_image_elements = $xpath->query( '//*[@data-bg-image or @data-image or @data-background-image]' );
+				foreach ( $data_image_elements as $element ) {
+					$data_attrs = array( 'data-bg-image', 'data-image', 'data-background-image' );
+					foreach ( $data_attrs as $attr ) {
+						$data_url = $element->getAttribute( $attr );
+						if ( ! empty( $data_url ) && ! isset( $seen_srcs[ $data_url ] ) ) {
+							// Normalize URL
+							if ( strpos( $data_url, 'http' ) !== 0 ) {
+								if ( strpos( $data_url, '/' ) === 0 ) {
+									$data_url = site_url( $data_url );
+								} else {
+									$data_url = content_url( $data_url );
+								}
+							}
+							
+							$seen_srcs[ $data_url ] = true;
+							$attachment_id = $this->get_attachment_id_from_url( $data_url );
+							
+							$alt = '';
+							$title = '';
+							$description = '';
+							
+							if ( $attachment_id ) {
+								$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+								$attachment = get_post( $attachment_id );
+								$title = $attachment ? $attachment->post_title : '';
+								$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+							}
+							
+							$images[] = array(
+								'src'           => $data_url,
+								'alt'           => $alt,
+								'title'         => $title,
+								'description'   => $description,
+								'attachment_id' => $attachment_id,
+							);
+						}
+					}
+				}
+				
+				Logger::info( 'FP SEO: extract_images_from_content - Extracted from background-image and data attributes', array(
+					'post_id' => $post->ID,
+					'images_after_bg_extraction' => count( $images ),
+				) );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error extracting background images', array(
+					'error' => $e->getMessage(),
+					'post_id' => $post->ID,
+				) );
+			}
+		}
+		
+		// CRITICAL: Also extract from background-image CSS using regex (fallback if DOMDocument fails)
+		// This catches images in inline styles that might not be parsed correctly
+		if ( strpos( $content_to_parse, 'background-image' ) !== false ) {
+			preg_match_all( '/background-image\s*:\s*url\(["\']?([^"\')]+)["\']?\)/i', $content_to_parse, $bg_regex_matches, PREG_SET_ORDER );
+			foreach ( $bg_regex_matches as $bg_match ) {
+				$bg_url = $bg_match[1] ?? '';
+				if ( ! empty( $bg_url ) && ! isset( $seen_srcs[ $bg_url ] ) ) {
+					// Normalize URL
+					if ( strpos( $bg_url, 'http' ) !== 0 ) {
+						if ( strpos( $bg_url, '/' ) === 0 ) {
+							$bg_url = site_url( $bg_url );
+						} else {
+							$bg_url = content_url( $bg_url );
+						}
+					}
+					
+					$seen_srcs[ $bg_url ] = true;
+					$attachment_id = $this->get_attachment_id_from_url( $bg_url );
+					
+					$alt = '';
+					$title = '';
+					$description = '';
+					
+					if ( $attachment_id ) {
+						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+						$attachment = get_post( $attachment_id );
+						$title = $attachment ? $attachment->post_title : '';
+						$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+					}
+					
+					$images[] = array(
+						'src'           => $bg_url,
+						'alt'           => $alt,
+						'title'         => $title,
+						'description'   => $description,
+						'attachment_id' => $attachment_id,
+					);
+				}
+			}
+			
+			Logger::info( 'FP SEO: extract_images_from_content - Extracted background-image from raw content via regex', array(
+				'post_id' => $post->ID,
+				'images_after_bg_regex' => count( $images ),
+			) );
+		}
 		
 		// Se non abbiamo trovato immagini con DOMDocument ma ci sono tag <img> nel contenuto,
 		// prova a estrarle con regex come fallback
@@ -2172,14 +2346,439 @@ class MetaboxRenderer {
 			}
 		}
 		
+		// CRITICAL: Extract images from post meta (WPBakery, Nectar Slider, and other plugins store images in post meta)
+		// This is essential for pages that use page builders or sliders that don't store images in post_content
+		try {
+			// CRITICAL: Always check for Nectar Slider images, even if no shortcode is found
+			// Some pages might use sliders without the shortcode in content
+			$is_homepage_check = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
+			if ( $is_homepage_check || strpos( $content, 'nectar' ) !== false || strpos( $content, 'slider' ) !== false ) {
+				// Try to find all published Nectar Slider posts
+				$all_sliders = get_posts( array(
+					'post_type' => 'nectar_slider',
+					'posts_per_page' => 100, // Get more sliders
+					'post_status' => 'publish',
+					'orderby' => 'date',
+					'order' => 'DESC',
+					'suppress_filters' => false,
+				) );
+				
+				Logger::info( 'FP SEO: extract_images_from_content - Checking all sliders (fallback)', array(
+					'post_id' => $post->ID,
+					'is_homepage' => $is_homepage_check,
+					'all_sliders_count' => count( $all_sliders ),
+					'slider_ids' => array_map( function( $s ) { return $s->ID; }, $all_sliders ),
+				) );
+				
+				foreach ( $all_sliders as $slider_post ) {
+					$slider_image = get_post_meta( $slider_post->ID, '_nectar_slider_image', true );
+					if ( ! empty( $slider_image ) ) {
+						// Handle array values
+						if ( is_array( $slider_image ) ) {
+							if ( count( $slider_image ) === 1 ) {
+								$slider_image = $slider_image[0];
+							} else {
+								foreach ( $slider_image as $img_value ) {
+									if ( ! empty( $img_value ) ) {
+										$this->process_meta_image_value( $img_value, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+									}
+								}
+								continue;
+							}
+						}
+						
+						// Handle serialized arrays/objects
+						if ( is_string( $slider_image ) && ( $slider_image[0] === 'a:' || $slider_image[0] === 'O:' ) ) {
+							$unserialized = @unserialize( $slider_image );
+							if ( is_array( $unserialized ) ) {
+								$image_ids_or_urls = $this->extract_image_from_array( $unserialized );
+								foreach ( $image_ids_or_urls as $img_value ) {
+									$this->process_meta_image_value( $img_value, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+								}
+								continue;
+							}
+						}
+						
+						if ( ! empty( $slider_image ) ) {
+							$this->process_meta_image_value( $slider_image, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+						}
+					}
+				}
+			}
+			
+			$all_meta = get_post_meta( $post->ID );
+			$image_meta_keys = array();
+
+			// Specific meta keys known to contain images (Nectar Slider, Salient theme, etc.)
+			$known_image_meta_keys = array(
+				'_nectar_slider_image',           // Nectar Slider image URL
+				'_nectar_slider_preview_image',  // Nectar Slider preview
+				'_nectar_header_bg',             // Salient header background
+				'_thumbnail_id',                 // Featured image (alternative)
+				'_wp_attachment_id',            // Generic attachment ID
+			);
+
+			// Collect all post meta keys that might contain images
+			foreach ( $all_meta as $key => $value ) {
+				// Check if it's a known image meta key
+				if ( in_array( $key, $known_image_meta_keys, true ) ) {
+					$image_meta_keys[ $key ] = $value;
+					continue;
+				}
+
+				// Check if key suggests it contains image data
+				if ( strpos( $key, 'image' ) !== false
+					|| strpos( $key, 'bg' ) !== false
+					|| strpos( $key, 'background' ) !== false
+					|| strpos( $key, 'thumbnail' ) !== false
+					|| strpos( $key, 'slide' ) !== false
+					|| strpos( $key, 'header' ) !== false
+					|| strpos( $key, 'preview' ) !== false ) {
+					$image_meta_keys[ $key ] = $value;
+				}
+			}
+
+			// CRITICAL: Also check for Nectar Slider shortcodes and extract images from associated slider posts
+			// Pattern: [nectar_slider location="location_name"] or [nectar_slider location=""]
+			// ALSO: If this is the homepage, always check for sliders even if no shortcode is found
+			$is_homepage = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
+			$has_nectar_slider_shortcode = preg_match_all( '/\[nectar_slider[^\]]*\]/i', $content, $slider_shortcode_matches, PREG_SET_ORDER );
+			
+			if ( $has_nectar_slider_shortcode || $is_homepage ) {
+				Logger::info( 'FP SEO: extract_images_from_content - Found Nectar Slider shortcode or homepage', array(
+					'post_id' => $post->ID,
+					'has_shortcode' => $has_nectar_slider_shortcode,
+					'is_homepage' => $is_homepage,
+					'shortcode_count' => $has_nectar_slider_shortcode ? count( $slider_shortcode_matches ) : 0,
+					'shortcodes' => $has_nectar_slider_shortcode ? $slider_shortcode_matches : array(),
+				) );
+				
+				// If no shortcode matches but this is homepage, process as if there's an empty shortcode
+				if ( ! $has_nectar_slider_shortcode && $is_homepage ) {
+					$slider_shortcode_matches = array( array( 0 => '[nectar_slider]' ) );
+				}
+				
+				foreach ( $slider_shortcode_matches as $shortcode_match ) {
+					$shortcode_content = $shortcode_match[0];
+					
+					// Extract location if present
+					$location = '';
+					if ( preg_match( '/location\s*=\s*["\']([^"\']+)["\']/i', $shortcode_content, $location_match ) ) {
+						$location = $location_match[1];
+					}
+					
+					Logger::info( 'FP SEO: extract_images_from_content - Processing Nectar Slider shortcode', array(
+						'post_id' => $post->ID,
+						'shortcode_content' => $shortcode_content,
+						'location' => $location ?: 'empty',
+					) );
+					
+					$slider_posts = array();
+					
+					if ( ! empty( $location ) ) {
+						// Find slider posts with this specific location
+						$slider_posts = get_posts( array(
+							'post_type' => 'nectar_slider',
+							'posts_per_page' => -1,
+							'tax_query' => array(
+								array(
+									'taxonomy' => 'slider-locations',
+									'field' => 'slug',
+									'terms' => $location,
+								),
+							),
+						) );
+						
+						Logger::info( 'FP SEO: extract_images_from_content - Found sliders with location', array(
+							'post_id' => $post->ID,
+							'location' => $location,
+							'slider_count' => count( $slider_posts ),
+						) );
+					} else {
+						// Location is empty - check if this is the homepage first
+						// Use multiple checks to ensure we identify the homepage correctly
+						$page_on_front = (int) get_option( 'page_on_front' );
+						$is_homepage = ( (int) $post->ID === $page_on_front );
+						
+						Logger::info( 'FP SEO: extract_images_from_content - Location is empty, checking homepage status', array(
+							'post_id' => $post->ID,
+							'page_on_front' => $page_on_front,
+							'is_homepage' => $is_homepage ? 'yes' : 'no',
+							'show_on_front' => get_option( 'show_on_front' ),
+						) );
+						
+						// Additional check: if page_on_front is 0, it means posts page, but we still check for home location
+						// Also check if show_on_front is 'page' to ensure we're using a static page
+						if ( ! $is_homepage && get_option( 'show_on_front' ) === 'page' ) {
+							// Double-check: maybe the post ID matches
+							$is_homepage = ( (int) $post->ID === $page_on_front );
+						}
+						
+						// Location is empty - try to find sliders with common location names first
+						// Common location names: 'home', 'homepage', 'main', 'default', etc.
+						$common_locations = array( 'home', 'homepage', 'main', 'default', 'header', 'hero' );
+						$slider_posts = array();
+						
+						// CRITICAL: If this is the homepage, prioritize 'home' location
+						// Also always check 'home' location when location is empty, as it's the most common case
+						$home_sliders = get_posts( array(
+							'post_type' => 'nectar_slider',
+							'posts_per_page' => 20,
+							'post_status' => 'publish',
+							'tax_query' => array(
+								array(
+									'taxonomy' => 'slider-locations',
+									'field' => 'slug',
+									'terms' => 'home',
+								),
+							),
+						) );
+						if ( ! empty( $home_sliders ) ) {
+							$slider_posts = array_merge( $slider_posts, $home_sliders );
+							Logger::info( 'FP SEO: extract_images_from_content - Found home sliders (location empty)', array(
+								'post_id' => $post->ID,
+								'is_homepage' => $is_homepage ? 'yes' : 'no',
+								'page_on_front' => $page_on_front,
+								'home_sliders_count' => count( $home_sliders ),
+								'home_slider_ids' => array_map( function( $s ) { return $s->ID; }, $home_sliders ),
+							) );
+						}
+						
+						// First, try to find sliders with common location names
+						foreach ( $common_locations as $common_location ) {
+							$location_sliders = get_posts( array(
+								'post_type' => 'nectar_slider',
+								'posts_per_page' => 10,
+								'post_status' => 'publish',
+								'tax_query' => array(
+									array(
+										'taxonomy' => 'slider-locations',
+										'field' => 'slug',
+										'terms' => $common_location,
+									),
+								),
+							) );
+							if ( ! empty( $location_sliders ) ) {
+								$slider_posts = array_merge( $slider_posts, $location_sliders );
+								Logger::info( 'FP SEO: extract_images_from_content - Found sliders with common location', array(
+									'post_id' => $post->ID,
+									'location' => $common_location,
+									'slider_count' => count( $location_sliders ),
+								) );
+							}
+						}
+						
+						// If no sliders found with common locations, get all published Nectar Slider posts
+						// Only get a limited number to avoid performance issues
+						if ( empty( $slider_posts ) ) {
+							$slider_posts = get_posts( array(
+								'post_type' => 'nectar_slider',
+								'posts_per_page' => 50, // Increased from 20 to 50 to catch more sliders
+								'post_status' => 'publish',
+								'orderby' => 'date',
+								'order' => 'DESC',
+							) );
+							
+							Logger::info( 'FP SEO: extract_images_from_content - No sliders found with common locations, getting all published sliders', array(
+								'post_id' => $post->ID,
+								'all_sliders_count' => count( $slider_posts ),
+							) );
+						}
+						
+						// CRITICAL: If still no sliders found, try without taxonomy filter
+						// Some sliders might not have location taxonomy set
+						if ( empty( $slider_posts ) ) {
+							$slider_posts = get_posts( array(
+								'post_type' => 'nectar_slider',
+								'posts_per_page' => 50,
+								'post_status' => 'publish',
+								'orderby' => 'date',
+								'order' => 'DESC',
+								'suppress_filters' => false,
+							) );
+							
+							Logger::info( 'FP SEO: extract_images_from_content - No sliders found with taxonomy, getting all sliders without filter', array(
+								'post_id' => $post->ID,
+								'all_sliders_count_no_tax' => count( $slider_posts ),
+							) );
+						}
+					}
+
+					Logger::info( 'FP SEO: extract_images_from_content - Processing slider posts', array(
+						'post_id' => $post->ID,
+						'total_slider_posts' => count( $slider_posts ),
+						'slider_post_ids' => array_map( function( $s ) { return $s->ID; }, $slider_posts ),
+					) );
+
+					foreach ( $slider_posts as $slider_post ) {
+						// Get slider image from meta
+						$slider_image = get_post_meta( $slider_post->ID, '_nectar_slider_image', true );
+						
+						Logger::info( 'FP SEO: extract_images_from_content - Checking slider post', array(
+							'post_id' => $post->ID,
+							'slider_post_id' => $slider_post->ID,
+							'slider_image' => $slider_image ?: 'empty',
+							'slider_image_type' => gettype( $slider_image ),
+							'location' => $location ?: 'empty',
+						) );
+						
+						// Handle array values (get_post_meta might return array with single element or multiple elements)
+						if ( is_array( $slider_image ) ) {
+							if ( count( $slider_image ) === 1 ) {
+								$slider_image = $slider_image[0];
+								Logger::info( 'FP SEO: extract_images_from_content - Unwrapped single-element array', array(
+									'post_id' => $post->ID,
+									'slider_post_id' => $slider_post->ID,
+									'unwrapped_value' => $slider_image,
+									'unwrapped_type' => gettype( $slider_image ),
+								) );
+							} else {
+								// Multiple elements - process each one
+								Logger::info( 'FP SEO: extract_images_from_content - Found array with multiple elements', array(
+									'post_id' => $post->ID,
+									'slider_post_id' => $slider_post->ID,
+									'array_count' => count( $slider_image ),
+								) );
+								foreach ( $slider_image as $img_value ) {
+									if ( ! empty( $img_value ) ) {
+										$images_count_before = count( $images );
+										$this->process_meta_image_value( $img_value, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+										$images_count_after = count( $images );
+										Logger::info( 'FP SEO: extract_images_from_content - Processed image from array element', array(
+											'post_id' => $post->ID,
+											'slider_post_id' => $slider_post->ID,
+											'img_value' => is_string( $img_value ) ? substr( $img_value, 0, 100 ) : $img_value,
+											'images_count_before' => $images_count_before,
+											'images_count_after' => $images_count_after,
+											'image_added' => $images_count_after > $images_count_before,
+										) );
+									}
+								}
+								continue; // Skip to next slider post since we processed all array elements
+							}
+						}
+						
+						// Handle serialized arrays/objects
+						if ( is_string( $slider_image ) && ( $slider_image[0] === 'a:' || $slider_image[0] === 'O:' ) ) {
+							$unserialized = @unserialize( $slider_image );
+							if ( is_array( $unserialized ) ) {
+								// Extract image IDs/URLs from serialized arrays
+								$image_ids_or_urls = $this->extract_image_from_array( $unserialized );
+								foreach ( $image_ids_or_urls as $img_value ) {
+									$images_count_before = count( $images );
+									$this->process_meta_image_value( $img_value, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+									$images_count_after = count( $images );
+									Logger::info( 'FP SEO: extract_images_from_content - Processed image from serialized array', array(
+										'post_id' => $post->ID,
+										'slider_post_id' => $slider_post->ID,
+										'img_value' => $img_value,
+										'images_count_before' => $images_count_before,
+										'images_count_after' => $images_count_after,
+										'image_added' => $images_count_after > $images_count_before,
+									) );
+								}
+								continue; // Skip to next slider post
+							}
+						}
+						
+						if ( ! empty( $slider_image ) ) {
+							// CRITICAL: Process the slider image directly instead of adding to image_meta_keys
+							// This ensures it's processed immediately and not lost in the array processing logic
+							$images_count_before = count( $images );
+							$this->process_meta_image_value( $slider_image, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
+							$images_count_after = count( $images );
+							
+							Logger::info( 'FP SEO: extract_images_from_content - Processed Nectar Slider image directly', array(
+								'post_id' => $post->ID,
+								'slider_post_id' => $slider_post->ID,
+								'slider_image' => $slider_image,
+								'location' => $location ?: 'empty',
+								'images_count_before' => $images_count_before,
+								'images_count_after' => $images_count_after,
+								'image_added' => $images_count_after > $images_count_before,
+								'slider_image_type' => gettype( $slider_image ),
+								'is_numeric' => is_numeric( $slider_image ),
+								'is_url' => filter_var( $slider_image, FILTER_VALIDATE_URL ) !== false,
+								'starts_with_http' => is_string( $slider_image ) && strpos( $slider_image, 'http' ) === 0,
+								'starts_with_slash' => is_string( $slider_image ) && strpos( $slider_image, '/' ) === 0,
+							) );
+						} else {
+							Logger::info( 'FP SEO: extract_images_from_content - Slider image is empty', array(
+								'post_id' => $post->ID,
+								'slider_post_id' => $slider_post->ID,
+								'location' => $location ?: 'empty',
+							) );
+						}
+					}
+				}
+			}
+			
+			if ( ! empty( $image_meta_keys ) ) {
+				Logger::info( 'FP SEO: extract_images_from_content - Found image-related post meta', array(
+					'post_id' => $post->ID,
+					'meta_keys_count' => count( $image_meta_keys ),
+					'meta_keys' => array_keys( $image_meta_keys ),
+				) );
+				
+				foreach ( $image_meta_keys as $meta_key => $meta_value ) {
+					// Handle array values (get_post_meta returns array with single element for single values)
+					if ( is_array( $meta_value ) && count( $meta_value ) === 1 ) {
+						$meta_value = $meta_value[0];
+					}
+					
+					// Skip empty values
+					if ( empty( $meta_value ) ) {
+						continue;
+					}
+					
+					// Handle serialized arrays/objects
+					if ( is_string( $meta_value ) && ( $meta_value[0] === 'a:' || $meta_value[0] === 'O:' ) ) {
+						$unserialized = @unserialize( $meta_value );
+						if ( is_array( $unserialized ) ) {
+							// Recursively extract image IDs/URLs from serialized arrays
+							$meta_value = $this->extract_image_from_array( $unserialized );
+							if ( empty( $meta_value ) ) {
+								continue;
+							}
+						}
+					}
+					
+					// Handle arrays directly (not serialized)
+					if ( is_array( $meta_value ) ) {
+						$image_ids_or_urls = $this->extract_image_from_array( $meta_value );
+						foreach ( $image_ids_or_urls as $img_value ) {
+							$this->process_meta_image_value( $img_value, $meta_key, $post->ID, $images, $seen_srcs );
+						}
+						continue;
+					}
+					
+					// Process single value
+					$this->process_meta_image_value( $meta_value, $meta_key, $post->ID, $images, $seen_srcs );
+				}
+				
+				Logger::info( 'FP SEO: extract_images_from_content - After extracting from post meta', array(
+					'post_id' => $post->ID,
+					'total_images_after_meta' => count( $images ),
+					'images_added_from_meta' => count( $images ) - ( count( $wpbakery_images ) + ( ! empty( $featured_image ) ? 1 : 0 ) + $total_img_tags ),
+				) );
+			}
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error extracting images from post meta', array(
+				'error' => $e->getMessage(),
+				'post_id' => $post->ID,
+				'trace' => $e->getTraceAsString(),
+			) );
+			// Continue without post meta images
+		}
+		
 		// Log sempre (non solo in debug) per tracciare il problema
 		Logger::info( 'FP SEO: extract_images_from_content - Final images count', array(
-			'post_id' => $post->ID,
-			'total_images' => count( $images ),
-			'wpbakery_images' => count( $wpbakery_images ),
-			'html_images' => count( $images ) - count( $wpbakery_images ),
-			'has_wpbakery' => $has_wpbakery,
-			'processed_content_length' => strlen( $processed_content ?? '' ),
+				'post_id' => $post->ID,
+				'total_images' => count( $images ),
+				'wpbakery_images' => count( $wpbakery_images ),
+				'html_images' => count( $images ) - count( $wpbakery_images ),
+				'has_wpbakery' => $has_wpbakery,
+				'processed_content_length' => strlen( $processed_content ?? '' ),
 			'images_srcs' => array_map( function( $img ) {
 				return array(
 					'src' => substr( $img['src'] ?? '', 0, 150 ),
@@ -2190,6 +2789,545 @@ class MetaboxRenderer {
 		) );
 		
 		return $images;
+	}
+	
+	/**
+	 * Extract image IDs or URLs from an array (recursively).
+	 *
+	 * @param array $array Array to search.
+	 * @return array Array of image IDs or URLs found.
+	 */
+	private function extract_image_from_array( array $array ): array {
+		$results = array();
+		foreach ( $array as $key => $value ) {
+			if ( is_array( $value ) ) {
+				// Recursively search nested arrays
+				$results = array_merge( $results, $this->extract_image_from_array( $value ) );
+			} elseif ( is_numeric( $value ) && $value > 0 ) {
+				// Check if it's an attachment ID
+				$attachment = get_post( absint( $value ) );
+				if ( $attachment && $attachment->post_type === 'attachment' ) {
+					$mime_type = get_post_mime_type( $attachment->ID );
+					if ( $mime_type && strpos( $mime_type, 'image/' ) === 0 ) {
+						$results[] = absint( $value );
+					}
+				}
+			} elseif ( is_string( $value ) && filter_var( $value, FILTER_VALIDATE_URL ) ) {
+				// Check if it's an image URL
+				// Accept URLs with image extensions OR URLs that might be image attachments (WordPress media URLs)
+				if ( preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i', $value ) 
+					|| strpos( $value, '/wp-content/uploads/' ) !== false
+					|| strpos( $value, '/wp-includes/images/' ) !== false ) {
+					$results[] = $value;
+				}
+			}
+		}
+		return $results;
+	}
+	
+	/**
+	 * Process a single meta image value (ID or URL) and add to images array.
+	 *
+	 * @param mixed  $value Image ID or URL.
+	 * @param string $meta_key Meta key name.
+	 * @param int    $post_id Post ID.
+	 * @param array  $images Images array (passed by reference).
+	 * @param array  $seen_srcs Seen sources array (passed by reference).
+	 */
+	private function process_meta_image_value( $value, string $meta_key, int $post_id, array &$images, array &$seen_srcs ): void {
+		Logger::info( 'FP SEO: process_meta_image_value called', array(
+			'post_id' => $post_id,
+			'meta_key' => $meta_key,
+			'value_type' => gettype( $value ),
+			'value_preview' => is_string( $value ) ? substr( $value, 0, 100 ) : ( is_numeric( $value ) ? $value : 'non-string/non-numeric' ),
+			'images_count_before' => count( $images ),
+		) );
+		
+		// Skip empty values (including empty strings, null, false, 0, '0', etc.)
+		if ( empty( $value ) ) {
+			Logger::info( 'FP SEO: process_meta_image_value - Value is empty, skipping', array(
+				'post_id' => $post_id,
+				'meta_key' => $meta_key,
+			) );
+			return;
+		}
+		
+		// Also skip if value is a string that's only whitespace
+		if ( is_string( $value ) && trim( $value ) === '' ) {
+			Logger::info( 'FP SEO: process_meta_image_value - Value is whitespace only, skipping', array(
+				'post_id' => $post_id,
+				'meta_key' => $meta_key,
+			) );
+			return;
+		}
+		
+		// Check if value is an attachment ID (numeric)
+		$attachment_id = is_numeric( $value ) ? absint( $value ) : 0;
+		if ( $attachment_id > 0 ) {
+			// Verify it's actually an attachment
+			$attachment = get_post( $attachment_id );
+			if ( $attachment && $attachment->post_type === 'attachment' ) {
+				// Check if image type
+				$mime_type = get_post_mime_type( $attachment_id );
+				if ( $mime_type && strpos( $mime_type, 'image/' ) === 0 ) {
+					$image_url = wp_get_attachment_url( $attachment_id );
+					if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+						$seen_srcs[ $image_url ] = true;
+						
+						// Get alt, title, description from attachment
+						$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+						$title = $attachment->post_title ?: '';
+						$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+						
+						// Check for saved custom data
+						$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+						if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+							$saved = $saved_images[ $image_url ];
+							$alt = $saved['alt'] ?? $alt;
+							$title = $saved['title'] ?? $title;
+							$description = $saved['description'] ?? $description;
+						}
+						
+						$images[] = array(
+							'src'           => $image_url,
+							'alt'           => $alt,
+							'title'         => $title,
+							'description'   => $description,
+							'attachment_id' => $attachment_id,
+						);
+						
+						Logger::info( 'FP SEO: extract_images_from_content - Added image from post meta', array(
+							'post_id' => $post_id,
+							'meta_key' => $meta_key,
+							'attachment_id' => $attachment_id,
+							'image_url' => $image_url,
+						) );
+					}
+				}
+			}
+		} elseif ( is_string( $value ) ) {
+			// Value is a string - could be a URL, file path, or numeric string
+			// First check if it's numeric (could be an attachment ID as string)
+			if ( is_numeric( $value ) && (int) $value > 0 ) {
+				// It's a numeric string, treat it as attachment ID
+				$attachment_id = absint( $value );
+				$attachment = get_post( $attachment_id );
+				if ( $attachment && $attachment->post_type === 'attachment' ) {
+					$mime_type = get_post_mime_type( $attachment_id );
+					if ( $mime_type && strpos( $mime_type, 'image/' ) === 0 ) {
+						$image_url = wp_get_attachment_url( $attachment_id );
+						if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+							$seen_srcs[ $image_url ] = true;
+							
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							$title = $attachment->post_title ?: '';
+							$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+							
+							// Check for saved custom data
+							$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+							if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+								$saved = $saved_images[ $image_url ];
+								$alt = $saved['alt'] ?? $alt;
+								$title = $saved['title'] ?? $title;
+								$description = $saved['description'] ?? $description;
+							}
+							
+							$images[] = array(
+								'src'           => $image_url,
+								'alt'           => $alt,
+								'title'         => $title,
+								'description'   => $description,
+								'attachment_id' => $attachment_id,
+							);
+							
+							Logger::info( 'FP SEO: extract_images_from_content - Added image from numeric string (attachment ID)', array(
+								'post_id' => $post_id,
+								'meta_key' => $meta_key,
+								'attachment_id' => $attachment_id,
+								'image_url' => $image_url,
+								'original_value' => $value,
+							) );
+							return; // Exit early since we processed it
+						} else {
+							Logger::info( 'FP SEO: process_meta_image_value - Numeric string is attachment but not image or URL not found', array(
+								'post_id' => $post_id,
+								'meta_key' => $meta_key,
+								'attachment_id' => $attachment_id,
+								'mime_type' => $mime_type ?? 'unknown',
+								'image_url' => $image_url ?? 'not found',
+							) );
+						}
+					} else {
+						Logger::info( 'FP SEO: process_meta_image_value - Numeric string is not a valid attachment', array(
+							'post_id' => $post_id,
+							'meta_key' => $meta_key,
+							'attachment_id' => $attachment_id,
+							'attachment_exists' => $attachment ? 'yes' : 'no',
+							'attachment_type' => $attachment ? $attachment->post_type : 'N/A',
+						) );
+					}
+				} else {
+					Logger::info( 'FP SEO: process_meta_image_value - Numeric string is not positive', array(
+						'post_id' => $post_id,
+						'meta_key' => $meta_key,
+						'value' => $value,
+						'int_value' => (int) $value,
+					) );
+				}
+			}
+			
+			// Check if it looks like a URL or file path
+			$is_url_like = (
+				filter_var( $value, FILTER_VALIDATE_URL ) !== false
+				|| strpos( $value, 'http' ) === 0
+				|| strpos( $value, '/' ) === 0
+				|| strpos( $value, 'wp-content' ) !== false
+				|| strpos( $value, 'uploads' ) !== false
+				|| preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)/i', $value )
+			);
+			
+			if ( $is_url_like ) {
+				// Value is a URL (or looks like one), try to find attachment ID from URL
+				// Normalize URL first if needed
+				$normalized_url = $value;
+				if ( strpos( $normalized_url, 'http' ) !== 0 ) {
+					if ( strpos( $normalized_url, '/' ) === 0 ) {
+						$normalized_url = site_url( $normalized_url );
+					} else {
+						$normalized_url = content_url( $normalized_url );
+					}
+				}
+			
+			$attachment_id = $this->get_attachment_id_from_url( $normalized_url );
+			if ( $attachment_id <= 0 ) {
+				// Try with original URL too
+				$attachment_id = $this->get_attachment_id_from_url( $value );
+			}
+			
+			if ( $attachment_id > 0 ) {
+				$image_url = wp_get_attachment_url( $attachment_id );
+				if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+					$seen_srcs[ $image_url ] = true;
+					
+					$attachment = get_post( $attachment_id );
+					$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+					$title = $attachment ? $attachment->post_title : '';
+					$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+					
+					// Check for saved custom data
+					$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+					if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+						$saved = $saved_images[ $image_url ];
+						$alt = $saved['alt'] ?? $alt;
+						$title = $saved['title'] ?? $title;
+						$description = $saved['description'] ?? $description;
+					}
+					
+					$images[] = array(
+						'src'           => $image_url,
+						'alt'           => $alt,
+						'title'         => $title,
+						'description'   => $description,
+						'attachment_id' => $attachment_id,
+					);
+					
+					Logger::info( 'FP SEO: extract_images_from_content - Added image from post meta URL', array(
+						'post_id' => $post_id,
+						'meta_key' => $meta_key,
+						'attachment_id' => $attachment_id,
+						'image_url' => $image_url,
+						'original_value' => $value,
+					) );
+				}
+			} elseif ( ! isset( $seen_srcs[ $normalized_url ] ) && ! isset( $seen_srcs[ $value ] ) ) {
+				// External URL or URL without attachment, add it anyway if it looks like an image
+				// Check if it's likely an image URL
+				// CRITICAL: For Nectar Slider and similar plugins, be more permissive
+				// If the meta key suggests it's an image (contains 'image', 'slider', 'bg', etc.), trust it
+				$meta_key_suggests_image = (
+					strpos( $meta_key, 'image' ) !== false
+					|| strpos( $meta_key, 'slider' ) !== false
+					|| strpos( $meta_key, 'bg' ) !== false
+					|| strpos( $meta_key, 'background' ) !== false
+					|| strpos( $meta_key, 'thumbnail' ) !== false
+				);
+				
+				$is_likely_image = (
+					preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i', $value )
+					|| preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i', $normalized_url )
+					|| strpos( $value, '/wp-content/uploads/' ) !== false
+					|| strpos( $normalized_url, '/wp-content/uploads/' ) !== false
+					|| ( $meta_key_suggests_image && filter_var( $normalized_url, FILTER_VALIDATE_URL ) !== false )
+				);
+				
+				if ( $is_likely_image ) {
+					$seen_srcs[ $normalized_url ] = true;
+					$seen_srcs[ $value ] = true;
+					$images[] = array(
+						'src'           => $normalized_url,
+						'alt'           => '',
+						'title'         => '',
+						'description'   => '',
+						'attachment_id' => null,
+					);
+					
+					Logger::info( 'FP SEO: extract_images_from_content - Added external image from post meta', array(
+						'post_id' => $post_id,
+						'meta_key' => $meta_key,
+						'image_url' => $normalized_url,
+						'original_value' => $value,
+						'is_likely_image' => true,
+						'meta_key_suggests_image' => $meta_key_suggests_image,
+					) );
+				} else {
+					Logger::info( 'FP SEO: process_meta_image_value - URL does not look like an image, skipping', array(
+						'post_id' => $post_id,
+						'meta_key' => $meta_key,
+						'value' => substr( $value, 0, 200 ),
+						'normalized_url' => substr( $normalized_url, 0, 200 ),
+						'has_image_ext' => preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i', $value ) || preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?|$)/i', $normalized_url ),
+						'has_wp_content_uploads' => strpos( $value, '/wp-content/uploads/' ) !== false || strpos( $normalized_url, '/wp-content/uploads/' ) !== false,
+						'meta_key_suggests_image' => $meta_key_suggests_image,
+						'is_valid_url' => filter_var( $normalized_url, FILTER_VALIDATE_URL ) !== false,
+					) );
+				}
+			} else {
+				Logger::info( 'FP SEO: process_meta_image_value - URL already seen, skipping', array(
+					'post_id' => $post_id,
+					'meta_key' => $meta_key,
+					'value' => substr( $value, 0, 200 ),
+					'normalized_url' => substr( $normalized_url, 0, 200 ),
+					'already_seen_normalized' => isset( $seen_srcs[ $normalized_url ] ),
+					'already_seen_original' => isset( $seen_srcs[ $value ] ),
+				) );
+			}
+			} else {
+				// String value that doesn't look like a URL - log it for debugging
+				Logger::info( 'FP SEO: process_meta_image_value - String value does not look like URL or attachment ID', array(
+					'post_id' => $post_id,
+					'meta_key' => $meta_key,
+					'value' => substr( $value, 0, 200 ),
+					'value_length' => strlen( $value ),
+					'is_numeric_check' => is_numeric( $value ),
+					'is_url_check' => filter_var( $value, FILTER_VALIDATE_URL ) !== false,
+					'starts_with_http' => strpos( $value, 'http' ) === 0,
+					'starts_with_slash' => strpos( $value, '/' ) === 0,
+					'has_wp_content' => strpos( $value, 'wp-content' ) !== false,
+					'has_uploads' => strpos( $value, 'uploads' ) !== false,
+					'has_image_ext' => preg_match( '/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)/i', $value ),
+				) );
+			}
+		} else {
+			// Value is not a string and not numeric - log it
+			Logger::info( 'FP SEO: process_meta_image_value - Value is not string or numeric', array(
+				'post_id' => $post_id,
+				'meta_key' => $meta_key,
+				'value_type' => gettype( $value ),
+				'value' => is_array( $value ) ? 'array(' . count( $value ) . ')' : ( is_object( $value ) ? get_class( $value ) : (string) $value ),
+			) );
+		}
+		
+		// Log final state
+		$images_count_after = count( $images );
+		Logger::info( 'FP SEO: process_meta_image_value completed', array(
+			'post_id' => $post_id,
+			'meta_key' => $meta_key,
+			'images_count_before' => $images_count_before,
+			'images_count_after' => $images_count_after,
+			'image_added' => $images_count_after > $images_count_before,
+		) );
+	}
+
+	/**
+	 * Render only the content of the images section (without header/wrapper).
+	 * Used for AJAX reloads.
+	 *
+	 * @param WP_Post $post Current post.
+	 * @param array   $images Images array (optional, will extract if not provided).
+	 */
+	public function render_images_section_content( WP_Post $post, array $images = array() ): void {
+		// If images not provided, extract them
+		if ( empty( $images ) ) {
+			try {
+				$images = $this->extract_images_from_content( $post );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Error extracting images from content in render_images_section_content', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'post_id' => $post->ID,
+				) );
+				$images = array(); // Continue with empty array instead of failing completely
+			}
+		}
+		
+		Logger::info( 'FP SEO: render_images_section_content - images extracted', array(
+			'post_id' => $post->ID,
+			'images_count' => count( $images ),
+			'images_preview' => array_slice( array_map( function( $img ) {
+				return array(
+					'src' => substr( $img['src'] ?? '', 0, 100 ),
+					'has_attachment_id' => ! empty( $img['attachment_id'] ?? null ),
+					'attachment_id' => $img['attachment_id'] ?? null,
+				);
+			}, $images ), 0, 5 ), // First 5 images for debug
+		) );
+		
+		if ( empty( $images ) ) : ?>
+			<div style="padding: 24px; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb;">
+				<p style="margin: 0; color: #6b7280; font-size: 14px;">
+					<?php esc_html_e( 'Nessuna immagine trovata nel contenuto.', 'fp-seo-performance' ); ?>
+				</p>
+				<p style="margin: 8px 0 0; color: #9ca3af; font-size: 12px;">
+					<?php esc_html_e( 'Aggiungi immagini al contenuto per ottimizzarle qui.', 'fp-seo-performance' ); ?>
+				</p>
+			</div>
+		<?php else :
+			// Get featured image ID to identify it
+			$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
+			
+			$rendered_count = 0;
+			$skipped_count = 0;
+			
+			// Render all found images
+			foreach ( $images as $index => $image ) :
+				if ( empty( $image['src'] ) ) {
+					$skipped_count++;
+					continue;
+				}
+				
+				// Compare using ONLY attachment ID
+				$is_featured = false;
+				if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
+					$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
+				}
+				
+				$rendered_count++;
+			?>
+			<div class="fp-seo-image-item <?php echo $is_featured ? 'fp-seo-featured-image' : ''; ?>" 
+				 data-image-index="<?php echo esc_attr( $index ); ?>"
+				 data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+				 data-is-featured="<?php echo $is_featured ? '1' : '0'; ?>"
+				 style="background: #fff; border: <?php echo $is_featured ? '2px solid #10b981' : '1px solid #e5e7eb'; ?>; border-radius: 8px; padding: 16px; transition: all 0.2s ease; <?php echo $is_featured ? 'box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);' : ''; ?>">
+				
+				<div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start;">
+					<!-- Image Preview -->
+					<div style="position: relative;">
+						<?php
+						$preview_url = $image['src'];
+						if ( strpos( $preview_url, 'http' ) !== 0 ) {
+							if ( strpos( $preview_url, '/' ) === 0 ) {
+								$preview_url = site_url( $preview_url );
+							} else {
+								$preview_url = content_url( $preview_url );
+							}
+						}
+						?>
+						<img src="<?php echo esc_url( $preview_url ); ?>" 
+							 alt="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+							 style="width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; object-fit: cover; max-height: 120px; min-height: 80px; background: #f3f4f6;"
+							 loading="lazy"
+							 onerror="this.onerror=null; this.src='<?php echo esc_js( $preview_url ); ?>';">
+						<?php if ( $is_featured ) : ?>
+							<div style="position: absolute; top: 4px; left: 4px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">
+								⭐ <?php esc_html_e( 'In Evidenza', 'fp-seo-performance' ); ?>
+							</div>
+						<?php endif; ?>
+						<div style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+							#<?php echo esc_html( $index + 1 ); ?>
+						</div>
+					</div>
+					
+					<!-- Image Fields -->
+					<div style="display: grid; gap: 12px; flex: 1;">
+						<!-- Image URL (read-only) -->
+						<div>
+							<label style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'URL Immagine', 'fp-seo-performance' ); ?>
+							</label>
+							<input type="text" 
+								   value="<?php echo esc_attr( $image['src'] ); ?>" 
+								   readonly
+								   style="width: 100%; padding: 6px 10px; font-size: 11px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; font-family: monospace;">
+						</div>
+						
+						<!-- Alt Text -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Alt Text', 'fp-seo-performance' ); ?>
+								<span style="color: #ef4444;">*</span>
+							</label>
+							<input type="text" 
+								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt" 
+								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][alt]" 
+								   value="<?php echo esc_attr( $image['alt'] ?? '' ); ?>"
+								   placeholder="<?php esc_attr_e( 'es: Foto del B&B Dimora Verde a Mentana', 'fp-seo-performance' ); ?>"
+								   maxlength="125"
+								   data-image-field="alt"
+								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 6px; transition: all 0.2s ease;">
+							<div style="display: flex; justify-content: space-between; margin-top: 4px;">
+								<span style="font-size: 10px; color: #9ca3af;">
+									<?php esc_html_e( 'Raccomandato: 5-15 parole descrittive', 'fp-seo-performance' ); ?>
+								</span>
+								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-alt-count" 
+									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+									<?php echo esc_html( mb_strlen( $image['alt'] ?? '' ) ); ?>/125
+								</span>
+							</div>
+						</div>
+						
+						<!-- Title -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Title', 'fp-seo-performance' ); ?>
+							</label>
+							<input type="text" 
+								   id="fp-seo-image-<?php echo esc_attr( $index ); ?>-title" 
+								   name="fp_seo_images[<?php echo esc_attr( $index ); ?>][title]" 
+								   value="<?php echo esc_attr( $image['title'] ?? '' ); ?>"
+								   placeholder="<?php esc_attr_e( 'es: Dimora Verde B&B - Vista esterna', 'fp-seo-performance' ); ?>"
+								   maxlength="200"
+								   data-image-field="title"
+								   data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+								   style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease;">
+						</div>
+						
+						<!-- Description -->
+						<div>
+							<label for="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+								   style="display: block; font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px;">
+								<?php esc_html_e( 'Description', 'fp-seo-performance' ); ?>
+							</label>
+							<textarea id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description" 
+									  name="fp_seo_images[<?php echo esc_attr( $index ); ?>][description]" 
+									  placeholder="<?php esc_attr_e( 'Descrizione estesa dell\'immagine...', 'fp-seo-performance' ); ?>"
+									  maxlength="500"
+									  data-image-field="description"
+									  data-image-src="<?php echo esc_attr( $image['src'] ); ?>"
+									  rows="3"
+									  style="width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; transition: all 0.2s ease; resize: vertical; font-family: inherit;"><?php echo esc_textarea( $image['description'] ?? '' ); ?></textarea>
+							<div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+								<span id="fp-seo-image-<?php echo esc_attr( $index ); ?>-description-count" 
+									  style="font-size: 10px; font-weight: 600; color: #6b7280;">
+									<?php echo esc_html( mb_strlen( $image['description'] ?? '' ) ); ?>/500
+								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<?php
+			endforeach;
+			
+			Logger::info( 'FP SEO: render_images_section_content - Rendering complete', array(
+				'post_id' => $post->ID,
+				'total_images' => count( $images ),
+				'rendered_count' => $rendered_count,
+				'skipped_count' => $skipped_count,
+			) );
+		endif;
 	}
 
 	/**
@@ -2203,6 +3341,9 @@ class MetaboxRenderer {
 		$images = array();
 		
 		if ( empty( $content ) ) {
+			Logger::info( 'FP SEO: extract_wpbakery_images - Content is empty', array(
+				'post_id' => $post_id,
+			) );
 			return $images;
 		}
 		
@@ -2245,6 +3386,7 @@ class MetaboxRenderer {
 			$dom_rendered->loadHTML( '<?xml encoding="UTF-8">' . $rendered );
 			libxml_clear_errors();
 			
+			// Extract from <img> tags
 			$rendered_img_tags = $dom_rendered->getElementsByTagName( 'img' );
 			foreach ( $rendered_img_tags as $img ) {
 				$src = $img->getAttribute( 'src' );
@@ -2291,42 +3433,194 @@ class MetaboxRenderer {
 					);
 				}
 			}
+			
+			// CRITICAL: Also extract images from CSS background-image properties
+			// WPBakery often uses background-image instead of <img> tags
+			// Pattern: background-image: url('...') or background-image: url("...")
+			if ( preg_match_all( '/background-image\s*:\s*url\s*\(["\']?([^"\'()]+)["\']?\)/i', $rendered, $bg_matches, PREG_SET_ORDER ) ) {
+				foreach ( $bg_matches as $bg_match ) {
+					$bg_url = trim( $bg_match[1] );
+					if ( ! empty( $bg_url ) && ! isset( $seen_srcs[ $bg_url ] ) ) {
+						// Normalize URL
+						if ( strpos( $bg_url, 'http' ) !== 0 ) {
+							if ( strpos( $bg_url, '/' ) === 0 ) {
+								$bg_url = site_url( $bg_url );
+							} else {
+								$bg_url = content_url( $bg_url );
+							}
+						}
+						
+						$seen_srcs[ $bg_url ] = true;
+						$attachment_id = $this->get_attachment_id_from_url( $bg_url );
+						
+						$alt = '';
+						$title = '';
+						$description = '';
+						
+						if ( $attachment_id ) {
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							$attachment = get_post( $attachment_id );
+							$title = $attachment ? $attachment->post_title : '';
+							$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						}
+						
+						// Check for saved custom data
+						$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+						if ( is_array( $saved_images ) && isset( $saved_images[ $bg_url ] ) ) {
+							$saved = $saved_images[ $bg_url ];
+							$alt = $saved['alt'] ?? $alt;
+							$title = $saved['title'] ?? $title;
+							$description = $saved['description'] ?? $description;
+						}
+						
+						$images[] = array(
+							'src'           => $bg_url,
+							'alt'           => $alt,
+							'title'         => $title,
+							'description'   => $description,
+							'attachment_id' => $attachment_id,
+						);
+					}
+				}
+			}
+			
+			// Also extract from data attributes (WPBakery might use data-bg-image, data-image, etc.)
+			$xpath = new \DOMXPath( $dom_rendered );
+			$data_image_elements = $xpath->query( '//*[@data-bg-image or @data-image or @data-background-image]' );
+			foreach ( $data_image_elements as $element ) {
+				$data_attrs = array( 'data-bg-image', 'data-image', 'data-background-image' );
+				foreach ( $data_attrs as $attr ) {
+					$data_url = $element->getAttribute( $attr );
+					if ( ! empty( $data_url ) && ! isset( $seen_srcs[ $data_url ] ) ) {
+						// Normalize URL
+						if ( strpos( $data_url, 'http' ) !== 0 ) {
+							if ( strpos( $data_url, '/' ) === 0 ) {
+								$data_url = site_url( $data_url );
+							} else {
+								$data_url = content_url( $data_url );
+							}
+						}
+						
+						$seen_srcs[ $data_url ] = true;
+						$attachment_id = $this->get_attachment_id_from_url( $data_url );
+						
+						$alt = '';
+						$title = '';
+						$description = '';
+						
+						if ( $attachment_id ) {
+							$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+							$attachment = get_post( $attachment_id );
+							$title = $attachment ? $attachment->post_title : '';
+							$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+						}
+						
+						$images[] = array(
+							'src'           => $data_url,
+							'alt'           => $alt,
+							'title'         => $title,
+							'description'   => $description,
+							'attachment_id' => $attachment_id,
+						);
+					}
+				}
+			}
 		}
 		
-		// Extract vc_single_image shortcodes
-		// Pattern: [vc_single_image image="123" ...] or [vc_single_image image="123|full" ...]
-		// Also try: [vc_single_image ... image="123" ...] (image can be anywhere in the shortcode)
-		$patterns = array(
-			'/\[vc_single_image[^\]]*image\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i',
-			'/\[vc_single_image[^\]]*\]/i', // Match entire shortcode, then extract attributes
+		// CRITICAL: Extract images from ALL WPBakery shortcodes, not just vc_single_image
+		// WPBakery can use images in many ways:
+		// - vc_single_image: image="123"
+		// - vc_row/vc_column: bg_image="123" or background_image="123"
+		// - vc_gallery: images="123,456,789"
+		// - Other shortcodes: image="123", bg_image="123", etc.
+		
+		// Extract all image-related attributes from ALL WPBakery shortcodes
+		// Look for: image="123", bg_image="123", background_image="123", images="123,456"
+		// Pattern matches any WPBakery shortcode with image attributes
+		$image_attr_patterns = array(
+			'image',           // Standard image attribute
+			'bg_image',        // Background image
+			'background_image', // Alternative background image
+			'images',          // Gallery images (comma-separated)
 		);
 		
 		$matches = array();
-		foreach ( $patterns as $pattern ) {
+		foreach ( $image_attr_patterns as $attr ) {
+			// CRITICAL: Pattern must handle multi-line shortcodes
+			// WPBakery shortcodes can span multiple lines, so we need to match across newlines
+			// Pattern: [vc_* ... attr="value" ...] where attr can be image, bg_image, etc.
+			// Use DOTALL flag (s) to make . match newlines, and use non-greedy matching
+			$pattern = '/\[vc_\w+.*?' . preg_quote( $attr, '/' ) . '\s*=\s*["\']([^"\']+)["\'].*?\]/is';
+			if ( preg_match_all( $pattern, $content, $attr_matches, PREG_SET_ORDER ) ) {
+				foreach ( $attr_matches as $match ) {
+					// Extract just the shortcode name and the attribute value
+					$shortcode_name = '';
+					if ( preg_match( '/\[(vc_\w+)/i', $match[0], $name_match ) ) {
+						$shortcode_name = $name_match[1];
+					}
+					$matches[] = array( 
+						0 => $match[0], // Full shortcode
+						1 => $match[1], // Attribute value
+						'attr' => $attr,
+						'shortcode_name' => $shortcode_name,
+					);
+				}
+			}
+		}
+		
+		// Also extract vc_single_image specifically (for backward compatibility and edge cases)
+		// CRITICAL: Use DOTALL flag (s) to match across newlines
+		$vc_single_image_patterns = array(
+			'/\[vc_single_image.*?image\s*=\s*["\']([^"\']+)["\'].*?\]/is',
+		);
+		
+		foreach ( $vc_single_image_patterns as $pattern ) {
 			if ( preg_match_all( $pattern, $content, $pattern_matches, PREG_SET_ORDER ) ) {
-				$matches = array_merge( $matches, $pattern_matches );
+				foreach ( $pattern_matches as $match ) {
+					// Avoid duplicates
+					$is_duplicate = false;
+					foreach ( $matches as $existing ) {
+						if ( ( $existing[0] ?? '' ) === ( $match[0] ?? '' ) && ( $existing[1] ?? '' ) === ( $match[1] ?? '' ) ) {
+							$is_duplicate = true;
+							break;
+						}
+					}
+					if ( ! $is_duplicate ) {
+						$matches[] = array( 
+							0 => $match[0] ?? '', 
+							1 => $match[1] ?? '', 
+							'attr' => 'image',
+							'shortcode_name' => 'vc_single_image',
+						);
+					}
+				}
 			}
 		}
 		
 		if ( ! empty( $matches ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'extract_wpbakery_images - Found vc_single_image shortcodes', array(
+			Logger::info( 'FP SEO: extract_wpbakery_images - Found WPBakery shortcodes with images', array(
 					'post_id' => $post_id,
 					'count' => count( $matches ),
-				) );
-			}
+				'shortcodes_preview' => array_slice( array_map( function( $m ) {
+					return array(
+						'shortcode' => substr( $m[0] ?? '', 0, 100 ),
+						'attr_value' => substr( $m[1] ?? '', 0, 50 ),
+						'attr_name' => $m['attr'] ?? 'unknown',
+					);
+				}, $matches ), 0, 5 ),
+			) );
 		}
 		
 		foreach ( $matches as $match ) {
 			$shortcode_content = $match[0];
+			$image_param = $match[1] ?? '';
+			$attr_name = $match['attr'] ?? 'image';
 			
-			// Extract image parameter - try multiple ways
-			$image_param = '';
-			if ( isset( $match[1] ) ) {
-				$image_param = $match[1];
-			} else {
-				// Try to extract from shortcode attributes
-				if ( preg_match( '/image\s*=\s*["\']([^"\']+)["\']/i', $shortcode_content, $attr_match ) ) {
+			// If image_param is empty, try to extract from shortcode attributes
+			if ( empty( $image_param ) ) {
+				// Try to extract from shortcode attributes based on attr_name
+				$attr_pattern = '/' . preg_quote( $attr_name, '/' ) . '\s*=\s*["\']([^"\']+)["\']/i';
+				if ( preg_match( $attr_pattern, $shortcode_content, $attr_match ) ) {
 					$image_param = $attr_match[1];
 				}
 			}
@@ -2335,37 +3629,43 @@ class MetaboxRenderer {
 				continue;
 			}
 			
+			// Handle different formats:
+			// - Single ID: "123"
+			// - ID with size: "123|full" or "123|medium"
+			// - Comma-separated IDs: "123,456,789"
+			// - URL: "https://..."
+			
+			// Check if it's comma-separated (for galleries)
+			if ( strpos( $image_param, ',' ) !== false ) {
+				$image_ids = array_map( 'intval', array_filter( explode( ',', $image_param ), 'is_numeric' ) );
+				foreach ( $image_ids as $attachment_id ) {
+			if ( $attachment_id > 0 ) {
+						$this->add_wpbakery_image_to_list( $attachment_id, $post_id, $images, $seen_srcs );
+					}
+				}
+				continue;
+			}
+			
 			// Extract attachment ID (format can be "123" or "123|full")
+			// Remove everything except digits
 			$attachment_id = (int) preg_replace( '/[^\d]/', '', $image_param );
 			
 			if ( $attachment_id > 0 ) {
-				// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
-				$image_url = wp_get_attachment_url( $attachment_id );
-				if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
-					$seen_srcs[ $image_url ] = true;
-					// Get alt text from attachment
-					$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
-					
-					// Get title from attachment
-					$attachment = get_post( $attachment_id );
-					$title = $attachment ? $attachment->post_title : '';
-					$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
-					
-					// Check for saved custom data
-					$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
-					if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
-						$saved = $saved_images[ $image_url ];
-						$alt = $saved['alt'] ?? $alt;
-						$title = $saved['title'] ?? $title;
-						$description = $saved['description'] ?? $description;
-					}
-					
+				$this->add_wpbakery_image_to_list( $attachment_id, $post_id, $images, $seen_srcs );
+			} elseif ( filter_var( $image_param, FILTER_VALIDATE_URL ) ) {
+				// It's a URL, try to find attachment ID from URL
+				$attachment_id = $this->get_attachment_id_from_url( $image_param );
+				if ( $attachment_id > 0 ) {
+					$this->add_wpbakery_image_to_list( $attachment_id, $post_id, $images, $seen_srcs );
+				} elseif ( ! isset( $seen_srcs[ $image_param ] ) ) {
+					// External URL, add it anyway
+					$seen_srcs[ $image_param ] = true;
 					$images[] = array(
-						'src'           => $image_url,
-						'alt'           => $alt,
-						'title'         => $title,
-						'description'   => $description,
-						'attachment_id' => $attachment_id,
+						'src'           => $image_param,
+						'alt'           => '',
+						'title'         => '',
+						'description'   => '',
+						'attachment_id' => null,
 					);
 				}
 			}
@@ -2373,8 +3673,9 @@ class MetaboxRenderer {
 		
 		// Extract vc_gallery shortcodes
 		// Pattern: [vc_gallery images="123,456,789" ...]
-		if ( preg_match_all( '/\[vc_gallery[^\]]*images\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $match ) {
+		// CRITICAL: Use DOTALL flag (s) to match across newlines, and use non-greedy matching
+		if ( preg_match_all( '/\[vc_gallery.*?images\s*=\s*["\']([^"\']+)["\'].*?\]/is', $content, $gallery_matches, PREG_SET_ORDER ) ) {
+			foreach ( $gallery_matches as $match ) {
 				$images_param = $match[1];
 				
 				// Split by comma and extract IDs
@@ -2418,10 +3719,37 @@ class MetaboxRenderer {
 		
 		// Extract images from other WPBakery shortcodes with image attributes
 		// Pattern: [vc_row image_url="123" ...] or [vc_column image_1_url="123" image_2_url="456" ...]
-		$image_attr_patterns = array( 'image_url', 'image_1_url', 'image_2_url', 'image_3_url', 'images' );
-		foreach ( $image_attr_patterns as $attr ) {
-			if ( preg_match_all( '/\[vc_[^\]]*' . preg_quote( $attr, '/' ) . '\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $matches, PREG_SET_ORDER ) ) {
-				foreach ( $matches as $match ) {
+		// CRITICAL: Use DOTALL flag (s) to match across newlines
+		$other_image_attrs = array( 'image_url', 'image_1_url', 'image_2_url', 'image_3_url' );
+		foreach ( $other_image_attrs as $attr ) {
+			$pattern = '/\[vc_.*?' . preg_quote( $attr, '/' ) . '\s*=\s*["\']([^"\']+)["\'].*?\]/is';
+			if ( preg_match_all( $pattern, $content, $other_matches, PREG_SET_ORDER ) ) {
+				foreach ( $other_matches as $match ) {
+					// Avoid duplicates
+					$is_duplicate = false;
+					foreach ( $matches as $existing ) {
+						if ( ( $existing[0] ?? '' ) === ( $match[0] ?? '' ) && ( $existing[1] ?? '' ) === ( $match[1] ?? '' ) ) {
+							$is_duplicate = true;
+							break;
+						}
+					}
+					if ( ! $is_duplicate ) {
+						$matches[] = array( 
+							0 => $match[0] ?? '', 
+							1 => $match[1] ?? '', 
+							'attr' => $attr,
+							'shortcode_name' => 'vc_other',
+						);
+					}
+				}
+			}
+		}
+		
+		// Legacy extraction for backward compatibility (handles single-line shortcodes)
+		$legacy_attrs = array( 'image_url', 'image_1_url', 'image_2_url', 'image_3_url', 'images' );
+		foreach ( $legacy_attrs as $attr ) {
+			if ( preg_match_all( '/\[vc_[^\]]*' . preg_quote( $attr, '/' ) . '\s*=\s*["\']([^"\']+)["\'][^\]]*\]/i', $content, $legacy_matches, PREG_SET_ORDER ) ) {
+				foreach ( $legacy_matches as $match ) {
 					$image_param = $match[1];
 					
 					// Check if it's an attachment ID (numeric) or URL
@@ -2518,6 +3846,46 @@ class MetaboxRenderer {
 		}
 		
 		return $images;
+	}
+
+	/**
+	 * Helper method to add a WPBakery image to the images list.
+	 *
+	 * @param int   $attachment_id Attachment ID.
+	 * @param int   $post_id Post ID.
+	 * @param array $images Images array (passed by reference).
+	 * @param array $seen_srcs Seen sources array (passed by reference).
+	 */
+	private function add_wpbakery_image_to_list( int $attachment_id, int $post_id, array &$images, array &$seen_srcs ): void {
+		// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
+		$image_url = wp_get_attachment_url( $attachment_id );
+		if ( $image_url && ! isset( $seen_srcs[ $image_url ] ) ) {
+			$seen_srcs[ $image_url ] = true;
+			// Get alt text from attachment
+			$alt = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '';
+			
+			// Get title from attachment
+			$attachment = get_post( $attachment_id );
+			$title = $attachment ? $attachment->post_title : '';
+			$description = $attachment ? ( $attachment->post_content ?: $attachment->post_excerpt ?: '' ) : '';
+			
+			// Check for saved custom data
+			$saved_images = get_post_meta( $post_id, '_fp_seo_images_data', true );
+			if ( is_array( $saved_images ) && isset( $saved_images[ $image_url ] ) ) {
+				$saved = $saved_images[ $image_url ];
+				$alt = $saved['alt'] ?? $alt;
+				$title = $saved['title'] ?? $title;
+				$description = $saved['description'] ?? $description;
+			}
+			
+			$images[] = array(
+				'src'           => $image_url,
+				'alt'           => $alt,
+				'title'         => $title,
+				'description'   => $description,
+				'attachment_id' => $attachment_id,
+			);
+		}
 	}
 
 	/**

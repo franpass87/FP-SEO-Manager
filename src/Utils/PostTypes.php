@@ -51,6 +51,9 @@ class PostTypes {
 									'wp_template',
 									'wp_template_part',
 									'wp_global_styles',
+									// Exclude Nectar Slider and other slider post types to prevent interference
+									'nectar_slider',
+									'home_slider',
 								),
 								true
 							) ) {

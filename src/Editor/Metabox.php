@@ -55,6 +55,7 @@ class Metabox {
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
 	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
 	private const AJAX_SAVE_IMAGES = 'fp_seo_save_images_data';
+	private const AJAX_RELOAD_IMAGES_SECTION = 'fp_seo_reload_images_section';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
@@ -424,6 +425,7 @@ class Metabox {
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
 			add_action( 'wp_ajax_' . self::AJAX_SAVE_IMAGES, array( $this, 'handle_save_images_ajax' ) );
+		add_action( 'wp_ajax_' . self::AJAX_RELOAD_IMAGES_SECTION, array( $this, 'handle_reload_images_section_ajax' ) );
 			add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
 		} catch ( \Throwable $e ) {
 			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
@@ -860,6 +862,78 @@ class Metabox {
 				});
 			}
 		}
+
+		// Reload images section when featured image is set/removed
+		jQuery(document).ready(function() {
+			// Listen for WordPress featured image events
+			jQuery(document).on('wp-set-post-thumbnail', function(event, thumbnailId) {
+				console.log('FP SEO: wp-set-post-thumbnail event triggered', { thumbnailId: thumbnailId });
+				// Reload images section after a short delay to ensure thumbnail is saved
+				setTimeout(function() {
+					reloadImagesSection();
+				}, 500);
+			});
+
+			// Also listen for thumbnail removal
+			jQuery(document).on('wp-remove-post-thumbnail', function() {
+				console.log('FP SEO: wp-remove-post-thumbnail event triggered');
+				setTimeout(function() {
+					reloadImagesSection();
+				}, 500);
+			});
+
+			// Function to reload images section via AJAX
+			function reloadImagesSection() {
+				console.log('FP SEO: reloadImagesSection() called');
+				const postId = jQuery('#post_ID').val();
+				if (!postId) {
+					console.warn('FP SEO: No post ID found, skipping reload');
+					return;
+				}
+
+				const imagesSection = jQuery('.fp-seo-performance-metabox__section').filter(function() {
+					const title = jQuery(this).find('h4').text();
+					return title.includes('Images Optimization') || title.includes('Images');
+				});
+
+				if (imagesSection.length === 0) {
+					console.warn('FP SEO: Images section not found, skipping reload');
+					return;
+				}
+
+				console.log('FP SEO: Reloading images section for post', postId);
+
+				// Show loading indicator
+				imagesSection.find('.fp-seo-performance-metabox__section-content').html(
+					'<div style="padding: 24px; text-align: center;"><span style="color: #8b5cf6;">⏳ Caricamento immagini...</span></div>'
+				);
+
+				// AJAX request to reload images section
+				// Use the nonce generated inline (not from a hidden field)
+				const reloadNonce = '<?php echo esc_js( wp_create_nonce( 'fp_seo_reload_images_nonce' ) ); ?>';
+				jQuery.ajax({
+					url: ajaxurl,
+					type: 'POST',
+					data: {
+						action: '<?php echo esc_js( self::AJAX_RELOAD_IMAGES_SECTION ); ?>',
+						post_id: postId,
+						nonce: reloadNonce
+					},
+					success: function(response) {
+						console.log('FP SEO: AJAX success', response);
+						if (response.success && response.data && response.data.html) {
+							imagesSection.find('.fp-seo-performance-metabox__section-content').html(response.data.html);
+							console.log('FP SEO: Images section reloaded successfully');
+						} else {
+							console.error('FP SEO: Error reloading images section', response);
+						}
+					},
+					error: function(xhr, status, error) {
+						console.error('FP SEO: AJAX error reloading images section', { status, error, responseText: xhr.responseText });
+					}
+				});
+			}
+		});
 	});
 	</script>
 		<?php
@@ -3307,6 +3381,95 @@ class Metabox {
 		wp_send_json_success( array(
 			'message' => __( 'Images data saved successfully.', 'fp-seo-performance' ),
 			'count'   => count( $sanitized_images ),
+		) );
+	}
+
+	/**
+	 * Handle AJAX request to reload images section.
+	 */
+	public function handle_reload_images_section_ajax(): void {
+		// Verify nonce
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_reload_images_nonce' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
+		}
+
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+
+		if ( $post_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
+		}
+
+		// Check post type
+		$post_type = get_post_type( $post_id );
+		$supported_types = $this->get_supported_post_types();
+		
+		if ( ! in_array( $post_type, $supported_types, true ) ) {
+			wp_send_json_error( array( 
+				'message' => __( 'This post type is not supported.', 'fp-seo-performance' ),
+				'post_type' => $post_type,
+			), 400 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+		}
+
+		// Get post object - CRITICAL: Always refresh from database to get latest content
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
+		}
+		
+		// CRITICAL: Refresh post content from database to ensure we have the latest version
+		// WordPress's get_post() might return cached/stale content, especially after AJAX calls
+		global $wpdb;
+		$db_content = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_content FROM {$wpdb->posts} WHERE ID = %d AND post_status != 'inherit'",
+			$post_id
+		) );
+		if ( ! empty( $db_content ) ) {
+			$post->post_content = $db_content;
+			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Refreshed post content from database', array(
+				'post_id' => $post_id,
+				'content_length' => strlen( $db_content ),
+				'has_wpbakery' => strpos( $db_content, '[vc_' ) !== false,
+				'has_img_tags' => strpos( $db_content, '<img' ) !== false,
+			) );
+		}
+
+		// Render only the images section content
+		if ( $this->renderer === null ) {
+			$this->initialize_renderer();
+		}
+
+		if ( $this->renderer === null ) {
+			wp_send_json_error( array( 'message' => __( 'Renderer not available.', 'fp-seo-performance' ) ), 500 );
+		}
+
+		// Extract images
+		try {
+			$images = $this->renderer->extract_images_from_content( $post );
+			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Images extracted', array(
+				'post_id' => $post_id,
+				'images_count' => count( $images ),
+			) );
+		} catch ( \Throwable $e ) {
+			Logger::error( 'FP SEO: Error extracting images in reload handler', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'post_id' => $post_id,
+			) );
+			$images = array();
+		}
+
+		// Render images section content HTML
+		ob_start();
+		$this->renderer->render_images_section_content( $post, $images );
+		$html = ob_get_clean();
+
+		wp_send_json_success( array( 
+			'html' => $html,
+			'images_count' => count( $images ),
 		) );
 	}
 
