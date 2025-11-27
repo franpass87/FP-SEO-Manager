@@ -331,6 +331,17 @@ class Metabox {
 			add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
 		}
 		
+		// CRITICAL FIX: Prevent homepage from becoming auto-draft when saving
+		// This hook runs when WordPress updates a post
+		if ( ! has_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ) ) ) {
+			add_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ), 1, 2 );
+		}
+		
+		// CRITICAL FIX: Also hook into edit_post to catch status changes
+		if ( ! has_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ) ) ) {
+			add_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ), 1, 2 );
+		}
+		
 		// CRITICAL FIX: Force WordPress to load correct homepage when opening editor
 		// This intercepts the post loading before WordPress displays it in the editor
 		if ( ! has_action( 'admin_init', array( $this, 'force_correct_homepage_in_editor' ) ) ) {
@@ -2286,9 +2297,49 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
-		// DIAGNOSTIC: Check if save_meta is being called unexpectedly (e.g., when opening editor)
+		// CRITICAL: If this is the homepage, ensure it never becomes auto-draft
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
+		
+		if ( $is_homepage ) {
+			// Get current status from database (not cached)
+			global $wpdb;
+			$current_status_db = $wpdb->get_var( $wpdb->prepare(
+				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+				$post_id
+			) );
+			
+			// If status is auto-draft, fix it immediately
+			if ( $current_status_db === 'auto-draft' ) {
+				$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
+				if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
+					$original_status = 'publish'; // Default to publish for homepage
+				}
+				
+				// Fix status immediately
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_status' => $original_status ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				
+				// Clear cache
+				clean_post_cache( $post_id );
+				wp_cache_delete( $post_id, 'posts' );
+				
+				Logger::warning( 'Metabox::save_meta - Fixed homepage status to prevent auto-draft', array(
+					'post_id' => $post_id,
+					'fixed_status' => $original_status,
+				) );
+			} else {
+				// Save current status as original for future reference
+				update_post_meta( $post_id, '_fp_seo_original_status', $current_status_db );
+			}
+		}
+		
+		// DIAGNOSTIC: Check if save_meta is being called unexpectedly (e.g., when opening editor)
 		$current_status = get_post_status( $post_id );
 		$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
 		$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
@@ -2940,6 +2991,113 @@ class Metabox {
 		}
 		
 		return $data;
+	}
+
+	/**
+	 * Prevent homepage from becoming auto-draft when updating post.
+	 * Hook: wp_update_post (priority 1)
+	 * 
+	 * This intercepts post updates and ensures homepage never becomes auto-draft.
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param WP_Post  $post    Post object after update.
+	 */
+	public function prevent_homepage_auto_draft_on_update( int $post_id, WP_Post $post ): void {
+		// Only check if this is the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
+			return;
+		}
+		
+		// Get current status from database (not from post object which might be cached)
+		global $wpdb;
+		$current_status = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+			$post_id
+		) );
+		
+		// If status is auto-draft, fix it immediately
+		if ( $current_status === 'auto-draft' ) {
+			// Get original status before update
+			$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
+			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
+				$original_status = 'publish'; // Default to publish for homepage
+			}
+			
+			// Fix status immediately
+			$wpdb->update(
+				$wpdb->posts,
+				array( 'post_status' => $original_status ),
+				array( 'ID' => $post_id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			
+			// Clear cache
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'posts' );
+			
+			Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_update - Fixed homepage status after update', array(
+				'post_id' => $post_id,
+				'fixed_status' => $original_status,
+			) );
+		}
+	}
+
+	/**
+	 * Prevent homepage from becoming auto-draft when editing post.
+	 * Hook: edit_post (priority 1)
+	 * 
+	 * This intercepts post edits and ensures homepage never becomes auto-draft.
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param WP_Post  $post    Post object.
+	 */
+	public function prevent_homepage_auto_draft_on_edit_post( int $post_id, $post ): void {
+		// Only check if this is the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
+			return;
+		}
+		
+		// Save original status before any modifications
+		$current_status = get_post_status( $post_id );
+		if ( $current_status && $current_status !== 'auto-draft' ) {
+			update_post_meta( $post_id, '_fp_seo_original_status', $current_status );
+		}
+		
+		// Get current status from database
+		global $wpdb;
+		$db_status = $wpdb->get_var( $wpdb->prepare(
+			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
+			$post_id
+		) );
+		
+		// If status is auto-draft, fix it immediately
+		if ( $db_status === 'auto-draft' ) {
+			$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
+			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
+				$original_status = 'publish'; // Default to publish for homepage
+			}
+			
+			// Fix status immediately
+			$wpdb->update(
+				$wpdb->posts,
+				array( 'post_status' => $original_status ),
+				array( 'ID' => $post_id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			
+			// Clear cache
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'posts' );
+			
+			Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit_post - Fixed homepage status during edit', array(
+				'post_id' => $post_id,
+				'fixed_status' => $original_status,
+			) );
+		}
 	}
 
 	/**
