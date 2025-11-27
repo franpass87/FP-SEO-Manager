@@ -1985,10 +1985,12 @@ class Metabox {
 		// CRITICAL: Skip if this is just opening the editor (not actually saving)
 		// WordPress creates auto-draft when opening editor - we should not interfere
 		// Check multiple conditions to ensure we only process actual saves
-		$is_actual_save = isset( $_POST['save'] ) || 
-						  isset( $_POST['publish'] ) || 
-						  isset( $_POST['update'] ) ||
-						  ( isset( $_POST['action'] ) && $_POST['action'] === 'editpost' );
+		
+		// Check if this is an actual save operation (not just opening editor)
+		$is_actual_save = ( isset( $_POST['save'] ) && $_POST['save'] !== '' ) || 
+						  ( isset( $_POST['publish'] ) && $_POST['publish'] !== '' ) || 
+						  ( isset( $_POST['update'] ) && $_POST['update'] !== '' ) ||
+						  ( isset( $_POST['action'] ) && $_POST['action'] === 'editpost' && isset( $_POST['save'] ) );
 		
 		// Also check if there are actual SEO fields being submitted
 		$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
@@ -1996,6 +1998,19 @@ class Metabox {
 						  isset( $_POST['fp_seo_meta_description_sent'] ) ||
 						  isset( $_POST['fp_seo_title'] ) ||
 						  isset( $_POST['fp_seo_meta_description'] );
+		
+		// CRITICAL: Also check if post status is auto-draft - if so, skip completely
+		// This prevents any processing when WordPress is creating auto-draft during editor opening
+		$current_post_status = get_post_status( $post_id );
+		if ( $current_post_status === 'auto-draft' ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta skipped - post is auto-draft (editor opening)', array(
+					'post_id' => $post_id,
+					'post_status' => $current_post_status,
+				) );
+			}
+			return; // Skip completely for auto-draft - this is just WordPress opening editor
+		}
 		
 		// Only process if it's an actual save AND has SEO fields
 		// This prevents processing when WordPress is just creating auto-draft
@@ -2006,6 +2021,7 @@ class Metabox {
 					'is_actual_save' => $is_actual_save,
 					'has_seo_fields' => $has_seo_fields,
 					'update' => $update,
+					'post_status' => $current_post_status,
 				) );
 			}
 			return; // Not a save operation, just opening editor or auto-draft creation
