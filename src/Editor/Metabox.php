@@ -294,11 +294,10 @@ class Metabox {
 		// If you need to support a new post type, add it to PostTypes::analyzable() and
 		// the hooks will be automatically registered via the loop above.
 		
-		// DISABLED - wp_insert_post_data hook was modifying post_status which interfered with WordPress core saving
-		// The plugin should NOT touch post_status at all - let WordPress handle it completely
-		// if ( ! has_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ) ) ) {
-		// 	add_filter( 'wp_insert_post_data', array( $this, 'save_meta_pre_insert' ), 1, 4 );
-		// }
+		// DISABLED: Removed all homepage protection workarounds
+		// We need to find the root cause instead of patching symptoms
+		// The problem is that WordPress creates a new auto-draft when opening homepage editor
+		// This might be caused by something in the rendering or by another plugin/template
 		// 
 		// if ( ! has_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ) ) ) {
 		// 	add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
@@ -1726,6 +1725,46 @@ class Metabox {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: oggetto post non valido.', 'fp-seo-performance' ) . '</p></div>';
 			return;
 		}
+		
+		// DIAGNOSTIC: Check if WordPress is passing wrong post when opening homepage editor
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
+			// We're trying to edit the homepage
+			if ( $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
+				// PROBLEM DETECTED: WordPress passed wrong post (auto-draft instead of homepage)
+				$correct_post = get_post( $page_on_front_id );
+				$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
+				
+				// Show diagnostic notice
+				add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status ) {
+					?>
+					<div class="notice notice-error" style="border-left-color: #dc2626; padding: 12px;">
+						<h3 style="margin: 0 0 8px 0; color: #dc2626;">🔍 FP SEO: Problema Homepage Rilevato</h3>
+						<p style="margin: 0 0 8px 0;"><strong>Problema:</strong> WordPress ha passato un post sbagliato quando hai aperto l'editor della homepage.</p>
+						<ul style="margin: 8px 0; padding-left: 20px;">
+							<li><strong>Post richiesto:</strong> ID <?php echo esc_html( $requested_post_id ); ?> (Homepage)</li>
+							<li><strong>Post ricevuto:</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code></li>
+							<li><strong>Homepage corretta:</strong> ID <?php echo esc_html( $page_on_front_id ); ?> - Status: <code><?php echo esc_html( $correct_status ); ?></code></li>
+						</ul>
+						<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">
+							<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft invece di caricare la homepage esistente quando apri l'editor.
+						</p>
+					</div>
+					<?php
+				} );
+				
+				// Also log for debugging
+				Logger::warning( 'Metabox::render - WordPress passed wrong post when opening homepage editor', array(
+					'requested_post_id' => $requested_post_id,
+					'received_post_id' => $post->ID,
+					'received_post_status' => $post->post_status,
+					'correct_homepage_id' => $page_on_front_id,
+					'correct_homepage_status' => $correct_status,
+				) );
+			}
+		}
+		
 		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
 		// All the previous "homepage protection" code was causing more problems than it solved
 		$current_post = $post;
@@ -1982,15 +2021,59 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
-		// CRITICAL: Skip if this is just opening the editor (not actually saving)
-		// WordPress creates auto-draft when opening editor - we should not interfere
-		// Check multiple conditions to ensure we only process actual saves
+		// DIAGNOSTIC: Check if save_meta is being called unexpectedly (e.g., when opening editor)
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
+		$current_status = get_post_status( $post_id );
+		$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
+		$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
+		$has_post_data = ! empty( $_POST );
+		$is_real_save_check = ( isset( $_POST['save'] ) && $_POST['save'] !== '' ) || 
+							  ( isset( $_POST['publish'] ) && $_POST['publish'] !== '' );
 		
-		// Check if this is an actual save operation (not just opening editor)
-		$is_actual_save = ( isset( $_POST['save'] ) && $_POST['save'] !== '' ) || 
-						  ( isset( $_POST['publish'] ) && $_POST['publish'] !== '' ) || 
-						  ( isset( $_POST['update'] ) && $_POST['update'] !== '' ) ||
-						  ( isset( $_POST['action'] ) && $_POST['action'] === 'editpost' && isset( $_POST['save'] ) );
+		// Show diagnostic notice if save_meta is called unexpectedly for homepage
+		if ( $is_homepage && ! $is_real_save_check && ! $is_autosave ) {
+			add_action( 'admin_notices', function() use ( $post_id, $current_status, $is_ajax, $has_post_data ) {
+				?>
+				<div class="notice notice-warning" style="border-left-color: #f59e0b; padding: 12px;">
+					<h3 style="margin: 0 0 8px 0; color: #f59e0b;">⚠️ FP SEO: save_meta chiamato inaspettatamente</h3>
+					<p style="margin: 0 0 8px 0;"><strong>Problema:</strong> Il metodo save_meta è stato chiamato quando hai aperto l'editor della homepage, non durante un salvataggio.</p>
+					<ul style="margin: 8px 0; padding-left: 20px;">
+						<li><strong>Post ID:</strong> <?php echo esc_html( $post_id ); ?></li>
+						<li><strong>Status:</strong> <code><?php echo esc_html( $current_status ); ?></code></li>
+						<li><strong>È AJAX:</strong> <?php echo $is_ajax ? 'Sì' : 'No'; ?></li>
+						<li><strong>Ha dati POST:</strong> <?php echo $has_post_data ? 'Sì (' . count( $_POST ) . ' campi)' : 'No'; ?></li>
+						<li><strong>URI richiesta:</strong> <code><?php echo esc_html( $_SERVER['REQUEST_URI'] ?? 'unknown' ); ?></code></li>
+					</ul>
+					<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">
+						<strong>Causa possibile:</strong> Qualche hook sta triggerando save_post anche quando apri l'editor, causando la creazione di auto-draft.
+					</p>
+				</div>
+				<?php
+			} );
+			
+			Logger::warning( 'Metabox::save_meta called unexpectedly for homepage', array(
+				'post_id' => $post_id,
+				'post_status' => $current_status,
+				'is_ajax' => $is_ajax,
+				'has_post_data' => $has_post_data,
+				'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
+			) );
+		}
+		
+		// CRITICAL: Check post status FIRST - skip auto-draft immediately
+		// WordPress creates auto-draft when opening editor - we must NEVER process these
+		$current_post_status = get_post_status( $post_id );
+		if ( $current_post_status === 'auto-draft' || $current_post_status === false ) {
+			// NEVER process auto-draft - this is WordPress creating temporary draft when opening editor
+			return;
+		}
+		
+		// Check if this is a real save operation (user clicked Save/Publish button)
+		$is_real_save = ( isset( $_POST['save'] ) && $_POST['save'] !== '' ) || 
+						( isset( $_POST['publish'] ) && $_POST['publish'] !== '' ) ||
+						( isset( $_POST['action'] ) && $_POST['action'] === 'editpost' && 
+						  ( isset( $_POST['save'] ) || isset( $_POST['publish'] ) ) );
 		
 		// Also check if there are actual SEO fields being submitted
 		$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
@@ -1999,32 +2082,10 @@ class Metabox {
 						  isset( $_POST['fp_seo_title'] ) ||
 						  isset( $_POST['fp_seo_meta_description'] );
 		
-		// CRITICAL: Also check if post status is auto-draft - if so, skip completely
-		// This prevents any processing when WordPress is creating auto-draft during editor opening
-		$current_post_status = get_post_status( $post_id );
-		if ( $current_post_status === 'auto-draft' ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta skipped - post is auto-draft (editor opening)', array(
-					'post_id' => $post_id,
-					'post_status' => $current_post_status,
-				) );
-			}
-			return; // Skip completely for auto-draft - this is just WordPress opening editor
-		}
-		
-		// Only process if it's an actual save AND has SEO fields
-		// This prevents processing when WordPress is just creating auto-draft
-		if ( ! $is_actual_save || ! $has_seo_fields ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta skipped - not an actual save operation', array(
-					'post_id' => $post_id,
-					'is_actual_save' => $is_actual_save,
-					'has_seo_fields' => $has_seo_fields,
-					'update' => $update,
-					'post_status' => $current_post_status,
-				) );
-			}
-			return; // Not a save operation, just opening editor or auto-draft creation
+		// Only process if it's a REAL save operation AND has SEO fields
+		// This prevents ANY processing when WordPress is just opening editor
+		if ( ! $is_real_save || ! $has_seo_fields ) {
+			return; // Not a real save - exit immediately without any processing
 		}
 		
 		// CRITICAL: Check post type FIRST, before any static tracking
@@ -2562,6 +2623,116 @@ class Metabox {
 		}
 	}
 	
+	/**
+	 * Prevent homepage from becoming auto-draft when opening editor.
+	 * Hook: wp_insert_post_data
+	 * 
+	 * @param array $data Post data.
+	 * @param array $postarr Original post array.
+	 * @return array Modified post data.
+	 */
+	public function prevent_homepage_auto_draft_data( array $data, array $postarr ): array {
+		// Only check if this is the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return $data; // Not using static homepage
+		}
+		
+		// Check if this post is the homepage
+		$post_id = isset( $postarr['ID'] ) ? (int) $postarr['ID'] : 0;
+		if ( $post_id === 0 ) {
+			// New post - check if it's being created as homepage
+			// This shouldn't happen, but just in case
+			return $data;
+		}
+		
+		if ( $post_id !== $page_on_front_id ) {
+			return $data; // Not the homepage
+		}
+		
+		// This is the homepage - prevent it from becoming auto-draft
+		if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' ) {
+			// Get current status from database to preserve it
+			$current_status = get_post_status( $post_id );
+			if ( $current_status && $current_status !== 'auto-draft' ) {
+				$data['post_status'] = $current_status;
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'Metabox::prevent_homepage_auto_draft_data - Prevented homepage from becoming auto-draft', array(
+						'post_id' => $post_id,
+						'original_status' => $current_status,
+						'attempted_status' => 'auto-draft',
+					) );
+				}
+			} else {
+				// Fallback to publish if current status is also auto-draft
+				$data['post_status'] = 'publish';
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'Metabox::prevent_homepage_auto_draft_data - Forced homepage to publish (was auto-draft)', array(
+						'post_id' => $post_id,
+					) );
+				}
+			}
+		}
+		
+		return $data;
+	}
+
+	/**
+	 * Prevent homepage from becoming auto-draft via transition_post_status hook.
+	 * Hook: transition_post_status
+	 * This is a backup protection in case wp_insert_post_data doesn't catch it.
+	 * 
+	 * @param string $new_status New post status.
+	 * @param string $old_status Old post status.
+	 * @param WP_Post $post Post object.
+	 */
+	public function prevent_homepage_auto_draft_transition( string $new_status, string $old_status, $post ): void {
+		// Only check if this is the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return; // Not using static homepage
+		}
+		
+		// Check if this post is the homepage
+		if ( ! $post instanceof WP_Post || $post->ID !== $page_on_front_id ) {
+			return; // Not the homepage
+		}
+		
+		// If status is changing to auto-draft and it was published before, prevent it
+		if ( $new_status === 'auto-draft' && $old_status !== 'auto-draft' && $old_status !== '' ) {
+			// Use static flag to prevent infinite loops
+			static $correcting = array();
+			if ( isset( $correcting[ $post->ID ] ) ) {
+				return;
+			}
+			$correcting[ $post->ID ] = true;
+			
+			// Immediately correct the status back to what it was
+			global $wpdb;
+			$wpdb->update(
+				$wpdb->posts,
+				array( 'post_status' => $old_status ),
+				array( 'ID' => $post->ID ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			
+			// Clear cache
+			clean_post_cache( $post->ID );
+			wp_cache_delete( $post->ID, 'posts' );
+			
+			unset( $correcting[ $post->ID ] );
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'Metabox::prevent_homepage_auto_draft_transition - Prevented homepage from becoming auto-draft', array(
+					'post_id' => $post->ID,
+					'old_status' => $old_status,
+					'attempted_status' => $new_status,
+				) );
+			}
+		}
+	}
+
 	/**
 	 * Fix homepage status on shutdown (ultima risorsa).
 	 * Hook: shutdown
