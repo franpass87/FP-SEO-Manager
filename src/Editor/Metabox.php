@@ -1726,35 +1726,46 @@ class Metabox {
 			return;
 		}
 		
-		// DIAGNOSTIC: Check if WordPress is passing wrong post when opening homepage editor
+		// DIAGNOSTIC: Always show diagnostic info when editing homepage
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
 		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
-			// We're trying to edit the homepage
-			if ( $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
-				// PROBLEM DETECTED: WordPress passed wrong post (auto-draft instead of homepage)
-				$correct_post = get_post( $page_on_front_id );
-				$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
-				
-				// Show diagnostic notice
-				add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status ) {
-					?>
-					<div class="notice notice-error" style="border-left-color: #dc2626; padding: 12px;">
-						<h3 style="margin: 0 0 8px 0; color: #dc2626;">🔍 FP SEO: Problema Homepage Rilevato</h3>
-						<p style="margin: 0 0 8px 0;"><strong>Problema:</strong> WordPress ha passato un post sbagliato quando hai aperto l'editor della homepage.</p>
-						<ul style="margin: 8px 0; padding-left: 20px;">
-							<li><strong>Post richiesto:</strong> ID <?php echo esc_html( $requested_post_id ); ?> (Homepage)</li>
-							<li><strong>Post ricevuto:</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code></li>
-							<li><strong>Homepage corretta:</strong> ID <?php echo esc_html( $page_on_front_id ); ?> - Status: <code><?php echo esc_html( $correct_status ); ?></code></li>
-						</ul>
-						<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">
-							<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft invece di caricare la homepage esistente quando apri l'editor.
+			// We're trying to edit the homepage - show diagnostic info
+			$correct_post = get_post( $page_on_front_id );
+			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
+			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
+			
+			// Always show diagnostic notice when editing homepage
+			add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post ) {
+				$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
+				$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
+				$icon = $is_wrong_post ? '🔍' : 'ℹ️';
+				?>
+				<div class="notice <?php echo esc_attr( $notice_class ); ?>" style="border-left-color: <?php echo esc_attr( $notice_color ); ?>; padding: 12px; margin: 20px 0;">
+					<h3 style="margin: 0 0 8px 0; color: <?php echo esc_attr( $notice_color ); ?>;"><?php echo esc_html( $icon ); ?> FP SEO: Diagnostica Homepage</h3>
+					<?php if ( $is_wrong_post ) { ?>
+						<p style="margin: 0 0 8px 0; color: #dc2626;"><strong>⚠️ PROBLEMA RILEVATO:</strong> WordPress ha passato un post sbagliato!</p>
+					<?php } else { ?>
+						<p style="margin: 0 0 8px 0;"><strong>✓ Post corretto:</strong> WordPress ha passato la homepage corretta.</p>
+					<?php } ?>
+					<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">
+						<li><strong>URL richiesto:</strong> <code>post=<?php echo esc_html( $requested_post_id ); ?>&action=edit</code></li>
+						<li><strong>Post ricevuto da WordPress:</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
+						<li><strong>Homepage corretta (dal DB):</strong> ID <?php echo esc_html( $page_on_front_id ); ?> - Status: <code><?php echo esc_html( $correct_status ); ?></code></li>
+						<li><strong>Corrispondenza:</strong> <?php echo ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>'; ?></li>
+					</ul>
+					<?php if ( $is_wrong_post ) { ?>
+						<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">
+							<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID <?php echo esc_html( $post->ID ); ?>) invece di caricare la homepage esistente (ID <?php echo esc_html( $page_on_front_id ); ?>).<br>
+							<strong>Quando succede:</strong> Quando apri l'editor della homepage, WordPress dovrebbe passarti il post ID <?php echo esc_html( $page_on_front_id ); ?>, ma invece ti sta passando il post ID <?php echo esc_html( $post->ID ); ?> con status auto-draft.
 						</p>
-					</div>
-					<?php
-				} );
-				
-				// Also log for debugging
+					<?php } ?>
+				</div>
+				<?php
+			} );
+			
+			// Log for debugging
+			if ( $is_wrong_post ) {
 				Logger::warning( 'Metabox::render - WordPress passed wrong post when opening homepage editor', array(
 					'requested_post_id' => $requested_post_id,
 					'received_post_id' => $post->ID,
