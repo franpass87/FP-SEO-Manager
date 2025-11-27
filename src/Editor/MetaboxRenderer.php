@@ -1452,7 +1452,8 @@ class MetaboxRenderer {
 		
 		// Get AJAX URL and nonce for lazy loading
 		$ajax_url = admin_url( 'admin-ajax.php' );
-		$nonce = wp_create_nonce( Metabox::NONCE_ACTION );
+		// Use the nonce action string directly (cannot access private constant)
+		$nonce = wp_create_nonce( 'fp_seo_performance_meta' );
 		$post_id = $post->ID;
 		
 		?>
@@ -1655,7 +1656,7 @@ class MetaboxRenderer {
 						action: 'fp_seo_save_images_data',
 						post_id: postId,
 						images_data: imagesData,
-						fp_seo_performance_nonce: '<?php echo esc_js( wp_create_nonce( Metabox::NONCE_ACTION ) ); ?>'
+						fp_seo_performance_nonce: '<?php echo esc_js( wp_create_nonce( 'fp_seo_performance_meta' ) ); ?>'
 					},
 					success: function(response) {
 						if (response.success) {
