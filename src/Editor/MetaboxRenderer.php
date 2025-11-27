@@ -2387,85 +2387,20 @@ class MetaboxRenderer {
 			}
 		}
 		
-		// CRITICAL: Extract images from post meta (WPBakery, Nectar Slider, and other plugins store images in post meta)
-		// This is essential for pages that use page builders or sliders that don't store images in post_content
+		// DISABLED: Nectar Slider extraction completely removed to prevent interference
+		// Querying Nectar Slider posts during rendering was causing auto-draft creation when editing homepage
+		// Images from sliders should be extracted only via AJAX when explicitly requested, not during rendering
+		// The new ImageExtractor class handles this safely via lazy-loading
 		try {
-			// CRITICAL: Skip processing for auto-draft posts to prevent interference with homepage editing
-			// Auto-drafts should not trigger Nectar Slider image extraction
-			if ( $post->post_status === 'auto-draft' ) {
-				Logger::info( 'FP SEO: extract_images_from_content - Skipping Nectar Slider extraction for auto-draft', array(
-					'post_id' => $post->ID,
-					'post_status' => $post->post_status,
-				) );
-			} else {
-				// CRITICAL: Only check for Nectar Slider images if content contains slider references
-				// OR if this is a published homepage (not auto-draft)
-				$is_homepage_check = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
-				$is_published_homepage = $is_homepage_check && $post->post_status === 'publish';
-				$has_slider_references = strpos( $content, 'nectar' ) !== false || strpos( $content, 'slider' ) !== false;
-				
-				if ( $is_published_homepage || $has_slider_references ) {
-				// Try to find all published Nectar Slider posts
-				$all_sliders = get_posts( array(
-					'post_type' => 'nectar_slider',
-					'posts_per_page' => 100, // Get more sliders
-					'post_status' => 'publish',
-					'orderby' => 'date',
-					'order' => 'DESC',
-					'suppress_filters' => false,
-				) );
-				
-				Logger::info( 'FP SEO: extract_images_from_content - Checking all sliders (fallback)', array(
-					'post_id' => $post->ID,
-					'is_homepage' => $is_homepage_check,
-					'all_sliders_count' => count( $all_sliders ),
-					'slider_ids' => array_map( function( $s ) { return $s->ID; }, $all_sliders ),
-				) );
-				
-				foreach ( $all_sliders as $slider_post ) {
-					$slider_image = get_post_meta( $slider_post->ID, '_nectar_slider_image', true );
-					if ( ! empty( $slider_image ) ) {
-						// Handle array values
-						if ( is_array( $slider_image ) ) {
-							if ( count( $slider_image ) === 1 ) {
-								$slider_image = $slider_image[0];
-							} else {
-								foreach ( $slider_image as $img_value ) {
-									if ( ! empty( $img_value ) ) {
-										$this->process_meta_image_value( $img_value, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-									}
-								}
-								continue;
-							}
-						}
-						
-						// Handle serialized arrays/objects
-						if ( is_string( $slider_image ) && ( $slider_image[0] === 'a:' || $slider_image[0] === 'O:' ) ) {
-							$unserialized = @unserialize( $slider_image );
-							if ( is_array( $unserialized ) ) {
-								$image_ids_or_urls = $this->extract_image_from_array( $unserialized );
-								foreach ( $image_ids_or_urls as $img_value ) {
-									$this->process_meta_image_value( $img_value, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-								}
-								continue;
-							}
-						}
-						
-						if ( ! empty( $slider_image ) ) {
-							$this->process_meta_image_value( $slider_image, '_nectar_slider_image_fallback_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-						}
-					}
-				}
-				} // End if ( $is_published_homepage || $has_slider_references )
-			} // End else (not auto-draft)
+			// Skip all Nectar Slider extraction - it was causing interference with homepage editing
 			
 			$all_meta = get_post_meta( $post->ID );
 			$image_meta_keys = array();
 
-			// Specific meta keys known to contain images (Nectar Slider, Salient theme, etc.)
+			// Specific meta keys known to contain images (excluding Nectar Slider to prevent interference)
 			$known_image_meta_keys = array(
-				'_nectar_slider_image',           // Nectar Slider image URL
-				'_nectar_slider_preview_image',  // Nectar Slider preview
+				// '_nectar_slider_image',           // DISABLED - causes interference with homepage editing
+				// '_nectar_slider_preview_image',  // DISABLED - causes interference with homepage editing
 				'_nectar_header_bg',             // Salient header background
 				'_thumbnail_id',                 // Featured image (alternative)
 				'_wp_attachment_id',            // Generic attachment ID
@@ -2480,296 +2415,24 @@ class MetaboxRenderer {
 				}
 
 				// Check if key suggests it contains image data
-				if ( strpos( $key, 'image' ) !== false
+				// EXCLUDE Nectar Slider keys to prevent interference
+				$is_nectar_slider_key = strpos( $key, '_nectar_slider' ) === 0;
+				if ( ! $is_nectar_slider_key && (
+					strpos( $key, 'image' ) !== false
 					|| strpos( $key, 'bg' ) !== false
 					|| strpos( $key, 'background' ) !== false
 					|| strpos( $key, 'thumbnail' ) !== false
-					|| strpos( $key, 'slide' ) !== false
+					|| ( strpos( $key, 'slide' ) !== false && strpos( $key, 'nectar' ) === false ) // Exclude nectar slider keys
 					|| strpos( $key, 'header' ) !== false
-					|| strpos( $key, 'preview' ) !== false ) {
+					|| strpos( $key, 'preview' ) !== false
+				) ) {
 					$image_meta_keys[ $key ] = $value;
 				}
 			}
 
-			// CRITICAL: Also check for Nectar Slider shortcodes and extract images from associated slider posts
-			// Pattern: [nectar_slider location="location_name"] or [nectar_slider location=""]
-			// IMPORTANT: Only process if there's an actual shortcode OR if this is a published homepage (not auto-draft)
-			$is_homepage = ( (int) $post->ID === (int) get_option( 'page_on_front' ) );
-			$is_published_homepage = $is_homepage && $post->post_status === 'publish';
-			$has_nectar_slider_shortcode = preg_match_all( '/\[nectar_slider[^\]]*\]/i', $content, $slider_shortcode_matches, PREG_SET_ORDER );
-			
-			// Only process if there's a shortcode OR if it's a published homepage (skip auto-drafts)
-			if ( $has_nectar_slider_shortcode || $is_published_homepage ) {
-				Logger::info( 'FP SEO: extract_images_from_content - Found Nectar Slider shortcode or published homepage', array(
-					'post_id' => $post->ID,
-					'has_shortcode' => $has_nectar_slider_shortcode,
-					'is_homepage' => $is_homepage,
-					'is_published_homepage' => $is_published_homepage,
-					'post_status' => $post->post_status,
-					'shortcode_count' => $has_nectar_slider_shortcode ? count( $slider_shortcode_matches ) : 0,
-					'shortcodes' => $has_nectar_slider_shortcode ? $slider_shortcode_matches : array(),
-				) );
-				
-				// If no shortcode matches but this is a published homepage, process as if there's an empty shortcode
-				// BUT only if it's published, not auto-draft
-				if ( ! $has_nectar_slider_shortcode && $is_published_homepage ) {
-					$slider_shortcode_matches = array( array( 0 => '[nectar_slider]' ) );
-				}
-				
-				foreach ( $slider_shortcode_matches as $shortcode_match ) {
-					$shortcode_content = $shortcode_match[0];
-					
-					// Extract location if present
-					$location = '';
-					if ( preg_match( '/location\s*=\s*["\']([^"\']+)["\']/i', $shortcode_content, $location_match ) ) {
-						$location = $location_match[1];
-					}
-					
-					Logger::info( 'FP SEO: extract_images_from_content - Processing Nectar Slider shortcode', array(
-						'post_id' => $post->ID,
-						'shortcode_content' => $shortcode_content,
-						'location' => $location ?: 'empty',
-					) );
-					
-					$slider_posts = array();
-					
-					if ( ! empty( $location ) ) {
-						// Find slider posts with this specific location
-						$slider_posts = get_posts( array(
-							'post_type' => 'nectar_slider',
-							'posts_per_page' => -1,
-							'tax_query' => array(
-								array(
-									'taxonomy' => 'slider-locations',
-									'field' => 'slug',
-									'terms' => $location,
-								),
-							),
-						) );
-						
-						Logger::info( 'FP SEO: extract_images_from_content - Found sliders with location', array(
-							'post_id' => $post->ID,
-							'location' => $location,
-							'slider_count' => count( $slider_posts ),
-						) );
-					} else {
-						// Location is empty - check if this is the homepage first
-						// Use multiple checks to ensure we identify the homepage correctly
-						$page_on_front = (int) get_option( 'page_on_front' );
-						$is_homepage = ( (int) $post->ID === $page_on_front );
-						
-						Logger::info( 'FP SEO: extract_images_from_content - Location is empty, checking homepage status', array(
-							'post_id' => $post->ID,
-							'page_on_front' => $page_on_front,
-							'is_homepage' => $is_homepage ? 'yes' : 'no',
-							'show_on_front' => get_option( 'show_on_front' ),
-						) );
-						
-						// Additional check: if page_on_front is 0, it means posts page, but we still check for home location
-						// Also check if show_on_front is 'page' to ensure we're using a static page
-						if ( ! $is_homepage && get_option( 'show_on_front' ) === 'page' ) {
-							// Double-check: maybe the post ID matches
-							$is_homepage = ( (int) $post->ID === $page_on_front );
-						}
-						
-						// Location is empty - try to find sliders with common location names first
-						// Common location names: 'home', 'homepage', 'main', 'default', etc.
-						$common_locations = array( 'home', 'homepage', 'main', 'default', 'header', 'hero' );
-						$slider_posts = array();
-						
-						// CRITICAL: If this is the homepage, prioritize 'home' location
-						// Also always check 'home' location when location is empty, as it's the most common case
-						$home_sliders = get_posts( array(
-							'post_type' => 'nectar_slider',
-							'posts_per_page' => 20,
-							'post_status' => 'publish',
-							'tax_query' => array(
-								array(
-									'taxonomy' => 'slider-locations',
-									'field' => 'slug',
-									'terms' => 'home',
-								),
-							),
-						) );
-						if ( ! empty( $home_sliders ) ) {
-							$slider_posts = array_merge( $slider_posts, $home_sliders );
-							Logger::info( 'FP SEO: extract_images_from_content - Found home sliders (location empty)', array(
-								'post_id' => $post->ID,
-								'is_homepage' => $is_homepage ? 'yes' : 'no',
-								'page_on_front' => $page_on_front,
-								'home_sliders_count' => count( $home_sliders ),
-								'home_slider_ids' => array_map( function( $s ) { return $s->ID; }, $home_sliders ),
-							) );
-						}
-						
-						// First, try to find sliders with common location names
-						foreach ( $common_locations as $common_location ) {
-							$location_sliders = get_posts( array(
-								'post_type' => 'nectar_slider',
-								'posts_per_page' => 10,
-								'post_status' => 'publish',
-								'tax_query' => array(
-									array(
-										'taxonomy' => 'slider-locations',
-										'field' => 'slug',
-										'terms' => $common_location,
-									),
-								),
-							) );
-							if ( ! empty( $location_sliders ) ) {
-								$slider_posts = array_merge( $slider_posts, $location_sliders );
-								Logger::info( 'FP SEO: extract_images_from_content - Found sliders with common location', array(
-									'post_id' => $post->ID,
-									'location' => $common_location,
-									'slider_count' => count( $location_sliders ),
-								) );
-							}
-						}
-						
-						// If no sliders found with common locations, get all published Nectar Slider posts
-						// Only get a limited number to avoid performance issues
-						if ( empty( $slider_posts ) ) {
-							$slider_posts = get_posts( array(
-								'post_type' => 'nectar_slider',
-								'posts_per_page' => 50, // Increased from 20 to 50 to catch more sliders
-								'post_status' => 'publish',
-								'orderby' => 'date',
-								'order' => 'DESC',
-							) );
-							
-							Logger::info( 'FP SEO: extract_images_from_content - No sliders found with common locations, getting all published sliders', array(
-								'post_id' => $post->ID,
-								'all_sliders_count' => count( $slider_posts ),
-							) );
-						}
-						
-						// CRITICAL: If still no sliders found, try without taxonomy filter
-						// Some sliders might not have location taxonomy set
-						if ( empty( $slider_posts ) ) {
-							$slider_posts = get_posts( array(
-								'post_type' => 'nectar_slider',
-								'posts_per_page' => 50,
-								'post_status' => 'publish',
-								'orderby' => 'date',
-								'order' => 'DESC',
-								'suppress_filters' => false,
-							) );
-							
-							Logger::info( 'FP SEO: extract_images_from_content - No sliders found with taxonomy, getting all sliders without filter', array(
-								'post_id' => $post->ID,
-								'all_sliders_count_no_tax' => count( $slider_posts ),
-							) );
-						}
-					}
-
-					Logger::info( 'FP SEO: extract_images_from_content - Processing slider posts', array(
-						'post_id' => $post->ID,
-						'total_slider_posts' => count( $slider_posts ),
-						'slider_post_ids' => array_map( function( $s ) { return $s->ID; }, $slider_posts ),
-					) );
-
-					foreach ( $slider_posts as $slider_post ) {
-						// Get slider image from meta
-						$slider_image = get_post_meta( $slider_post->ID, '_nectar_slider_image', true );
-						
-						Logger::info( 'FP SEO: extract_images_from_content - Checking slider post', array(
-							'post_id' => $post->ID,
-							'slider_post_id' => $slider_post->ID,
-							'slider_image' => $slider_image ?: 'empty',
-							'slider_image_type' => gettype( $slider_image ),
-							'location' => $location ?: 'empty',
-						) );
-						
-						// Handle array values (get_post_meta might return array with single element or multiple elements)
-						if ( is_array( $slider_image ) ) {
-							if ( count( $slider_image ) === 1 ) {
-								$slider_image = $slider_image[0];
-								Logger::info( 'FP SEO: extract_images_from_content - Unwrapped single-element array', array(
-									'post_id' => $post->ID,
-									'slider_post_id' => $slider_post->ID,
-									'unwrapped_value' => $slider_image,
-									'unwrapped_type' => gettype( $slider_image ),
-								) );
-							} else {
-								// Multiple elements - process each one
-								Logger::info( 'FP SEO: extract_images_from_content - Found array with multiple elements', array(
-									'post_id' => $post->ID,
-									'slider_post_id' => $slider_post->ID,
-									'array_count' => count( $slider_image ),
-								) );
-								foreach ( $slider_image as $img_value ) {
-									if ( ! empty( $img_value ) ) {
-										$images_count_before = count( $images );
-										$this->process_meta_image_value( $img_value, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-										$images_count_after = count( $images );
-										Logger::info( 'FP SEO: extract_images_from_content - Processed image from array element', array(
-											'post_id' => $post->ID,
-											'slider_post_id' => $slider_post->ID,
-											'img_value' => is_string( $img_value ) ? substr( $img_value, 0, 100 ) : $img_value,
-											'images_count_before' => $images_count_before,
-											'images_count_after' => $images_count_after,
-											'image_added' => $images_count_after > $images_count_before,
-										) );
-									}
-								}
-								continue; // Skip to next slider post since we processed all array elements
-							}
-						}
-						
-						// Handle serialized arrays/objects
-						if ( is_string( $slider_image ) && ( $slider_image[0] === 'a:' || $slider_image[0] === 'O:' ) ) {
-							$unserialized = @unserialize( $slider_image );
-							if ( is_array( $unserialized ) ) {
-								// Extract image IDs/URLs from serialized arrays
-								$image_ids_or_urls = $this->extract_image_from_array( $unserialized );
-								foreach ( $image_ids_or_urls as $img_value ) {
-									$images_count_before = count( $images );
-									$this->process_meta_image_value( $img_value, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-									$images_count_after = count( $images );
-									Logger::info( 'FP SEO: extract_images_from_content - Processed image from serialized array', array(
-										'post_id' => $post->ID,
-										'slider_post_id' => $slider_post->ID,
-										'img_value' => $img_value,
-										'images_count_before' => $images_count_before,
-										'images_count_after' => $images_count_after,
-										'image_added' => $images_count_after > $images_count_before,
-									) );
-								}
-								continue; // Skip to next slider post
-							}
-						}
-						
-						if ( ! empty( $slider_image ) ) {
-							// CRITICAL: Process the slider image directly instead of adding to image_meta_keys
-							// This ensures it's processed immediately and not lost in the array processing logic
-							$images_count_before = count( $images );
-							$this->process_meta_image_value( $slider_image, '_nectar_slider_image_from_slider_' . $slider_post->ID, $post->ID, $images, $seen_srcs );
-							$images_count_after = count( $images );
-							
-							Logger::info( 'FP SEO: extract_images_from_content - Processed Nectar Slider image directly', array(
-								'post_id' => $post->ID,
-								'slider_post_id' => $slider_post->ID,
-								'slider_image' => $slider_image,
-								'location' => $location ?: 'empty',
-								'images_count_before' => $images_count_before,
-								'images_count_after' => $images_count_after,
-								'image_added' => $images_count_after > $images_count_before,
-								'slider_image_type' => gettype( $slider_image ),
-								'is_numeric' => is_numeric( $slider_image ),
-								'is_url' => filter_var( $slider_image, FILTER_VALIDATE_URL ) !== false,
-								'starts_with_http' => is_string( $slider_image ) && strpos( $slider_image, 'http' ) === 0,
-								'starts_with_slash' => is_string( $slider_image ) && strpos( $slider_image, '/' ) === 0,
-							) );
-						} else {
-							Logger::info( 'FP SEO: extract_images_from_content - Slider image is empty', array(
-								'post_id' => $post->ID,
-								'slider_post_id' => $slider_post->ID,
-								'location' => $location ?: 'empty',
-							) );
-						}
-					}
-				}
-			}
+			// DISABLED: Nectar Slider extraction completely removed
+			// Querying Nectar Slider posts was causing auto-draft creation when editing homepage
+			// Images from sliders are now handled by ImageExtractor via AJAX (lazy-loaded) only
 			
 			if ( ! empty( $image_meta_keys ) ) {
 				Logger::info( 'FP SEO: extract_images_from_content - Found image-related post meta', array(
