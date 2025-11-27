@@ -1803,7 +1803,7 @@ class Metabox {
 			}
 		}
 		
-		// DIAGNOSTIC: Always show diagnostic info when editing homepage
+		// COMPREHENSIVE DIAGNOSTIC: Always show extensive diagnostic info when editing homepage
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
 			// We're trying to edit the homepage - show diagnostic info
@@ -1831,35 +1831,182 @@ class Metabox {
 			$screen_id = $current_screen ? $current_screen->id : 'unknown';
 			$screen_base = $current_screen ? $current_screen->base : 'unknown';
 			
-			// Always show diagnostic notice when editing homepage
-			add_action( 'admin_notices', function() use ( $requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post, $global_post_id, $global_post_status, $is_ajax, $is_autosave, $screen_id, $screen_base ) {
-				$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
-				$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
-				$icon = $is_wrong_post ? '🔍' : 'ℹ️';
+			// COMPREHENSIVE DIAGNOSTIC: Gather extensive information
+			global $wpdb, $wp_filter;
+			
+			// Get all auto-drafts in database
+			$auto_drafts_in_db = $wpdb->get_results( $wpdb->prepare(
+				"SELECT ID, post_title, post_author, post_date, post_date_gmt, post_modified, post_modified_gmt 
+				FROM {$wpdb->posts} 
+				WHERE post_type = 'page' AND post_status = 'auto-draft' 
+				AND post_author = %d 
+				ORDER BY ID DESC 
+				LIMIT 20",
+				get_current_user_id()
+			), ARRAY_A );
+			
+			// Get homepage from DB directly
+			$homepage_from_db = $wpdb->get_row( $wpdb->prepare(
+				"SELECT ID, post_title, post_status, post_type, post_content, post_modified 
+				FROM {$wpdb->posts} 
+				WHERE ID = %d",
+				$page_on_front_id
+			), ARRAY_A );
+			
+			// Check what hooks are active on wp_insert_post
+			$wp_insert_post_hooks = array();
+			if ( isset( $wp_filter['wp_insert_post'] ) ) {
+				foreach ( $wp_filter['wp_insert_post']->callbacks as $priority => $hooks ) {
+					foreach ( $hooks as $hook ) {
+						$callback = is_array( $hook['function'] ) 
+							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
+							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
+						$wp_insert_post_hooks[] = array(
+							'priority' => $priority,
+							'callback' => $callback,
+						);
+					}
+				}
+			}
+			
+			// Check what hooks are active on save_post
+			$save_post_hooks = array();
+			if ( isset( $wp_filter['save_post'] ) ) {
+				foreach ( $wp_filter['save_post']->callbacks as $priority => $hooks ) {
+					foreach ( $hooks as $hook ) {
+						$callback = is_array( $hook['function'] ) 
+							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
+							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
+						$save_post_hooks[] = array(
+							'priority' => $priority,
+							'callback' => $callback,
+						);
+					}
+				}
+			}
+			
+			// Check what hooks are active on get_post
+			$get_post_filters = array();
+			if ( isset( $wp_filter['get_post'] ) ) {
+				foreach ( $wp_filter['get_post']->callbacks as $priority => $hooks ) {
+					foreach ( $hooks as $hook ) {
+						$callback = is_array( $hook['function'] ) 
+							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
+							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
+						$get_post_filters[] = array(
+							'priority' => $priority,
+							'callback' => $callback,
+						);
+					}
+				}
+			}
+			
+			// Get post object from multiple sources for comparison
+			$post_from_get_post = get_post( $page_on_front_id );
+			$post_from_get_post_edit = get_post( $page_on_front_id, OBJECT, 'edit' );
+			
+			// Check if there's a post lock
+			$post_lock = wp_check_post_lock( $page_on_front_id );
+			$post_lock_user = $post_lock ? get_userdata( $post_lock ) : null;
+			
+			// Check autosave
+			$autosave = wp_get_post_autosave( $page_on_front_id );
+			
+			// Always show comprehensive diagnostic notice when editing homepage
+			add_action( 'admin_notices', function() use ( 
+				$requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post, 
+				$global_post_id, $global_post_status, $is_ajax, $is_autosave, $screen_id, $screen_base,
+				$auto_drafts_in_db, $homepage_from_db, $wp_insert_post_hooks, $save_post_hooks, $get_post_filters,
+				$post_from_get_post, $post_from_get_post_edit, $post_lock, $post_lock_user, $autosave
+			) {
+				$notice_class = 'notice-warning';
+				$notice_color = '#f59e0b';
+				$icon = '🔍';
 				?>
-				<div class="notice <?php echo esc_attr( $notice_class ); ?>" style="border-left-color: <?php echo esc_attr( $notice_color ); ?>; padding: 12px; margin: 20px 0;">
-					<h3 style="margin: 0 0 8px 0; color: <?php echo esc_attr( $notice_color ); ?>;"><?php echo esc_html( $icon ); ?> FP SEO: Diagnostica Homepage</h3>
-					<?php if ( $is_wrong_post ) { ?>
-						<p style="margin: 0 0 8px 0; color: #dc2626;"><strong>⚠️ PROBLEMA RILEVATO:</strong> WordPress ha passato un post sbagliato!</p>
-					<?php } else { ?>
-						<p style="margin: 0 0 8px 0;"><strong>✓ Post corretto:</strong> WordPress ha passato la homepage corretta.</p>
-					<?php } ?>
-					<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">
-						<li><strong>URL richiesto:</strong> <code>post=<?php echo esc_html( $requested_post_id ); ?>&action=edit</code></li>
-						<li><strong>Post ricevuto da WordPress (parametro render):</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
-						<li><strong>Post globale ($GLOBALS['post']):</strong> ID <?php echo esc_html( $global_post_id ); ?> - Status: <code><?php echo esc_html( $global_post_status ); ?></code></li>
-						<li><strong>Homepage corretta (dal DB):</strong> ID <?php echo esc_html( $page_on_front_id ); ?> - Status: <code><?php echo esc_html( $correct_status ); ?></code></li>
-						<li><strong>Corrispondenza:</strong> <?php echo ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>'; ?></li>
-						<li><strong>Contesto:</strong> Screen: <code><?php echo esc_html( $screen_id ); ?></code> (<?php echo esc_html( $screen_base ); ?>) | AJAX: <?php echo $is_ajax ? 'Sì' : 'No'; ?> | Autosave: <?php echo $is_autosave ? 'Sì' : 'No'; ?></li>
-					</ul>
-					<?php if ( $is_wrong_post ) { ?>
-						<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">
-							<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID <?php echo esc_html( $post->ID ); ?>) invece di caricare la homepage esistente (ID <?php echo esc_html( $page_on_front_id ); ?>).<br>
-							<strong>Quando succede:</strong> Quando apri l'editor della homepage, WordPress dovrebbe passarti il post ID <?php echo esc_html( $page_on_front_id ); ?>, ma invece ti sta passando il post ID <?php echo esc_html( $post->ID ); ?> con status auto-draft.<br>
-							<?php if ( $global_post_id !== $post->ID ) { ?>
-								<strong>⚠️ DISCREPANZA:</strong> Il post globale (ID <?php echo esc_html( $global_post_id ); ?>) è diverso dal post passato al metabox (ID <?php echo esc_html( $post->ID ); ?>). Questo indica che qualcosa sta modificando il post durante il rendering.
+				<div class="notice <?php echo esc_attr( $notice_class ); ?>" style="border-left-color: <?php echo esc_attr( $notice_color ); ?>; padding: 15px; margin: 20px 0; max-width: 95%;">
+					<h3 style="margin: 0 0 12px 0; color: <?php echo esc_attr( $notice_color ); ?>; font-size: 16px;"><?php echo esc_html( $icon ); ?> FP SEO: Diagnostica Completa Homepage</h3>
+					
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0;">
+						<div style="background: #f9fafb; padding: 12px; border-radius: 4px;">
+							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #374151;">📋 Informazioni Base</h4>
+							<ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8;">
+								<li><strong>URL richiesto:</strong> <code>post=<?php echo esc_html( $requested_post_id ); ?>&action=edit</code></li>
+								<li><strong>Post ricevuto (render):</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
+								<li><strong>Post globale:</strong> ID <?php echo esc_html( $global_post_id ); ?> - Status: <code><?php echo esc_html( $global_post_status ); ?></code></li>
+								<li><strong>Homepage (DB diretto):</strong> ID <?php echo esc_html( $homepage_from_db['ID'] ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $homepage_from_db['post_status'] ?? 'N/A' ); ?></code></li>
+								<li><strong>get_post(ID):</strong> ID <?php echo esc_html( $post_from_get_post->ID ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $post_from_get_post->post_status ?? 'N/A' ); ?></code></li>
+								<li><strong>get_post(ID, 'edit'):</strong> ID <?php echo esc_html( $post_from_get_post_edit->ID ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $post_from_get_post_edit->post_status ?? 'N/A' ); ?></code></li>
+								<li><strong>Post Lock:</strong> <?php echo $post_lock ? 'Sì (User ID: ' . esc_html( $post_lock ) . ' - ' . esc_html( $post_lock_user->user_login ?? 'unknown' ) . ')' : 'No'; ?></li>
+								<li><strong>Autosave:</strong> <?php echo $autosave ? 'Sì (ID: ' . esc_html( $autosave->ID ) . ')' : 'No'; ?></li>
+							</ul>
+						</div>
+						
+						<div style="background: #fef3c7; padding: 12px; border-radius: 4px;">
+							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #92400e;">🗄️ Auto-Draft nel Database</h4>
+							<?php if ( empty( $auto_drafts_in_db ) ) { ?>
+								<p style="margin: 0; font-size: 12px; color: #10b981;">✓ Nessun auto-draft trovato</p>
+							<?php } else { ?>
+								<p style="margin: 0 0 8px 0; font-size: 12px; color: #dc2626;"><strong>⚠️ Trovati <?php echo count( $auto_drafts_in_db ); ?> auto-draft:</strong></p>
+								<ul style="margin: 0; padding-left: 20px; font-size: 11px; line-height: 1.6; max-height: 200px; overflow-y: auto;">
+									<?php foreach ( array_slice( $auto_drafts_in_db, 0, 10 ) as $ad ) { ?>
+										<li>ID <?php echo esc_html( $ad['ID'] ); ?> - Creato: <?php echo esc_html( $ad['post_date'] ); ?></li>
+									<?php } ?>
+								</ul>
 							<?php } ?>
-						</p>
+						</div>
+					</div>
+					
+					<div style="margin: 15px 0; background: #eff6ff; padding: 12px; border-radius: 4px;">
+						<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #1e40af;">🔗 Hook Attivi</h4>
+						<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 11px;">
+							<div>
+								<strong>wp_insert_post (<?php echo count( $wp_insert_post_hooks ); ?>):</strong>
+								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
+									<?php foreach ( array_slice( $wp_insert_post_hooks, 0, 10 ) as $hook ) { ?>
+										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
+									<?php } ?>
+								</ul>
+							</div>
+							<div>
+								<strong>save_post (<?php echo count( $save_post_hooks ); ?>):</strong>
+								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
+									<?php foreach ( array_slice( $save_post_hooks, 0, 10 ) as $hook ) { ?>
+										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
+									<?php } ?>
+								</ul>
+							</div>
+							<div>
+								<strong>get_post filter (<?php echo count( $get_post_filters ); ?>):</strong>
+								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
+									<?php foreach ( array_slice( $get_post_filters, 0, 10 ) as $hook ) { ?>
+										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
+									<?php } ?>
+								</ul>
+							</div>
+						</div>
+					</div>
+					
+					<div style="margin: 15px 0; background: #f3f4f6; padding: 12px; border-radius: 4px; font-size: 12px;">
+						<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #374151;">📊 Contesto</h4>
+						<ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+							<li><strong>Screen:</strong> <code><?php echo esc_html( $screen_id ); ?></code> (<?php echo esc_html( $screen_base ); ?>)</li>
+							<li><strong>AJAX:</strong> <?php echo $is_ajax ? 'Sì' : 'No'; ?> | <strong>Autosave:</strong> <?php echo $is_autosave ? 'Sì' : 'No'; ?></li>
+							<li><strong>REQUEST_URI:</strong> <code style="font-size: 10px;"><?php echo esc_html( $_SERVER['REQUEST_URI'] ?? 'N/A' ); ?></code></li>
+							<li><strong>POST data:</strong> <?php echo ! empty( $_POST ) ? count( $_POST ) . ' campi' : 'Nessuno'; ?></li>
+						</ul>
+					</div>
+					
+					<?php if ( ! empty( $homepage_from_db ) ) { ?>
+						<div style="margin: 15px 0; background: #f0fdf4; padding: 12px; border-radius: 4px; font-size: 11px;">
+							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #166534;">✅ Homepage dal DB</h4>
+							<ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+								<li><strong>ID:</strong> <?php echo esc_html( $homepage_from_db['ID'] ); ?></li>
+								<li><strong>Status:</strong> <code><?php echo esc_html( $homepage_from_db['post_status'] ); ?></code></li>
+								<li><strong>Type:</strong> <code><?php echo esc_html( $homepage_from_db['post_type'] ); ?></code></li>
+								<li><strong>Content length:</strong> <?php echo strlen( $homepage_from_db['post_content'] ?? '' ); ?> caratteri</li>
+								<li><strong>Modified:</strong> <?php echo esc_html( $homepage_from_db['post_modified'] ?? 'N/A' ); ?></li>
+							</ul>
+						</div>
 					<?php } ?>
 				</div>
 				<?php
