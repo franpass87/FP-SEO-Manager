@@ -1979,6 +1979,19 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
+		// CRITICAL: Skip if this is just opening the editor (not actually saving)
+		// WordPress creates auto-draft when opening editor - we should not interfere
+		if ( ! isset( $_POST['save'] ) && ! isset( $_POST['publish'] ) && ! isset( $_POST['update'] ) ) {
+			// This is likely just opening the editor, not saving
+			// Only process if there are actual SEO fields being submitted
+			$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
+							  isset( $_POST['fp_seo_title_sent'] ) || 
+							  isset( $_POST['fp_seo_meta_description_sent'] );
+			if ( ! $has_seo_fields ) {
+				return; // Not a save operation, just opening editor
+			}
+		}
+		
 		// CRITICAL: Check post type FIRST, before any static tracking
 		// This ensures we don't interfere with unsupported post types at all
 		$post_type = get_post_type( $post_id );
