@@ -96,6 +96,22 @@ spl_autoload_register(
 	false // Non throw exception, ritorna false
 );
 
+// CRITICAL: Register error handler very early to catch fatal errors from other plugins
+// This helps prevent WordPress from completely crashing when other plugins have fatal errors
+register_shutdown_function( function() {
+	$error = error_get_last();
+	if ( $error !== null && in_array( $error['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
+		// Check if error is from FP-Multilanguage
+		if ( strpos( $error['file'], 'FP-Multilanguage' ) !== false ) {
+			// Log the error but don't break WordPress completely
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+				error_log( 'FP SEO: Detected fatal error from FP-Multilanguage: ' . $error['message'] . ' in ' . $error['file'] . ' on line ' . $error['line'] );
+			}
+			// Don't prevent WordPress from showing the error, but log it for debugging
+		}
+	}
+} );
+
 // Carica Container prima di Plugin per evitare errori di autoload
 require_once __DIR__ . '/src/Infrastructure/Container.php';
 require_once __DIR__ . '/src/Infrastructure/Plugin.php';

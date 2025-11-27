@@ -509,6 +509,12 @@ class MetaboxSaver {
 	 *
 	 * @param int $post_id Post ID.
 	 */
+	/**
+	 * Save slug - CRITICAL: Use direct DB update to avoid triggering wp_update_post hooks.
+	 * wp_update_post triggers save_post and other hooks that can cause auto-draft creation.
+	 *
+	 * @param int $post_id Post ID.
+	 */
 	private function save_slug( int $post_id ): void {
 		if ( ! isset( $_POST['fp_seo_slug'] ) ) {
 			return;
@@ -517,19 +523,35 @@ class MetaboxSaver {
 		$slug = trim( sanitize_title( wp_unslash( (string) $_POST['fp_seo_slug'] ) ) );
 
 		if ( '' !== $slug ) {
-			$result = wp_update_post(
-				array(
-					'ID'       => $post_id,
-					'post_name' => $slug,
-				),
-				true
+			// CRITICAL: Use direct DB update instead of wp_update_post
+			// wp_update_post triggers save_post and other hooks that can cause auto-draft creation
+			global $wpdb;
+			$updated = $wpdb->update(
+				$wpdb->posts,
+				array( 'post_name' => $slug ),
+				array( 'ID' => $post_id ),
+				array( '%s' ),
+				array( '%d' )
 			);
-
-			if ( is_wp_error( $result ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Failed to update slug', array(
-					'post_id' => $post_id,
-					'error' => $result->get_error_message(),
-				) );
+			
+			if ( $updated !== false ) {
+				// Clear cache after direct update
+				clean_post_cache( $post_id );
+				wp_cache_delete( $post_id, 'posts' );
+				
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'FP SEO: Slug saved via direct DB update', array(
+						'post_id' => $post_id,
+						'slug' => $slug,
+					) );
+				}
+			} else {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Failed to update slug via direct DB update', array(
+						'post_id' => $post_id,
+						'db_error' => $wpdb->last_error,
+					) );
+				}
 			}
 		}
 	}
@@ -546,61 +568,33 @@ class MetaboxSaver {
 
 		$excerpt = trim( sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) ) );
 
-		// Use wp_update_post with proper error handling
-		$result = wp_update_post(
-			array(
-				'ID'           => $post_id,
-				'post_excerpt' => $excerpt,
-			),
-			true
+		// CRITICAL: Use direct DB update instead of wp_update_post
+		// wp_update_post triggers save_post and other hooks that can cause auto-draft creation
+		global $wpdb;
+		$updated = $wpdb->update(
+			$wpdb->posts,
+			array( 'post_excerpt' => $excerpt ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
 		);
-
-		if ( is_wp_error( $result ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Failed to update excerpt via wp_update_post', array(
-					'post_id' => $post_id,
-					'error' => $result->get_error_message(),
-				) );
-			}
-			
-			// Fallback: try direct database update
-			global $wpdb;
-			$updated = $wpdb->update(
-				$wpdb->posts,
-				array( 'post_excerpt' => $excerpt ),
-				array( 'ID' => $post_id ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			
-			if ( $updated !== false ) {
-				// Clear cache after direct update
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'posts' );
-				
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: Excerpt saved via direct DB update', array(
-						'post_id' => $post_id,
-						'excerpt_length' => strlen( $excerpt ),
-					) );
-				}
-			} else {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Failed to update excerpt via direct DB update', array(
-						'post_id' => $post_id,
-						'db_error' => $wpdb->last_error,
-					) );
-				}
-			}
-		} else {
-			// Success - clear cache
+		
+		if ( $updated !== false ) {
+			// Clear cache after direct update
 			clean_post_cache( $post_id );
 			wp_cache_delete( $post_id, 'posts' );
 			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: Excerpt saved successfully', array(
+				Logger::debug( 'FP SEO: Excerpt saved via direct DB update', array(
 					'post_id' => $post_id,
 					'excerpt_length' => strlen( $excerpt ),
+				) );
+			}
+		} else {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Failed to update excerpt via direct DB update', array(
+					'post_id' => $post_id,
+					'db_error' => $wpdb->last_error,
 				) );
 			}
 		}

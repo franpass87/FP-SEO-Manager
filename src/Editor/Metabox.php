@@ -67,6 +67,16 @@ class Metabox {
 	private $renderer;
 
 	/**
+	 * @var HomepageProtection
+	 */
+	private $homepage_protection;
+
+	/**
+	 * @var MetaboxDiagnostics
+	 */
+	private $diagnostics;
+
+	/**
 	 * Costruttore - registra gli hook immediatamente e inizializza il renderer
 	 */
 	public function __construct() {
@@ -93,8 +103,68 @@ class Metabox {
 			$this->renderer = null;
 		}
 		
+		// Initialize modular components with error handling
+		if ( class_exists( 'FP\SEO\Editor\HomepageProtection' ) ) {
+			try {
+				$this->homepage_protection = new HomepageProtection();
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize HomepageProtection', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				// Create a dummy object to prevent fatal errors
+				$this->homepage_protection = new class {
+					public function register_hooks(): void {}
+					public function correct_homepage_post( WP_Post $post ): WP_Post { return $post; }
+				};
+			}
+		} else {
+			Logger::error( 'FP SEO: HomepageProtection class not found' );
+			// Create a dummy object to prevent fatal errors
+			$this->homepage_protection = new class {
+				public function register_hooks(): void {}
+				public function correct_homepage_post( WP_Post $post ): WP_Post { return $post; }
+			};
+		}
+		
+		if ( class_exists( 'FP\SEO\Editor\MetaboxDiagnostics' ) ) {
+			try {
+				$this->diagnostics = new MetaboxDiagnostics();
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize MetaboxDiagnostics', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				// Create a dummy object to prevent fatal errors
+				$this->diagnostics = new class {
+					public function get_homepage_diagnostics( WP_Post $post ): array { return array(); }
+					public function render_diagnostics( array $diagnostics ): string { return ''; }
+				};
+			}
+		} else {
+			Logger::error( 'FP SEO: MetaboxDiagnostics class not found' );
+			// Create a dummy object to prevent fatal errors
+			$this->diagnostics = new class {
+				public function get_homepage_diagnostics( WP_Post $post ): array { return array(); }
+				public function render_diagnostics( array $diagnostics ): string { return ''; }
+			};
+		}
+
 		// Registra hook di salvataggio
 		$this->register_hooks();
+		
+		// Register homepage protection hooks if available
+		// RE-ENABLED with error handling to prevent conflicts with other plugins
+		if ( isset( $this->homepage_protection ) && method_exists( $this->homepage_protection, 'register_hooks' ) ) {
+			try {
+				$this->homepage_protection->register_hooks();
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to register homepage protection hooks', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+			}
+		}
 		
 		// IMPORTANTE: Registra anche l'hook add_meta_boxes nel costruttore
 		// Questo garantisce che il metabox venga sempre registrato, anche se register() non viene chiamato
@@ -325,22 +395,27 @@ class Metabox {
 			add_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ), 999, 3 );
 		}
 		
+		// DISABLED: These hooks might be causing the auto-draft issue
+		// Testing if removing them fixes the problem
+		// 
 		// CRITICAL FIX: Prevent auto-draft creation when editing homepage
 		// Intercept wp_insert_post_data to prevent auto-draft creation
-		if ( ! has_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ) ) ) {
-			add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
-		}
+		// if ( ! has_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ) ) ) {
+		// 	add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
+		// }
 		
+		// DISABLED: wp_update_post hook might be causing issues
 		// CRITICAL FIX: Prevent homepage from becoming auto-draft when saving
 		// This hook runs when WordPress updates a post
-		if ( ! has_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ) ) ) {
-			add_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ), 1, 2 );
-		}
+		// if ( ! has_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ) ) ) {
+		// 	add_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ), 1, 2 );
+		// }
 		
+		// DISABLED: edit_post hook might be causing issues
 		// CRITICAL FIX: Also hook into edit_post to catch status changes
-		if ( ! has_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ) ) ) {
-			add_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ), 1, 2 );
-		}
+		// if ( ! has_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ) ) ) {
+		// 	add_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ), 1, 2 );
+		// }
 		
 		// CRITICAL FIX: Force WordPress to load correct homepage when opening editor
 		// This intercepts the post loading before WordPress displays it in the editor
@@ -681,6 +756,48 @@ class Metabox {
 		<script>
 		// Clean up any text content from indicator icons (cache fix)
 		document.addEventListener('DOMContentLoaded', function() {
+			// CRITICAL: Fix homepage title if it shows "Bozza automatica"
+			<?php
+			$page_on_front_id = (int) get_option( 'page_on_front' );
+			if ( $page_on_front_id > 0 ) {
+				$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+				if ( $requested_post_id === $page_on_front_id ) {
+					$homepage = get_post( $page_on_front_id );
+					if ( $homepage instanceof WP_Post && $homepage->post_title !== 'Bozza automatica' ) {
+						?>
+						(function() {
+							const postIdInput = document.querySelector('#post_ID');
+							const titleInput = document.querySelector('#title');
+							const expectedPostId = <?php echo esc_js( $page_on_front_id ); ?>;
+							const expectedTitle = <?php echo wp_json_encode( $homepage->post_title ); ?>;
+							
+							if (postIdInput && titleInput) {
+								const currentPostId = parseInt(postIdInput.value, 10);
+								const currentTitle = titleInput.value;
+								
+								// If post ID is correct but title is wrong, fix it
+								if (currentPostId === expectedPostId && currentTitle === 'Bozza automatica') {
+									titleInput.value = expectedTitle;
+									
+									// Also update the editor if it exists (Gutenberg)
+									if (window.wp && window.wp.data && window.wp.data.dispatch) {
+										try {
+											window.wp.data.dispatch('core/editor').editPost({ title: expectedTitle });
+										} catch(e) {
+											// Gutenberg might not be loaded yet
+										}
+									}
+									
+									console.log('FP SEO: Fixed homepage title from "Bozza automatica" to "' + expectedTitle + '"');
+								}
+							}
+						})();
+						<?php
+					}
+				}
+			}
+			?>
+			
 			const icons = document.querySelectorAll('.fp-seo-performance-indicator__icon');
 			icons.forEach(function(icon) {
 				icon.textContent = '';
@@ -1745,6 +1862,108 @@ class Metabox {
 			box-shadow: 0 2px 6px 0 rgba(0,0,0,0.08) !important;
 		}
 		</style>
+		<script>
+		(function() {
+			// CRITICAL: Fix homepage title if it shows "Bozza automatica"
+			// This runs immediately and also on DOMContentLoaded for block editor
+			var pageOnFront = <?php echo (int) get_option( 'page_on_front' ); ?>;
+			var currentPostId = <?php echo isset( $_GET['post'] ) ? (int) $_GET['post'] : 0; ?>;
+			var correctTitle = '<?php echo esc_js( get_the_title( (int) get_option( 'page_on_front' ) ) ); ?>';
+			
+			if ( pageOnFront === 0 || currentPostId !== pageOnFront || ! correctTitle || correctTitle === 'Bozza automatica' || correctTitle === 'Auto Draft' ) {
+				return;
+			}
+			
+			function fixHomepageTitle() {
+				// Fix title in classic editor
+				var titleInput = document.getElementById('title');
+				if ( titleInput ) {
+					var currentValue = titleInput.value || titleInput.textContent || '';
+					if ( currentValue === 'Bozza automatica' || currentValue === 'Auto Draft' || currentValue.trim() === '' ) {
+						titleInput.value = correctTitle;
+						if ( titleInput.dispatchEvent ) {
+							titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+							titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+						}
+					}
+				}
+				
+				// Fix title in block editor (Gutenberg)
+				var blockEditorTitle = document.querySelector('.editor-post-title__input, .wp-block-post-title input, .wp-block-post-title textarea, [data-type="core/post-title"] input, [data-type="core/post-title"] textarea');
+				if ( blockEditorTitle ) {
+					var currentValue = blockEditorTitle.value || blockEditorTitle.textContent || '';
+					if ( currentValue === 'Bozza automatica' || currentValue === 'Auto Draft' || currentValue.trim() === '' ) {
+						blockEditorTitle.value = correctTitle;
+						if ( blockEditorTitle.dispatchEvent ) {
+							blockEditorTitle.dispatchEvent(new Event('input', { bubbles: true }));
+							blockEditorTitle.dispatchEvent(new Event('change', { bubbles: true }));
+						}
+						// Also update textContent for textarea
+						if ( blockEditorTitle.textContent !== undefined ) {
+							blockEditorTitle.textContent = correctTitle;
+						}
+						// Update innerHTML if it's a contenteditable
+						if ( blockEditorTitle.contentEditable === 'true' ) {
+							blockEditorTitle.textContent = correctTitle;
+							blockEditorTitle.innerHTML = correctTitle;
+						}
+					}
+				}
+				
+				// Fix page title in browser tab
+				var pageTitle = document.querySelector('title');
+				if ( pageTitle && pageTitle.textContent.indexOf('Bozza automatica') !== -1 ) {
+					pageTitle.textContent = pageTitle.textContent.replace('Bozza automatica', correctTitle);
+				}
+			}
+			
+			// Run immediately
+			fixHomepageTitle();
+			
+			// Run on DOMContentLoaded for block editor
+			if ( document.readyState === 'loading' ) {
+				document.addEventListener('DOMContentLoaded', fixHomepageTitle);
+			} else {
+				// Already loaded, run immediately
+				fixHomepageTitle();
+			}
+			
+			// Run after delays to catch late-loading elements
+			setTimeout(fixHomepageTitle, 100);
+			setTimeout(fixHomepageTitle, 500);
+			setTimeout(fixHomepageTitle, 1000);
+			setTimeout(fixHomepageTitle, 2000);
+			setTimeout(fixHomepageTitle, 3000);
+			
+			// Also run when WordPress editor loads (for block editor)
+			if ( typeof wp !== 'undefined' && wp.data && wp.data.subscribe ) {
+				wp.data.subscribe(function() {
+					setTimeout(fixHomepageTitle, 100);
+				});
+			}
+			
+			// Use MutationObserver to watch for title changes
+			var observer = new MutationObserver(function(mutations) {
+				mutations.forEach(function(mutation) {
+					if ( mutation.type === 'childList' || mutation.type === 'characterData' ) {
+						setTimeout(fixHomepageTitle, 50);
+					}
+				});
+			});
+			
+			// Observe title input changes
+			var titleInput = document.getElementById('title');
+			if ( titleInput ) {
+				observer.observe(titleInput, { childList: true, characterData: true, subtree: true });
+			}
+			
+			// Observe block editor title changes
+			var blockEditorTitle = document.querySelector('.editor-post-title__input, .wp-block-post-title input, .wp-block-post-title textarea');
+			if ( blockEditorTitle ) {
+				observer.observe(blockEditorTitle, { childList: true, characterData: true, subtree: true });
+			}
+		})();
+		</script>
 		<?php
 	}
 
@@ -1754,17 +1973,19 @@ class Metabox {
 	 * @param WP_Post $post Current post instance.
 	 */
 	public function render( WP_Post $post ): void {
-		// Validazione input
-		if ( ! $post instanceof WP_Post ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Invalid post object in render', array(
-					'post' => gettype( $post ),
-					'post_id' => isset( $post->ID ) ? $post->ID : 'unknown',
-				) );
+		// CRITICAL: Wrap entire render method in try-catch to prevent fatal errors
+		try {
+			// Validazione input
+			if ( ! $post instanceof WP_Post ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Invalid post object in render', array(
+						'post' => gettype( $post ),
+						'post_id' => isset( $post->ID ) ? $post->ID : 'unknown',
+					) );
+				}
+				echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: oggetto post non valido.', 'fp-seo-performance' ) . '</p></div>';
+				return;
 			}
-			echo '<div class="notice notice-error"><p>' . esc_html__( 'Errore: oggetto post non valido.', 'fp-seo-performance' ) . '</p></div>';
-			return;
-		}
 		
 		// CRITICAL FIX: Check if WordPress passed wrong post (e.g., nectar_slider instead of homepage)
 		// This happens when Nectar Slider or other plugins modify the global $post
@@ -1772,6 +1993,9 @@ class Metabox {
 		$post_was_corrected = false;
 		
 		// CRITICAL: Clean up any auto-drafts when editing homepage
+		// DISABLED: wp_delete_post() triggers hooks that cause errors in FP-Multilanguage
+		// This cleanup is now handled by HomepageProtection class via wp_insert_post hook
+		/*
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
 			// Delete any auto-draft pages that might have been created
@@ -1783,263 +2007,70 @@ class Metabox {
 			
 			foreach ( $auto_drafts as $auto_draft_id ) {
 				if ( (int) $auto_draft_id !== $page_on_front_id ) {
-					wp_delete_post( (int) $auto_draft_id, true ); // Force delete
-					Logger::debug( 'Metabox::render - Deleted auto-draft page', array(
-						'auto_draft_id' => $auto_draft_id,
-						'homepage_id' => $page_on_front_id,
+					try {
+						wp_delete_post( (int) $auto_draft_id, true ); // Force delete
+						Logger::debug( 'Metabox::render - Deleted auto-draft page', array(
+							'auto_draft_id' => $auto_draft_id,
+							'homepage_id' => $page_on_front_id,
+						) );
+					} catch ( \Throwable $e ) {
+						// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
+						Logger::warning( 'FP SEO: Failed to delete auto-draft during render', array(
+							'auto_draft_id' => $auto_draft_id,
+							'error' => $e->getMessage(),
+						) );
+					}
+				}
+			}
+		}
+		*/
+		
+		// Correct homepage post if WordPress passed wrong one (delegated to HomepageProtection)
+		// RE-ENABLED with error handling to prevent conflicts
+		if ( isset( $this->homepage_protection ) && method_exists( $this->homepage_protection, 'correct_homepage_post' ) ) {
+			try {
+				$post = $this->homepage_protection->correct_homepage_post( $post );
+			} catch ( \Throwable $e ) {
+				// Silently fail homepage correction to prevent breaking the metabox
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::error( 'FP SEO: Error correcting homepage post', array(
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
 					) );
 				}
+				// Continue with original post if correction fails
 			}
 		}
 		
-		if ( $requested_post_id > 0 && $post->ID !== $requested_post_id ) {
-			// WordPress passed wrong post - get the correct one from URL
-			$correct_post = get_post( $requested_post_id );
-			if ( $correct_post instanceof WP_Post ) {
-				Logger::warning( 'Metabox::render - WordPress passed wrong post, correcting', array(
-					'requested_post_id' => $requested_post_id,
-					'wrong_post_id' => $post->ID,
-					'wrong_post_type' => $post->post_type,
-					'correct_post_id' => $correct_post->ID,
-					'correct_post_type' => $correct_post->post_type,
-				) );
-				$post = $correct_post;
-				$post_was_corrected = true;
-				// Also fix global post to prevent other issues
-				global $wp_query;
-				$GLOBALS['post'] = $correct_post;
-				if ( isset( $wp_query ) ) {
-					$wp_query->post = $correct_post;
-				}
-			}
-		}
-		
-		// COMPREHENSIVE DIAGNOSTIC: Always show extensive diagnostic info when editing homepage
+		// Show diagnostics when editing homepage (delegated to MetaboxDiagnostics)
+		// TEMPORARILY DISABLED to test if metabox renders without diagnostics
+		// Diagnostics are disabled to prevent any potential errors from breaking the metabox
+		/*
 		$page_on_front_id = (int) get_option( 'page_on_front' );
 		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
-			// We're trying to edit the homepage - show diagnostic info
-			$correct_post = get_post( $page_on_front_id );
-			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
-			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
-			
-			// If we corrected the post, show success message
-			if ( $post_was_corrected && $post->ID === $page_on_front_id ) {
-				$is_wrong_post = false; // Post is now correct
-			}
-			
-			// Get global post for comparison
-			global $wp_query, $pagenow;
-			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
-			$global_post_id = $global_post instanceof WP_Post ? $global_post->ID : 0;
-			$global_post_status = $global_post instanceof WP_Post ? $global_post->post_status : 'none';
-			
-			// Check if this is AJAX
-			$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
-			$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
-			
-			// Get current screen info
-			$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-			$screen_id = $current_screen ? $current_screen->id : 'unknown';
-			$screen_base = $current_screen ? $current_screen->base : 'unknown';
-			
-			// COMPREHENSIVE DIAGNOSTIC: Gather extensive information
-			global $wpdb, $wp_filter;
-			
-			// Get all auto-drafts in database
-			$auto_drafts_in_db = $wpdb->get_results( $wpdb->prepare(
-				"SELECT ID, post_title, post_author, post_date, post_date_gmt, post_modified, post_modified_gmt 
-				FROM {$wpdb->posts} 
-				WHERE post_type = 'page' AND post_status = 'auto-draft' 
-				AND post_author = %d 
-				ORDER BY ID DESC 
-				LIMIT 20",
-				get_current_user_id()
-			), ARRAY_A );
-			
-			// Get homepage from DB directly
-			$homepage_from_db = $wpdb->get_row( $wpdb->prepare(
-				"SELECT ID, post_title, post_status, post_type, post_content, post_modified 
-				FROM {$wpdb->posts} 
-				WHERE ID = %d",
-				$page_on_front_id
-			), ARRAY_A );
-			
-			// Check what hooks are active on wp_insert_post
-			$wp_insert_post_hooks = array();
-			if ( isset( $wp_filter['wp_insert_post'] ) ) {
-				foreach ( $wp_filter['wp_insert_post']->callbacks as $priority => $hooks ) {
-					foreach ( $hooks as $hook ) {
-						$callback = is_array( $hook['function'] ) 
-							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
-							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
-						$wp_insert_post_hooks[] = array(
-							'priority' => $priority,
-							'callback' => $callback,
-						);
+			if ( isset( $this->diagnostics ) && method_exists( $this->diagnostics, 'get_homepage_diagnostics' ) ) {
+				try {
+					$diagnostics_data = $this->diagnostics->get_homepage_diagnostics( $post );
+					if ( ! empty( $diagnostics_data ) && method_exists( $this->diagnostics, 'render_diagnostics' ) ) {
+						$diagnostics_html = $this->diagnostics->render_diagnostics( $diagnostics_data );
+						if ( ! empty( $diagnostics_html ) ) {
+							add_action( 'admin_notices', function() use ( $diagnostics_html ) {
+								echo $diagnostics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+							} );
+						}
+					}
+				} catch ( \Throwable $e ) {
+					// Silently fail diagnostics to prevent breaking the metabox
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::error( 'FP SEO: Error rendering diagnostics', array(
+							'error' => $e->getMessage(),
+							'trace' => $e->getTraceAsString(),
+						) );
 					}
 				}
-			}
-			
-			// Check what hooks are active on save_post
-			$save_post_hooks = array();
-			if ( isset( $wp_filter['save_post'] ) ) {
-				foreach ( $wp_filter['save_post']->callbacks as $priority => $hooks ) {
-					foreach ( $hooks as $hook ) {
-						$callback = is_array( $hook['function'] ) 
-							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
-							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
-						$save_post_hooks[] = array(
-							'priority' => $priority,
-							'callback' => $callback,
-						);
-					}
-				}
-			}
-			
-			// Check what hooks are active on get_post
-			$get_post_filters = array();
-			if ( isset( $wp_filter['get_post'] ) ) {
-				foreach ( $wp_filter['get_post']->callbacks as $priority => $hooks ) {
-					foreach ( $hooks as $hook ) {
-						$callback = is_array( $hook['function'] ) 
-							? ( is_object( $hook['function'][0] ) ? get_class( $hook['function'][0] ) . '::' . $hook['function'][1] : 'array' )
-							: ( is_string( $hook['function'] ) ? $hook['function'] : 'closure' );
-						$get_post_filters[] = array(
-							'priority' => $priority,
-							'callback' => $callback,
-						);
-					}
-				}
-			}
-			
-			// Get post object from multiple sources for comparison
-			$post_from_get_post = get_post( $page_on_front_id );
-			$post_from_get_post_edit = get_post( $page_on_front_id, OBJECT, 'edit' );
-			
-			// Check if there's a post lock
-			$post_lock = wp_check_post_lock( $page_on_front_id );
-			$post_lock_user = $post_lock ? get_userdata( $post_lock ) : null;
-			
-			// Check autosave
-			$autosave = wp_get_post_autosave( $page_on_front_id );
-			
-			// Always show comprehensive diagnostic notice when editing homepage
-			add_action( 'admin_notices', function() use ( 
-				$requested_post_id, $post, $page_on_front_id, $correct_status, $is_wrong_post, 
-				$global_post_id, $global_post_status, $is_ajax, $is_autosave, $screen_id, $screen_base,
-				$auto_drafts_in_db, $homepage_from_db, $wp_insert_post_hooks, $save_post_hooks, $get_post_filters,
-				$post_from_get_post, $post_from_get_post_edit, $post_lock, $post_lock_user, $autosave
-			) {
-				$notice_class = 'notice-warning';
-				$notice_color = '#f59e0b';
-				$icon = '🔍';
-				?>
-				<div class="notice <?php echo esc_attr( $notice_class ); ?>" style="border-left-color: <?php echo esc_attr( $notice_color ); ?>; padding: 15px; margin: 20px 0; max-width: 95%;">
-					<h3 style="margin: 0 0 12px 0; color: <?php echo esc_attr( $notice_color ); ?>; font-size: 16px;"><?php echo esc_html( $icon ); ?> FP SEO: Diagnostica Completa Homepage</h3>
-					
-					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0;">
-						<div style="background: #f9fafb; padding: 12px; border-radius: 4px;">
-							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #374151;">📋 Informazioni Base</h4>
-							<ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8;">
-								<li><strong>URL richiesto:</strong> <code>post=<?php echo esc_html( $requested_post_id ); ?>&action=edit</code></li>
-								<li><strong>Post ricevuto (render):</strong> ID <?php echo esc_html( $post->ID ); ?> - Status: <code><?php echo esc_html( $post->post_status ); ?></code> - Type: <code><?php echo esc_html( $post->post_type ); ?></code></li>
-								<li><strong>Post globale:</strong> ID <?php echo esc_html( $global_post_id ); ?> - Status: <code><?php echo esc_html( $global_post_status ); ?></code></li>
-								<li><strong>Homepage (DB diretto):</strong> ID <?php echo esc_html( $homepage_from_db['ID'] ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $homepage_from_db['post_status'] ?? 'N/A' ); ?></code></li>
-								<li><strong>get_post(ID):</strong> ID <?php echo esc_html( $post_from_get_post->ID ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $post_from_get_post->post_status ?? 'N/A' ); ?></code></li>
-								<li><strong>get_post(ID, 'edit'):</strong> ID <?php echo esc_html( $post_from_get_post_edit->ID ?? 'N/A' ); ?> - Status: <code><?php echo esc_html( $post_from_get_post_edit->post_status ?? 'N/A' ); ?></code></li>
-								<li><strong>Post Lock:</strong> <?php echo $post_lock ? 'Sì (User ID: ' . esc_html( $post_lock ) . ' - ' . esc_html( $post_lock_user->user_login ?? 'unknown' ) . ')' : 'No'; ?></li>
-								<li><strong>Autosave:</strong> <?php echo $autosave ? 'Sì (ID: ' . esc_html( $autosave->ID ) . ')' : 'No'; ?></li>
-							</ul>
-						</div>
-						
-						<div style="background: #fef3c7; padding: 12px; border-radius: 4px;">
-							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #92400e;">🗄️ Auto-Draft nel Database</h4>
-							<?php if ( empty( $auto_drafts_in_db ) ) { ?>
-								<p style="margin: 0; font-size: 12px; color: #10b981;">✓ Nessun auto-draft trovato</p>
-							<?php } else { ?>
-								<p style="margin: 0 0 8px 0; font-size: 12px; color: #dc2626;"><strong>⚠️ Trovati <?php echo count( $auto_drafts_in_db ); ?> auto-draft:</strong></p>
-								<ul style="margin: 0; padding-left: 20px; font-size: 11px; line-height: 1.6; max-height: 200px; overflow-y: auto;">
-									<?php foreach ( array_slice( $auto_drafts_in_db, 0, 10 ) as $ad ) { ?>
-										<li>ID <?php echo esc_html( $ad['ID'] ); ?> - Creato: <?php echo esc_html( $ad['post_date'] ); ?></li>
-									<?php } ?>
-								</ul>
-							<?php } ?>
-						</div>
-					</div>
-					
-					<div style="margin: 15px 0; background: #eff6ff; padding: 12px; border-radius: 4px;">
-						<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #1e40af;">🔗 Hook Attivi</h4>
-						<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 11px;">
-							<div>
-								<strong>wp_insert_post (<?php echo count( $wp_insert_post_hooks ); ?>):</strong>
-								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
-									<?php foreach ( array_slice( $wp_insert_post_hooks, 0, 10 ) as $hook ) { ?>
-										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
-									<?php } ?>
-								</ul>
-							</div>
-							<div>
-								<strong>save_post (<?php echo count( $save_post_hooks ); ?>):</strong>
-								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
-									<?php foreach ( array_slice( $save_post_hooks, 0, 10 ) as $hook ) { ?>
-										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
-									<?php } ?>
-								</ul>
-							</div>
-							<div>
-								<strong>get_post filter (<?php echo count( $get_post_filters ); ?>):</strong>
-								<ul style="margin: 4px 0 0 0; padding-left: 18px; line-height: 1.5; max-height: 150px; overflow-y: auto;">
-									<?php foreach ( array_slice( $get_post_filters, 0, 10 ) as $hook ) { ?>
-										<li>P<?php echo esc_html( $hook['priority'] ); ?>: <?php echo esc_html( $hook['callback'] ); ?></li>
-									<?php } ?>
-								</ul>
-							</div>
-						</div>
-					</div>
-					
-					<div style="margin: 15px 0; background: #f3f4f6; padding: 12px; border-radius: 4px; font-size: 12px;">
-						<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #374151;">📊 Contesto</h4>
-						<ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-							<li><strong>Screen:</strong> <code><?php echo esc_html( $screen_id ); ?></code> (<?php echo esc_html( $screen_base ); ?>)</li>
-							<li><strong>AJAX:</strong> <?php echo $is_ajax ? 'Sì' : 'No'; ?> | <strong>Autosave:</strong> <?php echo $is_autosave ? 'Sì' : 'No'; ?></li>
-							<li><strong>REQUEST_URI:</strong> <code style="font-size: 10px;"><?php echo esc_html( $_SERVER['REQUEST_URI'] ?? 'N/A' ); ?></code></li>
-							<li><strong>POST data:</strong> <?php echo ! empty( $_POST ) ? count( $_POST ) . ' campi' : 'Nessuno'; ?></li>
-						</ul>
-					</div>
-					
-					<?php if ( ! empty( $homepage_from_db ) ) { ?>
-						<div style="margin: 15px 0; background: #f0fdf4; padding: 12px; border-radius: 4px; font-size: 11px;">
-							<h4 style="margin: 0 0 8px 0; font-size: 14px; color: #166534;">✅ Homepage dal DB</h4>
-							<ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-								<li><strong>ID:</strong> <?php echo esc_html( $homepage_from_db['ID'] ); ?></li>
-								<li><strong>Status:</strong> <code><?php echo esc_html( $homepage_from_db['post_status'] ); ?></code></li>
-								<li><strong>Type:</strong> <code><?php echo esc_html( $homepage_from_db['post_type'] ); ?></code></li>
-								<li><strong>Content length:</strong> <?php echo strlen( $homepage_from_db['post_content'] ?? '' ); ?> caratteri</li>
-								<li><strong>Modified:</strong> <?php echo esc_html( $homepage_from_db['post_modified'] ?? 'N/A' ); ?></li>
-							</ul>
-						</div>
-					<?php } ?>
-				</div>
-				<?php
-			} );
-			
-			// Log for debugging
-			if ( $is_wrong_post ) {
-				Logger::warning( 'Metabox::render - WordPress passed wrong post when opening homepage editor', array(
-					'requested_post_id' => $requested_post_id,
-					'received_post_id' => $post->ID,
-					'received_post_status' => $post->post_status,
-					'global_post_id' => $global_post_id,
-					'global_post_status' => $global_post_status,
-					'correct_homepage_id' => $page_on_front_id,
-					'correct_homepage_status' => $correct_status,
-					'is_ajax' => $is_ajax,
-					'is_autosave' => $is_autosave,
-					'screen_id' => $screen_id,
-					'screen_base' => $screen_base,
-				) );
 			}
 		}
+		*/
 		
 		// SIMPLIFIED: Just use the post WordPress gives us - no special handling
 		// All the previous "homepage protection" code was causing more problems than it solved
@@ -2131,6 +2162,15 @@ class Metabox {
 			}
 		}
 
+		// Ensure $analysis is always an array before passing to renderer
+		if ( ! is_array( $analysis ) ) {
+			Logger::error( 'FP SEO: Invalid analysis result in Metabox::render()', array(
+				'analysis_type' => gettype( $analysis ),
+				'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
+			) );
+			$analysis = array(); // Force to empty array
+		}
+
 		// Use renderer to output HTML con gestione errori robusta
 		// Pass current_post instead of modifying the original $post parameter
 		try {
@@ -2151,10 +2191,14 @@ class Metabox {
 					'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
 					'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
 					'excluded' => $excluded,
-					'analysis_count' => count( $analysis ),
-					'renderer_class' => get_class( $this->renderer ),
+					'analysis_count' => is_array( $analysis ) ? count( $analysis ) : 0,
+					'analysis_type' => gettype( $analysis ),
+					'renderer_class' => isset( $this->renderer ) ? get_class( $this->renderer ) : 'null',
 				) );
 			}
+			
+			// CRITICAL: Output test message before calling renderer
+			echo '<!-- FP SEO Metabox::render() calling renderer -->';
 			
 			// Chiama il renderer
 			$this->renderer->render( $current_post, $analysis, $excluded );
@@ -2192,6 +2236,23 @@ class Metabox {
 				} else {
 					echo '<p><small><strong>Renderer:</strong> null</small></p>';
 				}
+			}
+			echo '</div>';
+		}
+		} catch ( \Throwable $e ) {
+			// Catch any errors that weren't caught by inner try-catch blocks
+			Logger::error( 'FP SEO: Uncaught error in Metabox::render()', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'error_type' => get_class( $e ),
+			) );
+			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Errore critico nel metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'Impossibile caricare il metabox. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
+				echo '<p><small><strong>File:</strong> ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
 			}
 			echo '</div>';
 		}
@@ -2872,14 +2933,23 @@ class Metabox {
 			}
 			$correcting[ $post->ID ] = true;
 			
-			// Correggi immediatamente usando wp_update_post
+			// Correggi immediatamente usando wpdb direttamente (evita wp_update_post che può causare loop)
 			// Rimuovi temporaneamente l'hook per evitare loop
 			remove_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1 );
 			
-			wp_update_post( array(
-				'ID' => $post->ID,
-				'post_status' => $old_status,
-			) );
+			// Use direct DB update instead of wp_update_post to avoid triggering more hooks
+			global $wpdb;
+			$wpdb->update(
+				$wpdb->posts,
+				array( 'post_status' => $old_status ),
+				array( 'ID' => $post->ID ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			
+			// Clear cache
+			clean_post_cache( $post->ID );
+			wp_cache_delete( $post->ID, 'posts' );
 			
 			// Ripristina l'hook
 			add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
@@ -3216,11 +3286,22 @@ class Metabox {
 			
 			// CRITICAL: Delete the auto-draft immediately if it's not the homepage
 			// This prevents WordPress from showing it in the editor
+			// Wrapped in try-catch to prevent errors from FP-Multilanguage or other plugins
 			if ( $post_id !== $page_on_front_id ) {
-				wp_delete_post( $post_id, true ); // Force delete, bypass trash
-				Logger::info( 'Metabox::diagnose_auto_draft_creation - Auto-draft deleted', array(
-					'deleted_post_id' => $post_id,
-				) );
+				try {
+					wp_delete_post( $post_id, true ); // Force delete, bypass trash
+					Logger::info( 'Metabox::diagnose_auto_draft_creation - Auto-draft deleted', array(
+						'deleted_post_id' => $post_id,
+					) );
+				} catch ( \Throwable $e ) {
+					// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						Logger::warning( 'FP SEO: Failed to delete auto-draft in diagnose_auto_draft_creation', array(
+							'auto_draft_id' => $post_id,
+							'error' => $e->getMessage(),
+						) );
+					}
+				}
 			}
 			
 			// Store diagnostic info in transient so it can be displayed in metabox
@@ -3297,10 +3378,20 @@ class Metabox {
 		) );
 		
 		foreach ( $auto_drafts as $auto_draft_id ) {
-			wp_delete_post( (int) $auto_draft_id, true );
-			Logger::debug( 'Metabox::force_correct_homepage_in_editor - Deleted auto-draft', array(
-				'auto_draft_id' => $auto_draft_id,
-			) );
+			try {
+				wp_delete_post( (int) $auto_draft_id, true );
+				Logger::debug( 'Metabox::force_correct_homepage_in_editor - Deleted auto-draft', array(
+					'auto_draft_id' => $auto_draft_id,
+				) );
+			} catch ( \Throwable $e ) {
+				// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::warning( 'FP SEO: Failed to delete auto-draft in force_correct_homepage_in_editor', array(
+						'auto_draft_id' => $auto_draft_id,
+						'error' => $e->getMessage(),
+					) );
+				}
+			}
 		}
 	}
 
@@ -3969,46 +4060,30 @@ class Metabox {
 				delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
 			}
 
-			// Salva Excerpt
+			// Salva Excerpt - CRITICAL: Use direct DB update to avoid triggering wp_update_post hooks
+			// wp_update_post triggers save_post and other hooks that can cause auto-draft creation
+			global $wpdb;
 			if ( '' !== $excerpt ) {
-				$excerpt_result = wp_update_post(
-					array(
-						'ID'           => $post_id,
-						'post_excerpt' => $excerpt,
-					),
-					true
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_excerpt' => $excerpt ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
 				);
-				
-				if ( is_wp_error( $excerpt_result ) ) {
-					// Fallback: direct database update
-					global $wpdb;
-					$wpdb->update(
-						$wpdb->posts,
-						array( 'post_excerpt' => $excerpt ),
-						array( 'ID' => $post_id ),
-						array( '%s' ),
-						array( '%d' )
-					);
-					clean_post_cache( $post_id );
-					wp_cache_delete( $post_id, 'posts' );
-				} else {
-					clean_post_cache( $post_id );
-					wp_cache_delete( $post_id, 'posts' );
-				}
 			} else {
 				// Se excerpt è vuoto, rimuovilo
-				$excerpt_result = wp_update_post(
-					array(
-						'ID'           => $post_id,
-						'post_excerpt' => '',
-					),
-					true
+				$wpdb->update(
+					$wpdb->posts,
+					array( 'post_excerpt' => '' ),
+					array( 'ID' => $post_id ),
+					array( '%s' ),
+					array( '%d' )
 				);
-				if ( ! is_wp_error( $excerpt_result ) ) {
-					clean_post_cache( $post_id );
-					wp_cache_delete( $post_id, 'posts' );
-				}
 			}
+			// Clear cache after direct DB update
+			clean_post_cache( $post_id );
+			wp_cache_delete( $post_id, 'posts' );
 
 			$result = true;
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {

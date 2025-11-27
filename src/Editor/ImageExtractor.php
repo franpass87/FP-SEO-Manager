@@ -52,6 +52,16 @@ class ImageExtractor {
 			return array();
 		}
 		
+		// CRITICAL: Only process in AJAX context to avoid interference with WordPress post loading
+		// During initial metabox rendering, WordPress might create auto-drafts, so we skip completely
+		if ( ! defined( 'DOING_AJAX' ) || ! DOING_AJAX ) {
+			Logger::debug( 'ImageExtractor::extract - Skipping extraction during non-AJAX context (editor load)', array(
+				'post_id' => $post_id,
+				'context' => 'non-ajax',
+			) );
+			return array();
+		}
+		
 		// CRITICAL: Skip auto-drafts completely - they should never be processed
 		// This prevents interference when WordPress creates auto-draft during editor opening
 		$post_status = get_post_status( $post_id );
@@ -76,9 +86,28 @@ class ImageExtractor {
 		}
 		
 		// Get post object safely
-		$post_obj = $post instanceof WP_Post ? $post : get_post( $post_id );
+		// CRITICAL: If we already have a WP_Post object, use it directly to avoid triggering get_post filter
+		// This prevents interference with homepage protection hooks
+		$post_obj = $post instanceof WP_Post ? $post : null;
+		
+		// Only call get_post if we don't have the object and we're sure it's safe (not during editor load)
 		if ( ! $post_obj instanceof WP_Post ) {
-			return array();
+			// CRITICAL: Only call get_post if we're in AJAX context or explicitly requested
+			// During metabox rendering, WordPress might pass wrong post, so we skip extraction
+			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+				$post_obj = get_post( $post_id );
+			} else {
+				// During normal rendering, skip to avoid interference
+				Logger::debug( 'ImageExtractor::extract - Skipping extraction during non-AJAX context', array(
+					'post_id' => $post_id,
+					'context' => 'non-ajax',
+				) );
+				return array();
+			}
+			
+			if ( ! $post_obj instanceof WP_Post ) {
+				return array();
+			}
 		}
 		
 		// Verify post type is supported

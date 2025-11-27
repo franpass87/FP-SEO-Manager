@@ -74,18 +74,34 @@ class MainMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 	 * @return void
 	 */
 	protected function boot_admin( Container $container ): void {
-		// Use parent implementation
-		parent::boot_admin( $container );
+		// CRITICAL: Wrap in try-catch to prevent fatal errors from breaking WordPress
+		try {
+			// Use parent implementation
+			parent::boot_admin( $container );
 
-		// Additional debug logging for main metabox
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			try {
-				$metabox = $container->get( Metabox::class );
-				Logger::debug( 'Metabox instance created', array( 'class' => get_class( $metabox ) ) );
-				Logger::debug( 'Metabox::register() called successfully' );
-			} catch ( \Throwable $e ) {
-				// Silent fail in debug mode
+			// Additional debug logging for main metabox
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				try {
+					$metabox = $container->get( Metabox::class );
+					Logger::debug( 'Metabox instance created', array( 'class' => get_class( $metabox ) ) );
+					Logger::debug( 'Metabox::register() called successfully' );
+				} catch ( \Throwable $e ) {
+					// Silent fail in debug mode
+					Logger::error( 'FP SEO: Error getting Metabox instance in MainMetaboxServiceProvider', array(
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+					) );
+				}
 			}
+		} catch ( \Throwable $e ) {
+			// Log error but don't break WordPress
+			Logger::error( 'FP SEO: Fatal error in MainMetaboxServiceProvider::boot_admin()', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+			) );
+			// Don't re-throw - allow WordPress to continue
 		}
 	}
 }

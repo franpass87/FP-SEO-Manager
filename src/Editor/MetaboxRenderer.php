@@ -138,117 +138,146 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
-		// DIAGNOSTIC: Show diagnostic info directly in metabox for homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
-			$correct_post = get_post( $page_on_front_id );
-			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
-			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
-			
-			global $wp_query;
-			$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
-			$global_post_id = $global_post instanceof WP_Post ? $global_post->ID : 0;
-			$global_post_status = $global_post instanceof WP_Post ? $global_post->post_status : 'none';
-			
-			$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
-			$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
-			$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-			$screen_id = $current_screen ? $current_screen->id : 'unknown';
-			
-			$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
-			$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
-			$icon = $is_wrong_post ? '🔍' : 'ℹ️';
-			
-			echo '<div class="notice ' . esc_attr( $notice_class ) . '" style="border-left-color: ' . esc_attr( $notice_color ) . '; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid ' . esc_attr( $notice_color ) . '; border-radius: 4px;">';
-			echo '<h3 style="margin: 0 0 8px 0; color: ' . esc_attr( $notice_color ) . ';">' . esc_html( $icon ) . ' FP SEO: Diagnostica Homepage</h3>';
-			if ( $is_wrong_post ) {
-				echo '<p style="margin: 0 0 8px 0; color: #dc2626;"><strong>⚠️ PROBLEMA RILEVATO:</strong> WordPress ha passato un post sbagliato!</p>';
-			} else {
-				echo '<p style="margin: 0 0 8px 0;"><strong>✓ Post corretto:</strong> WordPress ha passato la homepage corretta.</p>';
-			}
-			echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
-			echo '<li><strong>URL richiesto:</strong> <code>post=' . esc_html( $requested_post_id ) . '&action=edit</code></li>';
-			echo '<li><strong>Post ricevuto (parametro render):</strong> ID ' . esc_html( $post->ID ) . ' - Status: <code>' . esc_html( $post->post_status ) . '</code> - Type: <code>' . esc_html( $post->post_type ) . '</code></li>';
-			echo '<li><strong>Post globale ($GLOBALS[\'post\']):</strong> ID ' . esc_html( $global_post_id ) . ' - Status: <code>' . esc_html( $global_post_status ) . '</code></li>';
-			echo '<li><strong>Homepage corretta (dal DB):</strong> ID ' . esc_html( $page_on_front_id ) . ' - Status: <code>' . esc_html( $correct_status ) . '</code></li>';
-			echo '<li><strong>Corrispondenza:</strong> ' . ( ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>' ) . '</li>';
-			echo '<li><strong>Contesto:</strong> Screen: <code>' . esc_html( $screen_id ) . '</code> | AJAX: ' . ( $is_ajax ? 'Sì' : 'No' ) . ' | Autosave: ' . ( $is_autosave ? 'Sì' : 'No' ) . '</li>';
-			echo '</ul>';
-			if ( $is_wrong_post ) {
-				echo '<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">';
-				echo '<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID ' . esc_html( $post->ID ) . ') invece di caricare la homepage esistente (ID ' . esc_html( $page_on_front_id ) . ').<br>';
-				echo '<strong>Quando succede:</strong> Quando apri l\'editor della homepage, WordPress dovrebbe passarti il post ID ' . esc_html( $page_on_front_id ) . ', ma invece ti sta passando il post ID ' . esc_html( $post->ID ) . ' con status auto-draft.<br>';
-				if ( $global_post_id !== $post->ID ) {
-					echo '<strong>⚠️ DISCREPANZA:</strong> Il post globale (ID ' . esc_html( $global_post_id ) . ') è diverso dal post passato al metabox (ID ' . esc_html( $post->ID ) . '). Questo indica che qualcosa sta modificando il post durante il rendering.';
-				}
-				echo '</p>';
-			}
-			echo '</div>';
-			
-			// Check for auto-draft diagnosis info
-			$auto_draft_diagnosis = get_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id );
-			if ( $auto_draft_diagnosis && is_array( $auto_draft_diagnosis ) ) {
-				echo '<div class="notice notice-warning" style="border-left-color: #f59e0b; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid #f59e0b; border-radius: 4px;">';
-				echo '<h3 style="margin: 0 0 8px 0; color: #f59e0b;">🔍 Auto-draft Creato Recentemente</h3>';
-				echo '<p style="margin: 0 0 8px 0;"><strong>Un auto-draft è stato creato mentre stavi editando la homepage.</strong></p>';
-				echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
-				echo '<li><strong>Auto-draft ID:</strong> ' . esc_html( $auto_draft_diagnosis['auto_draft_id'] ?? 'unknown' ) . '</li>';
-				echo '<li><strong>Timestamp:</strong> ' . esc_html( date( 'Y-m-d H:i:s', $auto_draft_diagnosis['timestamp'] ?? 0 ) ) . '</li>';
-				if ( ! empty( $auto_draft_diagnosis['caller_trace'] ) ) {
-					echo '<li><strong>Chiamata da:</strong><br><code style="font-size: 11px; background: #f3f4f6; padding: 4px; border-radius: 2px;">';
-					echo esc_html( implode( '<br>', array_slice( $auto_draft_diagnosis['caller_trace'], 0, 5 ) ) );
-					echo '</code></li>';
-				}
-				echo '</ul>';
-				echo '</div>';
-			}
-			
-			if ( $is_wrong_post ) {
-				Logger::warning( 'MetaboxRenderer::render - WordPress passed wrong post when opening homepage editor', array(
-					'requested_post_id' => $requested_post_id,
-					'received_post_id' => $post->ID,
-					'received_post_status' => $post->post_status,
-					'global_post_id' => $global_post_id,
-					'global_post_status' => $global_post_status,
-					'correct_homepage_id' => $page_on_front_id,
-					'correct_homepage_status' => $correct_status,
-					'is_ajax' => $is_ajax,
-					'is_autosave' => $is_autosave,
-					'screen_id' => $screen_id,
-				) );
-			}
+		// CRITICAL: Validate $post before proceeding
+		if ( ! $post instanceof WP_Post ) {
+			Logger::error( 'FP SEO: Invalid post object passed to MetaboxRenderer::render()', array(
+				'post_type' => gettype( $post ),
+				'post_value' => is_object( $post ) ? get_class( $post ) : (string) $post,
+			) );
+			echo '<div class="notice notice-error"><p><strong>Errore: Oggetto post non valido.</strong></p></div>';
+			return;
 		}
 		
-		// Verifica che tutte le dipendenze siano caricate prima di iniziare
-		$required_classes = array(
-			'FP\\SEO\\Utils\\Logger',
-			'FP\\SEO\\Utils\\Options',
-		);
-
-		foreach ( $required_classes as $class_name ) {
-			if ( ! class_exists( $class_name, false ) ) {
-				Logger::error( 'FP SEO: Required class not loaded in MetaboxRenderer::render()', array(
-					'class' => $class_name,
+		// DIAGNOSTIC: Show diagnostic info directly in metabox for homepage
+		// TEMPORARILY DISABLED to test if it's causing the critical error
+		/*
+		// Wrapped in try-catch to prevent breaking the metabox if diagnostics fail
+		try {
+			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+			if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
+				// CRITICAL: Avoid calling get_post() during initial metabox rendering to prevent auto-draft creation
+				// Use post_status from the post object we already have
+				$correct_status = ( $post->ID === $page_on_front_id ) ? $post->post_status : 'unknown';
+				$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
+				
+				global $wp_query;
+				$global_post = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+				$global_post_id = $global_post instanceof WP_Post ? $global_post->ID : 0;
+				$global_post_status = $global_post instanceof WP_Post ? $global_post->post_status : 'none';
+				
+				$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
+				$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
+				$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+				$screen_id = $current_screen ? $current_screen->id : 'unknown';
+				
+				$notice_class = $is_wrong_post ? 'notice-error' : 'notice-info';
+				$notice_color = $is_wrong_post ? '#dc2626' : '#3b82f6';
+				$icon = $is_wrong_post ? '🔍' : 'ℹ️';
+				
+				echo '<div class="notice ' . esc_attr( $notice_class ) . '" style="border-left-color: ' . esc_attr( $notice_color ) . '; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid ' . esc_attr( $notice_color ) . '; border-radius: 4px;">';
+				echo '<h3 style="margin: 0 0 8px 0; color: ' . esc_attr( $notice_color ) . ';">' . esc_html( $icon ) . ' FP SEO: Diagnostica Homepage</h3>';
+				if ( $is_wrong_post ) {
+					echo '<p style="margin: 0 0 8px 0; color: #dc2626;"><strong>⚠️ PROBLEMA RILEVATO:</strong> WordPress ha passato un post sbagliato!</p>';
+				} else {
+					echo '<p style="margin: 0 0 8px 0;"><strong>✓ Post corretto:</strong> WordPress ha passato la homepage corretta.</p>';
+				}
+				echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
+				echo '<li><strong>URL richiesto:</strong> <code>post=' . esc_html( $requested_post_id ) . '&action=edit</code></li>';
+				echo '<li><strong>Post ricevuto (parametro render):</strong> ID ' . esc_html( $post->ID ) . ' - Status: <code>' . esc_html( $post->post_status ) . '</code> - Type: <code>' . esc_html( $post->post_type ) . '</code></li>';
+				echo '<li><strong>Post globale ($GLOBALS[\'post\']):</strong> ID ' . esc_html( $global_post_id ) . ' - Status: <code>' . esc_html( $global_post_status ) . '</code></li>';
+				echo '<li><strong>Homepage corretta (dal DB):</strong> ID ' . esc_html( $page_on_front_id ) . ' - Status: <code>' . esc_html( $correct_status ) . '</code></li>';
+				echo '<li><strong>Corrispondenza:</strong> ' . ( ( $post->ID === $page_on_front_id && $post->post_status !== 'auto-draft' ) ? '<span style="color: #10b981;">✓ Corretto</span>' : '<span style="color: #dc2626;">✗ ERRORE</span>' ) . '</li>';
+				echo '<li><strong>Contesto:</strong> Screen: <code>' . esc_html( $screen_id ) . '</code> | AJAX: ' . ( $is_ajax ? 'Sì' : 'No' ) . ' | Autosave: ' . ( $is_autosave ? 'Sì' : 'No' ) . '</li>';
+				echo '</ul>';
+				if ( $is_wrong_post ) {
+					echo '<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; padding: 8px; background: #fef2f2; border-radius: 4px;">';
+					echo '<strong>Causa possibile:</strong> Qualche plugin/tema sta creando un nuovo auto-draft (ID ' . esc_html( $post->ID ) . ') invece di caricare la homepage esistente (ID ' . esc_html( $page_on_front_id ) . ').<br>';
+					echo '<strong>Quando succede:</strong> Quando apri l\'editor della homepage, WordPress dovrebbe passarti il post ID ' . esc_html( $page_on_front_id ) . ', ma invece ti sta passando il post ID ' . esc_html( $post->ID ) . ' con status auto-draft.<br>';
+					if ( $global_post_id !== $post->ID ) {
+						echo '<strong>⚠️ DISCREPANZA:</strong> Il post globale (ID ' . esc_html( $global_post_id ) . ') è diverso dal post passato al metabox (ID ' . esc_html( $post->ID ) . '). Questo indica che qualcosa sta modificando il post durante il rendering.';
+					}
+					echo '</p>';
+				}
+				echo '</div>';
+				
+				// Check for auto-draft diagnosis info
+				$auto_draft_diagnosis = get_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id );
+				if ( $auto_draft_diagnosis && is_array( $auto_draft_diagnosis ) ) {
+					echo '<div class="notice notice-warning" style="border-left-color: #f59e0b; padding: 12px; margin: 0 0 20px 0; background: #fff; border: 1px solid #f59e0b; border-radius: 4px;">';
+					echo '<h3 style="margin: 0 0 8px 0; color: #f59e0b;">🔍 Auto-draft Creato Recentemente</h3>';
+					echo '<p style="margin: 0 0 8px 0;"><strong>Un auto-draft è stato creato mentre stavi editando la homepage.</strong></p>';
+					echo '<ul style="margin: 8px 0; padding-left: 20px; font-size: 13px;">';
+					echo '<li><strong>Auto-draft ID:</strong> ' . esc_html( $auto_draft_diagnosis['auto_draft_id'] ?? 'unknown' ) . '</li>';
+					echo '<li><strong>Timestamp:</strong> ' . esc_html( date( 'Y-m-d H:i:s', $auto_draft_diagnosis['timestamp'] ?? 0 ) ) . '</li>';
+					if ( ! empty( $auto_draft_diagnosis['caller_trace'] ) ) {
+						echo '<li><strong>Chiamata da:</strong><br><code style="font-size: 11px; background: #f3f4f6; padding: 4px; border-radius: 2px;">';
+						echo esc_html( implode( '<br>', array_slice( $auto_draft_diagnosis['caller_trace'], 0, 5 ) ) );
+						echo '</code></li>';
+					}
+					echo '</ul>';
+					echo '</div>';
+				}
+				
+				if ( $is_wrong_post ) {
+					Logger::warning( 'MetaboxRenderer::render - WordPress passed wrong post when opening homepage editor', array(
+						'requested_post_id' => $requested_post_id,
+						'received_post_id' => $post->ID,
+						'received_post_status' => $post->post_status,
+						'global_post_id' => $global_post_id,
+						'global_post_status' => $global_post_status,
+						'correct_homepage_id' => $page_on_front_id,
+						'correct_homepage_status' => $correct_status,
+						'is_ajax' => $is_ajax,
+						'is_autosave' => $is_autosave,
+						'screen_id' => $screen_id,
+					) );
+				}
+			}
+		} catch ( \Throwable $e ) {
+			// Silently fail diagnostics to prevent breaking the metabox
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::error( 'FP SEO: Error in homepage diagnostics in MetaboxRenderer', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
 				) );
-				echo '<div class="notice notice-error"><p><strong>Errore: Classe ' . esc_html( $class_name ) . ' non caricata.</strong></p></div>';
-				return;
 			}
 		}
+		*/
+		
+		// Wrap entire render method in try-catch to prevent fatal errors
+		try {
+			
+			// Verifica che tutte le dipendenze siano caricate prima di iniziare
+			$required_classes = array(
+				'FP\\SEO\\Utils\\Logger',
+				'FP\\SEO\\Utils\\Options',
+			);
 
-		// Log inizio rendering in debug mode
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'FP SEO: MetaboxRenderer::render() called', array(
+			foreach ( $required_classes as $class_name ) {
+				if ( ! class_exists( $class_name, false ) ) {
+					Logger::error( 'FP SEO: Required class not loaded in MetaboxRenderer::render()', array(
+						'class' => $class_name,
+					) );
+					echo '<div class="notice notice-error"><p><strong>Errore: Classe ' . esc_html( $class_name ) . ' non caricata.</strong></p></div>';
+					return;
+				}
+			}
+
+			// Log inizio rendering in debug mode
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'FP SEO: MetaboxRenderer::render() called', array(
 				'post_id' => isset( $post->ID ) ? $post->ID : 0,
 				'post_type' => isset( $post->post_type ) ? $post->post_type : 'unknown',
 				'excluded' => $excluded,
-				'analysis_count' => count( $analysis ),
-				'check_help_text_class' => get_class( $this->check_help_text ),
-			) );
-		}
-		
-		// Ensure we have a valid post ID
-		if ( empty( $post->ID ) || $post->ID <= 0 ) {
+				'analysis_count' => is_array( $analysis ) ? count( $analysis ) : 0,
+				'analysis_type' => gettype( $analysis ),
+				'check_help_text_class' => isset( $this->check_help_text ) ? get_class( $this->check_help_text ) : 'not set',
+				) );
+			}
+			
+			// Ensure we have a valid post ID
+			if ( empty( $post->ID ) || $post->ID <= 0 ) {
 			// Try to get post ID from request
 			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
 			if ( $post_id > 0 ) {
@@ -269,14 +298,14 @@ class MetaboxRenderer {
 					) );
 				}
 			}
-		}
-		
-		// DISABLED: Cache clearing was interfering with WordPress's post object
+			}
+			
+			// DISABLED: Cache clearing was interfering with WordPress's post object
 		// WordPress manages its own cache, we should not clear it during rendering
 		// This was causing WordPress to load the wrong post (auto-draft instead of homepage)
 		
-		// Log per debug - verifica diretta dal database (solo in debug mode)
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// Log per debug - verifica diretta dal database (solo in debug mode)
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			global $wpdb;
 			$db_title = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_title' ) );
 			$db_desc = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $post->ID, '_fp_seo_meta_description' ) );
@@ -299,22 +328,22 @@ class MetaboxRenderer {
 					'keyword' => $focus_keyword_debug ?: 'empty',
 				),
 			) );
-		}
-		
-		// Add hidden field to ensure metabox is always recognized in POST
-		// This helps WordPress identify that our metabox fields should be processed
-		echo '<input type="hidden" name="fp_seo_performance_metabox_present" value="1" />';
-		
-		// Validate inputs
-		if ( ! $post instanceof WP_Post ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && class_exists( '\FP\SEO\Utils\Logger' ) ) {
-				Logger::error( 'FP SEO: Invalid post object in render', array( 'post' => gettype( $post ) ) );
 			}
-			return;
-		}
-		
-		// Ensure check_help_text is initialized (doppio controllo di sicurezza)
-		if ( ! isset( $this->check_help_text ) || ! is_object( $this->check_help_text ) ) {
+			
+			// Add hidden field to ensure metabox is always recognized in POST
+			// This helps WordPress identify that our metabox fields should be processed
+			echo '<input type="hidden" name="fp_seo_performance_metabox_present" value="1" />';
+			
+			// Validate inputs
+			if ( ! $post instanceof WP_Post ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && class_exists( '\FP\SEO\Utils\Logger' ) ) {
+					Logger::error( 'FP SEO: Invalid post object in render', array( 'post' => gettype( $post ) ) );
+				}
+				return;
+			}
+			
+			// Ensure check_help_text is initialized (doppio controllo di sicurezza)
+			if ( ! isset( $this->check_help_text ) || ! is_object( $this->check_help_text ) ) {
 			// Try to initialize it
 			try {
 				if ( class_exists( 'FP\SEO\Editor\CheckHelpText' ) ) {
@@ -368,23 +397,39 @@ class MetaboxRenderer {
 					return '';
 				}
 			};
-		}
-		
-		$score_value  = isset( $analysis['score']['score'] ) ? (int) $analysis['score']['score'] : 0;
-		$score_status = isset( $analysis['score']['status'] ) ? (string) $analysis['score']['status'] : 'pending';
-		$checks       = $analysis['checks'] ?? array();
-		
-		// Debug: log checks received in renderer
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'MetaboxRenderer::render - checks received', array(
-				'post_id' => $post->ID,
-				'checks_count' => count( $checks ),
-				'first_check' => ! empty( $checks ) ? reset( $checks ) : null,
-			) );
-		}
+			}
+			
+			// Ensure $analysis is an array before accessing its keys
+			if ( ! is_array( $analysis ) ) {
+				Logger::error( 'FP SEO: Invalid analysis parameter in MetaboxRenderer::render()', array(
+					'analysis_type' => gettype( $analysis ),
+					'post_id' => isset( $post->ID ) ? $post->ID : 0,
+				) );
+				$analysis = array(); // Default to empty array
+			}
+			
+			$score_value  = isset( $analysis['score']['score'] ) ? (int) $analysis['score']['score'] : 0;
+			$score_status = isset( $analysis['score']['status'] ) ? (string) $analysis['score']['status'] : 'pending';
+			$checks       = $analysis['checks'] ?? array();
+			
+			// Debug: log checks received in renderer
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'MetaboxRenderer::render - checks received', array(
+					'post_id' => ( $post instanceof WP_Post ) ? $post->ID : 0,
+					'post_type' => gettype( $post ),
+					'checks_count' => is_array( $checks ) ? count( $checks ) : 0,
+					'first_check' => ! empty( $checks ) && is_array( $checks ) ? reset( $checks ) : null,
+				) );
+			}
 
-		// Avvolgi tutto il rendering in un try/catch per catturare errori specifici
-		?>
+			// Avvolgi tutto il rendering in un try/catch per catturare errori specifici
+			// CRITICAL: Log that we're about to render
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'MetaboxRenderer::render - About to output HTML', array(
+					'post_id' => ( $post instanceof WP_Post ) ? $post->ID : 0,
+				) );
+			}
+			?>
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
 			<?php
 			try {
@@ -464,6 +509,26 @@ class MetaboxRenderer {
 			?>
 		</div>
 		<?php
+		} catch ( \Throwable $e ) {
+			// Catch any fatal errors in the render method to prevent breaking the metabox
+			Logger::error( 'FP SEO: Fatal error in MetaboxRenderer::render()', array(
+				'error' => $e->getMessage(),
+				'trace' => $e->getTraceAsString(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'post_id' => isset( $post->ID ) ? $post->ID : 0,
+			) );
+			
+			// Show error message to user
+			echo '<div class="notice notice-error" style="display: block !important; padding: 15px; margin: 10px 0;">';
+			echo '<p><strong>' . esc_html__( 'Errore critico nel rendering del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'Impossibile caricare il metabox completo. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
+				echo '<p><small><strong>File:</strong> ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
+			}
+			echo '</div>';
+		}
 	}
 
 	/**
@@ -2959,21 +3024,33 @@ class MetaboxRenderer {
 	 */
 	public function render_images_section_content( WP_Post $post, array $images = array() ): void {
 		// Use new isolated ImageExtractor (ONLY way to extract images - completely safe)
+		// CRITICAL: Only extract images via AJAX, never during initial rendering
+		// This prevents interference with WordPress post loading
 		if ( empty( $images ) ) {
-			try {
-				$extractor = new ImageExtractor();
-				$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
-				$images = $extractor->extract( $post, $force_refresh );
-				
-				Logger::info( 'FP SEO: render_images_section_content - Images extracted via ImageExtractor', array(
-					'post_id' => $post->ID,
-					'image_count' => count( $images ),
-					'force_refresh' => $force_refresh,
-				) );
-			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Error extracting images using ImageExtractor', array(
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
+			// Only extract if we're in AJAX context
+			// During initial metabox rendering, images are loaded lazily via AJAX
+			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+				try {
+					$extractor = new ImageExtractor();
+					$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
+					$images = $extractor->extract( $post, $force_refresh );
+					
+					Logger::info( 'FP SEO: render_images_section_content - Images extracted via ImageExtractor (AJAX)', array(
+						'post_id' => $post->ID,
+						'image_count' => count( $images ),
+						'force_refresh' => $force_refresh,
+					) );
+				} catch ( \Throwable $e ) {
+					Logger::error( 'FP SEO: Error extracting images using ImageExtractor', array(
+						'error' => $e->getMessage(),
+						'trace' => $e->getTraceAsString(),
+						'post_id' => $post->ID,
+					) );
+					$images = array();
+				}
+			} else {
+				// During initial rendering, return empty array - images will be loaded via AJAX
+				Logger::debug( 'FP SEO: render_images_section_content - Skipping extraction during initial render (will load via AJAX)', array(
 					'post_id' => $post->ID,
 				) );
 				$images = array();
