@@ -331,6 +331,23 @@ class Metabox {
 			add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
 		}
 		
+		// CRITICAL FIX: Force WordPress to load correct homepage when opening editor
+		// This intercepts the post loading before WordPress displays it in the editor
+		if ( ! has_action( 'admin_init', array( $this, 'force_correct_homepage_in_editor' ) ) ) {
+			add_action( 'admin_init', array( $this, 'force_correct_homepage_in_editor' ), 1 );
+		}
+		
+		// Also hook into current_screen to fix post after WordPress loads it
+		if ( ! has_action( 'current_screen', array( $this, 'force_correct_homepage_on_screen' ) ) ) {
+			add_action( 'current_screen', array( $this, 'force_correct_homepage_on_screen' ), 999 );
+		}
+		
+		// CRITICAL: Filter get_post to always return homepage when editing homepage
+		// This intercepts ALL calls to get_post() and ensures we get the correct post
+		if ( ! has_filter( 'get_post', array( $this, 'filter_get_post_for_homepage' ) ) ) {
+			add_filter( 'get_post', array( $this, 'filter_get_post_for_homepage' ), 10, 2 );
+		}
+		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::debug( 'Metabox hooks registered in register_hooks()', array(
@@ -2911,6 +2928,190 @@ class Metabox {
 				'deleted' => $post_id !== $page_on_front_id,
 			), 300 ); // 5 minutes
 		}
+	}
+
+	/**
+	 * Force correct homepage in editor - intercepts post loading before WordPress displays it.
+	 * Hook: admin_init (priority 1)
+	 * 
+	 * This ensures that when editing the homepage, WordPress always loads the correct post,
+	 * not an auto-draft or wrong post.
+	 */
+	public function force_correct_homepage_in_editor(): void {
+		// Only run on post editor pages
+		$screen = get_current_screen();
+		if ( ! $screen || $screen->base !== 'post' ) {
+			return;
+		}
+		
+		// Check if we're editing the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $requested_post_id !== $page_on_front_id ) {
+			return;
+		}
+		
+		// Force WordPress to load the correct homepage
+		global $post, $post_type, $post_type_object;
+		
+		// Get the correct homepage
+		$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
+		if ( ! $correct_post instanceof WP_Post ) {
+			return;
+		}
+		
+		// If the global post is wrong or is an auto-draft, fix it
+		if ( ! $post || $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
+			$post = $correct_post;
+			$post_type = $correct_post->post_type;
+			$post_type_object = get_post_type_object( $post_type );
+			
+			// Also fix GLOBALS
+			$GLOBALS['post'] = $correct_post;
+			$GLOBALS['post_type'] = $post_type;
+			$GLOBALS['post_type_object'] = $post_type_object;
+			
+			Logger::info( 'Metabox::force_correct_homepage_in_editor - Forced correct homepage in editor', array(
+				'requested_post_id' => $requested_post_id,
+				'homepage_id' => $page_on_front_id,
+				'corrected_post_id' => $correct_post->ID,
+				'corrected_post_status' => $correct_post->post_status,
+			) );
+		}
+		
+		// Also delete any auto-drafts that might have been created
+		global $wpdb;
+		$auto_drafts = $wpdb->get_col( $wpdb->prepare(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND post_status = 'auto-draft' AND post_author = %d AND ID != %d ORDER BY ID DESC LIMIT 10",
+			get_current_user_id(),
+			$page_on_front_id
+		) );
+		
+		foreach ( $auto_drafts as $auto_draft_id ) {
+			wp_delete_post( (int) $auto_draft_id, true );
+			Logger::debug( 'Metabox::force_correct_homepage_in_editor - Deleted auto-draft', array(
+				'auto_draft_id' => $auto_draft_id,
+			) );
+		}
+	}
+
+	/**
+	 * Force correct homepage on screen load - runs after WordPress loads the post.
+	 * Hook: current_screen (priority 999)
+	 * 
+	 * This ensures the post is correct even after WordPress has loaded it.
+	 *
+	 * @param WP_Screen $screen Current screen object.
+	 */
+	public function force_correct_homepage_on_screen( $screen ): void {
+		// Only run on post editor pages
+		if ( ! $screen || $screen->base !== 'post' ) {
+			return;
+		}
+		
+		// Check if we're editing the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return;
+		}
+		
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $requested_post_id !== $page_on_front_id ) {
+			return;
+		}
+		
+		// Force WordPress to load the correct homepage
+		global $post, $post_type, $post_type_object;
+		
+		// Get the correct homepage
+		$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
+		if ( ! $correct_post instanceof WP_Post ) {
+			return;
+		}
+		
+		// If the global post is wrong or is an auto-draft, fix it
+		if ( ! $post || $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
+			$post = $correct_post;
+			$post_type = $correct_post->post_type;
+			$post_type_object = get_post_type_object( $post_type );
+			
+			// Also fix GLOBALS
+			$GLOBALS['post'] = $correct_post;
+			$GLOBALS['post_type'] = $post_type;
+			$GLOBALS['post_type_object'] = $post_type_object;
+			
+			Logger::info( 'Metabox::force_correct_homepage_on_screen - Forced correct homepage on screen load', array(
+				'requested_post_id' => $requested_post_id,
+				'homepage_id' => $page_on_front_id,
+				'corrected_post_id' => $correct_post->ID,
+				'corrected_post_status' => $correct_post->post_status,
+			) );
+		}
+	}
+
+	/**
+	 * Filter get_post to always return homepage when editing homepage.
+	 * Hook: get_post (priority 10)
+	 * 
+	 * This intercepts ALL calls to get_post() and ensures we get the correct homepage,
+	 * not an auto-draft or wrong post.
+	 *
+	 * @param WP_Post|null $post    The post object or null if not found.
+	 * @param int|WP_Post   $post_id Post ID or post object.
+	 * @return WP_Post|null Modified post object.
+	 */
+	public function filter_get_post_for_homepage( $post, $post_id ): ?WP_Post {
+		// Only run in admin when editing
+		if ( ! is_admin() || ! isset( $_GET['post'] ) || ! isset( $_GET['action'] ) || $_GET['action'] !== 'edit' ) {
+			return $post;
+		}
+		
+		// Check if we're editing the homepage
+		$page_on_front_id = (int) get_option( 'page_on_front' );
+		if ( $page_on_front_id === 0 ) {
+			return $post;
+		}
+		
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		if ( $requested_post_id !== $page_on_front_id ) {
+			return $post;
+		}
+		
+		// Get the post ID from the parameter
+		$check_post_id = $post_id instanceof WP_Post ? $post_id->ID : (int) $post_id;
+		
+		// If WordPress is trying to load an auto-draft or wrong post, return homepage instead
+		if ( $post instanceof WP_Post ) {
+			// If the loaded post is an auto-draft page, return homepage instead
+			if ( $post->post_status === 'auto-draft' && $post->post_type === 'page' && $check_post_id !== $page_on_front_id ) {
+				$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
+				if ( $correct_post instanceof WP_Post ) {
+					Logger::info( 'Metabox::filter_get_post_for_homepage - Replaced auto-draft with homepage', array(
+						'auto_draft_id' => $post->ID,
+						'homepage_id' => $page_on_front_id,
+					) );
+					return $correct_post;
+				}
+			}
+			
+			// If WordPress is trying to load a different post when we requested homepage, return homepage
+			if ( $check_post_id === $page_on_front_id && $post->ID !== $page_on_front_id ) {
+				$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
+				if ( $correct_post instanceof WP_Post ) {
+					Logger::info( 'Metabox::filter_get_post_for_homepage - Replaced wrong post with homepage', array(
+						'wrong_post_id' => $post->ID,
+						'homepage_id' => $page_on_front_id,
+					) );
+					return $correct_post;
+				}
+			}
+		}
+		
+		return $post;
 	}
 
 	/**
