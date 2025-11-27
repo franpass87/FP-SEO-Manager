@@ -273,15 +273,18 @@ class Metabox {
 		
 		foreach ( $supported_types as $post_type ) {
 			// Register post-type-specific hooks to avoid calling hooks for unsupported types
+			// Using only save_post hook to avoid interference with WordPress core saving
+			// Multiple hooks (edit_post, wp_insert_post) were being called even when just opening editor
 			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
 				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
 			}
-			if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
-				add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
-			}
-			if ( ! has_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ) ) ) {
-				add_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10, 3 );
-			}
+			// DISABLED: These hooks were causing auto-draft creation when opening editor
+			// if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
+			// 	add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
+			// }
+			// if ( ! has_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ) ) ) {
+			// 	add_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10, 3 );
+			// }
 		}
 		
 		// DISABLED: Generic hooks removed to prevent ANY interference with unsupported post types
@@ -1981,15 +1984,31 @@ class Metabox {
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
 		// CRITICAL: Skip if this is just opening the editor (not actually saving)
 		// WordPress creates auto-draft when opening editor - we should not interfere
-		if ( ! isset( $_POST['save'] ) && ! isset( $_POST['publish'] ) && ! isset( $_POST['update'] ) ) {
-			// This is likely just opening the editor, not saving
-			// Only process if there are actual SEO fields being submitted
-			$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
-							  isset( $_POST['fp_seo_title_sent'] ) || 
-							  isset( $_POST['fp_seo_meta_description_sent'] );
-			if ( ! $has_seo_fields ) {
-				return; // Not a save operation, just opening editor
+		// Check multiple conditions to ensure we only process actual saves
+		$is_actual_save = isset( $_POST['save'] ) || 
+						  isset( $_POST['publish'] ) || 
+						  isset( $_POST['update'] ) ||
+						  ( isset( $_POST['action'] ) && $_POST['action'] === 'editpost' );
+		
+		// Also check if there are actual SEO fields being submitted
+		$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
+						  isset( $_POST['fp_seo_title_sent'] ) || 
+						  isset( $_POST['fp_seo_meta_description_sent'] ) ||
+						  isset( $_POST['fp_seo_title'] ) ||
+						  isset( $_POST['fp_seo_meta_description'] );
+		
+		// Only process if it's an actual save AND has SEO fields
+		// This prevents processing when WordPress is just creating auto-draft
+		if ( ! $is_actual_save || ! $has_seo_fields ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'Metabox::save_meta skipped - not an actual save operation', array(
+					'post_id' => $post_id,
+					'is_actual_save' => $is_actual_save,
+					'has_seo_fields' => $has_seo_fields,
+					'update' => $update,
+				) );
 			}
+			return; // Not a save operation, just opening editor or auto-draft creation
 		}
 		
 		// CRITICAL: Check post type FIRST, before any static tracking
