@@ -1732,14 +1732,44 @@ class Metabox {
 			return;
 		}
 		
+		// CRITICAL FIX: Check if WordPress passed wrong post (e.g., nectar_slider instead of homepage)
+		// This happens when Nectar Slider or other plugins modify the global $post
+		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
+		$post_was_corrected = false;
+		if ( $requested_post_id > 0 && $post->ID !== $requested_post_id ) {
+			// WordPress passed wrong post - get the correct one from URL
+			$correct_post = get_post( $requested_post_id );
+			if ( $correct_post instanceof WP_Post ) {
+				Logger::warning( 'Metabox::render - WordPress passed wrong post, correcting', array(
+					'requested_post_id' => $requested_post_id,
+					'wrong_post_id' => $post->ID,
+					'wrong_post_type' => $post->post_type,
+					'correct_post_id' => $correct_post->ID,
+					'correct_post_type' => $correct_post->post_type,
+				) );
+				$post = $correct_post;
+				$post_was_corrected = true;
+				// Also fix global post to prevent other issues
+				global $wp_query;
+				$GLOBALS['post'] = $correct_post;
+				if ( isset( $wp_query ) ) {
+					$wp_query->post = $correct_post;
+				}
+			}
+		}
+		
 		// DIAGNOSTIC: Always show diagnostic info when editing homepage
 		$page_on_front_id = (int) get_option( 'page_on_front' );
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
 		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
 			// We're trying to edit the homepage - show diagnostic info
 			$correct_post = get_post( $page_on_front_id );
 			$correct_status = $correct_post instanceof WP_Post ? $correct_post->post_status : 'unknown';
 			$is_wrong_post = $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft';
+			
+			// If we corrected the post, show success message
+			if ( $post_was_corrected && $post->ID === $page_on_front_id ) {
+				$is_wrong_post = false; // Post is now correct
+			}
 			
 			// Get global post for comparison
 			global $wp_query, $pagenow;
