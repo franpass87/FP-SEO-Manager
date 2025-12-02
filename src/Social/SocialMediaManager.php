@@ -269,11 +269,7 @@ class SocialMediaManager {
 			return $social_image;
 		}
 
-		// Check for featured image
-		$featured_image = get_the_post_thumbnail_url( get_the_ID(), 'full' );
-		if ( $featured_image ) {
-			return $featured_image;
-		}
+		// Featured image check removed - no longer using featured images
 
 		// Check for default social image
 		$default_image = get_option( 'fp_seo_social_default_image' );
@@ -602,7 +598,7 @@ class SocialMediaManager {
 			});
 
 			$('#fp-seo-og-image').on('input', function() {
-				$('#fp-seo-og-image-preview').attr('src', $(this).val() || '<?php echo esc_js( get_the_post_thumbnail_url( get_the_ID(), 'full' ) ?: '' ); ?>');
+				$('#fp-seo-og-image-preview').attr('src', $(this).val() || '');
 			});
 
 			// Twitter
@@ -617,7 +613,7 @@ class SocialMediaManager {
 			});
 
 			$('#fp-seo-twitter-image').on('input', function() {
-				$('#fp-seo-twitter-image-preview').attr('src', $(this).val() || '<?php echo esc_js( get_the_post_thumbnail_url( get_the_ID(), 'full' ) ?: '' ); ?>');
+				$('#fp-seo-twitter-image-preview').attr('src', $(this).val() || '');
 			});
 
 			// LinkedIn
@@ -683,7 +679,7 @@ class SocialMediaManager {
 			'title' => get_the_title( $post->ID ),
 			'description' => get_the_excerpt( $post->ID ) ?: wp_trim_words( $post->post_content, 20 ),
 			'url' => get_permalink( $post->ID ),
-			'image' => get_the_post_thumbnail_url( $post->ID, 'full' ) ?: get_option( 'fp_seo_social_default_image' ),
+			'image' => get_option( 'fp_seo_social_default_image' ), // Featured image fallback removed
 		);
 	}
 

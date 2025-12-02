@@ -344,6 +344,7 @@
 	
 	function registerSubmitHandler($) {
 		// Use document ready to ensure DOM is loaded
+		// IMPORTANT: Register early to ensure our handler runs before other plugins (like Salient)
 		$(document).ready(function() {
 			var $titleField = $('#fp-seo-title');
 			var $descField = $('#fp-seo-meta-description');
@@ -460,6 +461,7 @@
 			
 			// Ensure fields are always present in the form, even if empty
 			// This is critical for WordPress to include them in POST
+			// IMPORTANT: This function ONLY modifies our own SEO fields, never touches other metabox fields
 			function ensureFieldsInForm() {
 				// ALWAYS get fresh values from visible fields
 				var titleValue = $titleField.length ? ($titleField.val() || '') : '';
@@ -472,8 +474,13 @@
 				var secondaryKeywordsValue = $secondaryKeywordsField.length ? ($secondaryKeywordsField.val() || '') : '';
 				
 				// Remove any existing hidden duplicates (keep only the original visible fields)
-				$form.find('input[name="fp_seo_title"][type="hidden"]').not($titleField).remove();
-				$form.find('input[name="fp_seo_meta_description"][type="hidden"]').not($descField).remove();
+				// CRITICAL: Only remove fields with our specific names and IDs to avoid interfering with other metaboxes
+				$form.find('input[name="fp_seo_title"][type="hidden"]').filter(function() {
+					return $(this).attr('id') !== 'fp-seo-title-hidden-backup' && !$(this).is($titleField);
+				}).remove();
+				$form.find('input[name="fp_seo_meta_description"][type="hidden"]').filter(function() {
+					return $(this).attr('id') !== 'fp-seo-meta-description-hidden-backup' && !$(this).is($descField);
+				}).remove();
 				
 				// Always ensure the visible fields have their values set
 				// This is important because WordPress reads from the visible fields
@@ -605,11 +612,24 @@
 			
 			// Intercept form submit early to ensure fields are present
 			// Use capture phase to run before any other handlers
+			// IMPORTANT: Use 'submit' event with early binding to ensure we run before Salient handlers
+			// We use jQuery's event system which respects the order of registration
 			$form.on('submit', function(e) {
 				console.log('FP SEO: Form submit intercepted - ensuring all fields are present');
 				
-				// Run synchronously before form submits
+				// CRITICAL: Always ensure fields are present, even if metabox wasn't interacted with
+				// This prevents SEO fields from being lost when saving from other metaboxes
+				// IMPORTANT: We only modify our own fields, never touch other metabox fields
 				ensureFieldsInForm();
+				
+				// Also ensure metabox present flag is set
+				if (!$form.find('input[name="fp_seo_performance_metabox_present"]').length) {
+					$form.append($('<input>', {
+						type: 'hidden',
+						name: 'fp_seo_performance_metabox_present',
+						value: '1'
+					}));
+				}
 				
 				// RIMOSSO: Salvataggio AJAX sincrono - async: false è deprecato e causa errori
 				// Gli hook WordPress con multiple priorità dovrebbero essere sufficienti

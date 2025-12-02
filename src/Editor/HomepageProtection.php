@@ -11,10 +11,10 @@ declare(strict_types=1);
 
 namespace FP\SEO\Editor;
 
+use FP\SEO\Editor\Helpers\HomepageHelper;
 use FP\SEO\Utils\Logger;
 use WP_Post;
 use function clean_post_cache;
-use function get_option;
 use function get_post;
 use function get_post_status;
 use function update_post_meta;
@@ -89,10 +89,9 @@ class HomepageProtection {
 			}
 
 			$requested_post_id = (int) $_GET['post'];
-			$page_on_front_id = (int) get_option( 'page_on_front' );
 
 			// Only if we're editing the homepage
-			if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
+			if ( ! HomepageHelper::is_homepage( $requested_post_id ) ) {
 				return;
 			}
 
@@ -146,10 +145,9 @@ class HomepageProtection {
 			}
 
 			$requested_post_id = (int) $_GET['post'];
-			$page_on_front_id = (int) get_option( 'page_on_front' );
 
 			// Only if we're editing the homepage
-			if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
+			if ( ! HomepageHelper::is_homepage( $requested_post_id ) ) {
 				return;
 			}
 
@@ -203,7 +201,7 @@ class HomepageProtection {
 			}
 
 			$requested_post_id = (int) $_GET['post'];
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 
 			if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
 				return;
@@ -252,7 +250,7 @@ class HomepageProtection {
 				return $post;
 			}
 
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 			if ( $page_on_front_id === 0 ) {
 				return $post;
 			}
@@ -315,7 +313,7 @@ class HomepageProtection {
 			}
 
 			$requested_post_id = (int) $_GET['post'];
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 
 			if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
 				return;
@@ -369,7 +367,7 @@ class HomepageProtection {
 	 */
 	public function correct_homepage_post( WP_Post $post ): WP_Post {
 		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$page_on_front_id = HomepageHelper::get_homepage_id();
 
 		if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
 			return $post;
@@ -408,7 +406,7 @@ class HomepageProtection {
 	 * @param int $post_id Post ID.
 	 */
 	public function ensure_homepage_status( int $post_id ): void {
-		$page_on_front_id = (int) get_option( 'page_on_front' );
+		$page_on_front_id = HomepageHelper::get_homepage_id();
 		if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
 			return;
 		}
@@ -450,7 +448,7 @@ class HomepageProtection {
 		// CRITICAL: Wrap in try-catch to prevent fatal errors
 		try {
 			// Only check if this is the homepage
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 			if ( $page_on_front_id === 0 ) {
 				return $data; // Not using static homepage
 			}
@@ -521,7 +519,7 @@ class HomepageProtection {
 			}
 
 			$requested_post_id = (int) $_GET['post'];
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 
 			if ( $page_on_front_id === 0 || $requested_post_id !== $page_on_front_id ) {
 				return;
@@ -571,10 +569,10 @@ class HomepageProtection {
 	 * Delete auto-drafts created by current user.
 	 */
 	private function delete_user_auto_drafts(): void {
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
+		if ( ! HomepageHelper::is_homepage_configured() ) {
 			return;
 		}
+		$page_on_front_id = HomepageHelper::get_homepage_id();
 
 		$user_id = get_current_user_id();
 		if ( $user_id === 0 ) {
@@ -632,7 +630,7 @@ class HomepageProtection {
 				return $title;
 			}
 
-			$page_on_front_id = (int) get_option( 'page_on_front' );
+			$page_on_front_id = HomepageHelper::get_homepage_id();
 			if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
 				return $title;
 			}

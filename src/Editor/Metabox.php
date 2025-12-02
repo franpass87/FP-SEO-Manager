@@ -14,6 +14,8 @@ namespace FP\SEO\Editor;
 use FP\SEO\Analysis\Analyzer;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
+use FP\SEO\Editor\Services\HomepageAutoDraftPrevention;
+use FP\SEO\Editor\Services\SeoFieldsSaver;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\Options;
@@ -54,9 +56,6 @@ class Metabox {
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
 	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
 	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
-	private const AJAX_SAVE_IMAGES = 'fp_seo_save_images_data';
-	private const AJAX_RELOAD_IMAGES_SECTION = 'fp_seo_reload_images_section';
-	private const AJAX_EXTRACT_IMAGES = 'fp_seo_extract_images';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
@@ -75,6 +74,36 @@ class Metabox {
 	 * @var MetaboxDiagnostics
 	 */
 	private $diagnostics;
+
+	/**
+	 * @var \FP\SEO\Editor\Handlers\AjaxHandler|null
+	 */
+	private $ajax_handler;
+
+	/**
+	 * @var \FP\SEO\Editor\Managers\AssetsManager|null
+	 */
+	private $assets_manager;
+
+	/**
+	 * @var \FP\SEO\Editor\Services\AnalysisRunner|null
+	 */
+	private $analysis_runner;
+
+	/**
+	 * @var SeoFieldsSaver|null
+	 */
+	private $fields_saver;
+
+	/**
+	 * @var \FP\SEO\Editor\Scripts\InlineScriptsManager|null
+	 */
+	private $inline_scripts_manager;
+
+	/**
+	 * @var \FP\SEO\Editor\Styles\MetaboxStylesManager|null
+	 */
+	private $styles_manager;
 
 	/**
 	 * Costruttore - registra gli hook immediatamente e inizializza il renderer
@@ -101,6 +130,74 @@ class Metabox {
 				'line' => $e->getLine(),
 			) );
 			$this->renderer = null;
+		}
+
+		// Initialize AJAX handler
+		if ( class_exists( 'FP\SEO\Editor\Handlers\AjaxHandler' ) ) {
+			try {
+				$this->ajax_handler = new \FP\SEO\Editor\Handlers\AjaxHandler( $this );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize AjaxHandler', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->ajax_handler = null;
+			}
+		}
+
+		// Initialize Assets Manager
+		if ( class_exists( 'FP\SEO\Editor\Managers\AssetsManager' ) ) {
+			try {
+				$this->assets_manager = new \FP\SEO\Editor\Managers\AssetsManager( $this );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize AssetsManager', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->assets_manager = null;
+			}
+		}
+
+		// Initialize Analysis Runner
+		if ( class_exists( 'FP\SEO\Editor\Services\AnalysisRunner' ) ) {
+			try {
+				$this->analysis_runner = new \FP\SEO\Editor\Services\AnalysisRunner();
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize AnalysisRunner', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->analysis_runner = null;
+			}
+		}
+
+		// Initialize SEO Fields Saver
+		$this->fields_saver = new SeoFieldsSaver();
+
+		// Initialize Inline Scripts Manager
+		if ( class_exists( 'FP\SEO\Editor\Scripts\InlineScriptsManager' ) ) {
+			try {
+				$this->inline_scripts_manager = new \FP\SEO\Editor\Scripts\InlineScriptsManager( $this );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize InlineScriptsManager', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->inline_scripts_manager = null;
+			}
+		}
+
+		// Initialize Styles Manager
+		if ( class_exists( 'FP\SEO\Editor\Styles\MetaboxStylesManager' ) ) {
+			try {
+				$this->styles_manager = new \FP\SEO\Editor\Styles\MetaboxStylesManager( $this );
+			} catch ( \Throwable $e ) {
+				Logger::error( 'FP SEO: Failed to initialize MetaboxStylesManager', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->styles_manager = null;
+			}
 		}
 		
 		// Initialize modular components with error handling
@@ -539,12 +636,23 @@ class Metabox {
 			
 			// Use priority 5 to ensure wp.media is loaded early, before other plugins
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5, 0 );
-			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
-			add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
-			add_action( 'wp_ajax_' . self::AJAX_SAVE_IMAGES, array( $this, 'handle_save_images_ajax' ) );
-			add_action( 'wp_ajax_' . self::AJAX_RELOAD_IMAGES_SECTION, array( $this, 'handle_reload_images_section_ajax' ) );
-			add_action( 'wp_ajax_' . self::AJAX_EXTRACT_IMAGES, array( $this, 'handle_extract_images_ajax' ) );
-			add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+			
+			// Register AJAX handlers via modular handler
+			if ( $this->ajax_handler ) {
+				$this->ajax_handler->register();
+			} else {
+				// Fallback to direct registration if handler not available
+				add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
+				add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
+			}
+			
+			// Register inline scripts manager
+			if ( $this->inline_scripts_manager ) {
+				add_action( 'admin_head', array( $this->inline_scripts_manager, 'inject' ) );
+			} else {
+				// Fallback to original method
+				add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+			}
 		} catch ( \Throwable $e ) {
 			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -694,6 +802,27 @@ class Metabox {
 		// Get AI configuration
 		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
 		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
+		
+		// Debug: Verify API key retrieval
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$all_options = Options::get();
+			Logger::debug( 'FP SEO: AI configuration check in Metabox', array(
+				'ai_enabled' => $ai_enabled,
+				'api_key_length' => strlen( $api_key ),
+				'api_key_empty' => empty( $api_key ),
+				'ai_section_exists' => isset( $all_options['ai'] ),
+				'ai_openai_api_key_exists' => isset( $all_options['ai']['openai_api_key'] ),
+				'ai_openai_api_key_length' => isset( $all_options['ai']['openai_api_key'] ) ? strlen( $all_options['ai']['openai_api_key'] ) : 0,
+				'api_key_via_get_option' => strlen( Options::get_option( 'ai.openai_api_key', '' ) ),
+			) );
+		}
+		
+		// Also check via OpenAiClient to ensure consistency
+		$openai_client = new \FP\SEO\Integrations\OpenAiClient();
+		$is_configured = $openai_client->is_configured();
+		
+		// Use the more reliable check from OpenAiClient
+		$api_key_present = $is_configured || ! empty( $api_key );
 
 		// Localizza lo script per renderlo disponibile al module
 		$localized_data = array(
@@ -705,7 +834,7 @@ class Metabox {
 				'enabled'  => $enabled,
 				'excluded' => $excluded,
 			'aiEnabled' => $ai_enabled,
-			'apiKeyPresent' => ! empty( $api_key ),
+			'apiKeyPresent' => $api_key_present,
 				'initial'  => $analysis,
 				'labels'   => array(
 					'score'      => __( 'SEO Score', 'fp-seo-performance' ),
@@ -1023,81 +1152,15 @@ class Metabox {
 			}
 		}
 
-		// Reload images section when featured image is set/removed
-		jQuery(document).ready(function() {
-			// Listen for WordPress featured image events
-			jQuery(document).on('wp-set-post-thumbnail', function(event, thumbnailId) {
-				console.log('FP SEO: wp-set-post-thumbnail event triggered', { thumbnailId: thumbnailId });
-				// Reload images section after a short delay to ensure thumbnail is saved
-				setTimeout(function() {
-					reloadImagesSection();
-				}, 500);
-			});
-
-			// Also listen for thumbnail removal
-			jQuery(document).on('wp-remove-post-thumbnail', function() {
-				console.log('FP SEO: wp-remove-post-thumbnail event triggered');
-				setTimeout(function() {
-					reloadImagesSection();
-				}, 500);
-			});
-
-			// Function to reload images section via AJAX
-			function reloadImagesSection() {
-				console.log('FP SEO: reloadImagesSection() called');
-				const postId = jQuery('#post_ID').val();
-				if (!postId) {
-					console.warn('FP SEO: No post ID found, skipping reload');
-					return;
-				}
-
-				const imagesSection = jQuery('.fp-seo-performance-metabox__section').filter(function() {
-					const title = jQuery(this).find('h4').text();
-					return title.includes('Images Optimization') || title.includes('Images');
-				});
-
-				if (imagesSection.length === 0) {
-					console.warn('FP SEO: Images section not found, skipping reload');
-					return;
-				}
-
-				console.log('FP SEO: Reloading images section for post', postId);
-
-				// Show loading indicator
-				imagesSection.find('.fp-seo-performance-metabox__section-content').html(
-					'<div style="padding: 24px; text-align: center;"><span style="color: #8b5cf6;">⏳ Caricamento immagini...</span></div>'
-				);
-
-				// AJAX request to reload images section
-				// Use the nonce generated inline (not from a hidden field)
-				const reloadNonce = '<?php echo esc_js( wp_create_nonce( 'fp_seo_reload_images_nonce' ) ); ?>';
-				jQuery.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: '<?php echo esc_js( self::AJAX_RELOAD_IMAGES_SECTION ); ?>',
-						post_id: postId,
-						nonce: reloadNonce
-					},
-					success: function(response) {
-						console.log('FP SEO: AJAX success', response);
-						if (response.success && response.data && response.data.html) {
-							imagesSection.find('.fp-seo-performance-metabox__section-content').html(response.data.html);
-							console.log('FP SEO: Images section reloaded successfully');
-						} else {
-							console.error('FP SEO: Error reloading images section', response);
-						}
-					},
-					error: function(xhr, status, error) {
-						console.error('FP SEO: AJAX error reloading images section', { status, error, responseText: xhr.responseText });
-					}
-				});
-			}
+		// Image optimization features removed - no longer managing images
+		// Removed: reloadImagesSection, refreshStandardPreview, and all featured image listeners
 		});
-	});
 	</script>
 		<?php
-		?>
+		// CSS styles are now handled by MetaboxStylesManager
+		// Only render styles if styles manager is not available (fallback)
+		if ( ! $this->styles_manager ) {
+			?>
 		<style id="fp-seo-metabox-modern-ui">
 		/* CSS Variables now unified in fp-seo-ui-system.css - No redefinition needed */
 		
@@ -3676,8 +3739,17 @@ class Metabox {
 	 *
 	 * @return array
 	 */
-	private function get_supported_post_types(): array {
-				return PostTypes::analyzable();
+	public function get_supported_post_types(): array {
+		return PostTypes::analyzable();
+	}
+
+	/**
+	 * Get analysis runner instance.
+	 *
+	 * @return \FP\SEO\Editor\Services\AnalysisRunner|null
+	 */
+	public function get_analysis_runner() {
+		return $this->analysis_runner;
 	}
 
 	/**
@@ -3686,7 +3758,7 @@ class Metabox {
 	 * @param int $post_id Post ID.
 	 * @return bool
 	 */
-	private function is_post_excluded( int $post_id ): bool {
+	public function is_post_excluded( int $post_id ): bool {
 		// DISABLED: Cache clearing interferes with WordPress's post object during page load
 		$excluded = get_post_meta( $post_id, self::META_EXCLUDE, true );
 		
@@ -3708,7 +3780,13 @@ class Metabox {
 	 * @param WP_Post $post Post object.
 	 * @return array
 	 */
-	private function run_analysis_for_post( WP_Post $post ): array {
+	public function run_analysis_for_post( WP_Post $post ): array {
+		// Use AnalysisRunner if available
+		if ( $this->analysis_runner ) {
+			return $this->analysis_runner->run( $post );
+		}
+
+		// Fallback to original implementation
 		// Check if required classes exist
 		if ( ! class_exists( '\FP\SEO\Analysis\Context' ) ) {
 			throw new \RuntimeException( 'Context class not found' );
@@ -3982,112 +4060,13 @@ class Metabox {
 			) );
 		}
 
-		// Get and sanitize values - supporta sia i nomi vecchi che quelli nuovi
-		$seo_title = '';
-		if ( isset( $_POST['fp_seo_title'] ) ) {
-			$seo_title = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_title'] ) );
-			$seo_title = trim( $seo_title );
-		} elseif ( isset( $_POST['seo_title'] ) ) {
-			$seo_title = sanitize_text_field( wp_unslash( (string) $_POST['seo_title'] ) );
-			$seo_title = trim( $seo_title );
-		}
-
-		$meta_description = '';
-		if ( isset( $_POST['fp_seo_meta_description'] ) ) {
-			$meta_description = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_meta_description'] ) );
-			$meta_description = trim( $meta_description );
-		} elseif ( isset( $_POST['meta_description'] ) ) {
-			$meta_description = sanitize_textarea_field( wp_unslash( (string) $_POST['meta_description'] ) );
-			$meta_description = trim( $meta_description );
-		}
-
-		$focus_keyword = '';
-		if ( isset( $_POST['fp_seo_focus_keyword'] ) ) {
-			$focus_keyword = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_focus_keyword'] ) );
-			$focus_keyword = trim( $focus_keyword );
-		}
-
-		$secondary_keywords = '';
-		if ( isset( $_POST['fp_seo_secondary_keywords'] ) ) {
-			$secondary_keywords = sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_secondary_keywords'] ) );
-			$secondary_keywords = trim( $secondary_keywords );
-		}
-
-		$excerpt = '';
-		if ( isset( $_POST['fp_seo_excerpt'] ) ) {
-			$excerpt = sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) );
-			$excerpt = trim( $excerpt );
-		}
-
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'AJAX save values', array(
-				'post_id' => $post_id,
-				'has_title' => ! empty( $seo_title ),
-				'has_description' => ! empty( $meta_description ),
-				'has_focus_keyword' => ! empty( $focus_keyword ),
-				'has_excerpt' => ! empty( $excerpt ),
-			) );
-		}
-
-		// Salva direttamente i campi senza usare MetaboxSaver per evitare conflitti
-		// Questo è più sicuro in contesto AJAX
+		// Use dedicated service for saving fields
 		try {
-			// Salva Title
-			if ( '' !== $seo_title ) {
-				update_post_meta( $post_id, '_fp_seo_title', $seo_title );
-			} else {
-				delete_post_meta( $post_id, '_fp_seo_title' );
-			}
+			$saved = $this->fields_saver->save_from_post( $post_id );
+			$result = ! empty( $saved );
 
-			// Salva Meta Description
-			if ( '' !== $meta_description ) {
-				update_post_meta( $post_id, '_fp_seo_meta_description', $meta_description );
-			} else {
-				delete_post_meta( $post_id, '_fp_seo_meta_description' );
-			}
-
-			// Salva Focus Keyword
-			if ( '' !== $focus_keyword ) {
-				update_post_meta( $post_id, self::META_FOCUS_KEYWORD, $focus_keyword );
-			} else {
-				delete_post_meta( $post_id, self::META_FOCUS_KEYWORD );
-			}
-
-			// Salva Secondary Keywords
-			if ( '' !== $secondary_keywords ) {
-				update_post_meta( $post_id, self::META_SECONDARY_KEYWORDS, $secondary_keywords );
-			} else {
-				delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
-			}
-
-			// Salva Excerpt - CRITICAL: Use direct DB update to avoid triggering wp_update_post hooks
-			// wp_update_post triggers save_post and other hooks that can cause auto-draft creation
-			global $wpdb;
-			if ( '' !== $excerpt ) {
-				$wpdb->update(
-					$wpdb->posts,
-					array( 'post_excerpt' => $excerpt ),
-					array( 'ID' => $post_id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-			} else {
-				// Se excerpt è vuoto, rimuovilo
-				$wpdb->update(
-					$wpdb->posts,
-					array( 'post_excerpt' => '' ),
-					array( 'ID' => $post_id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-			}
-			// Clear cache after direct DB update
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'posts' );
-
-			$result = true;
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'AJAX direct save successful', array( 'post_id' => $post_id ) );
+				Logger::debug( 'AJAX save successful', array( 'post_id' => $post_id, 'saved_fields' => array_keys( $saved ) ) );
 			}
 		} catch ( \Exception $e ) {
 			Logger::error( 'AJAX save error', array(
@@ -4103,23 +4082,9 @@ class Metabox {
 			$result = false;
 		}
 
-		// Force cache clear to ensure updated values are read on reload
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
-		}
-
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			Logger::info( 'FP SEO: Fields saved via AJAX', array(
 				'post_id' => $post_id,
-				'title' => $seo_title,
-				'description' => substr( $meta_description, 0, 50 ) . ( strlen( $meta_description ) > 50 ? '...' : '' ),
-				'focus_keyword' => $focus_keyword,
 				'result' => $result,
 			) );
 		}
@@ -4195,9 +4160,11 @@ class Metabox {
 	}
 
 	/**
-	 * Handle AJAX request to save images data.
+	 * Handle AJAX request to save images data - REMOVED
 	 */
 	public function handle_save_images_ajax(): void {
+		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
+		return;
 		// Verify nonce
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_images_nonce' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
@@ -4320,9 +4287,11 @@ class Metabox {
 	}
 
 	/**
-	 * Handle AJAX request to reload images section.
+	 * Handle AJAX request to reload images section - REMOVED
 	 */
 	public function handle_reload_images_section_ajax(): void {
+		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
+		return;
 		// Verify nonce
 		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_reload_images_nonce' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
@@ -4355,6 +4324,9 @@ class Metabox {
 			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
 		}
 		
+		// CRITICAL: Clear post meta cache to ensure we get latest featured image
+		clean_post_cache( $post_id );
+		
 		// CRITICAL: Refresh post content from database to ensure we have the latest version
 		// WordPress's get_post() might return cached/stale content, especially after AJAX calls
 		global $wpdb;
@@ -4364,13 +4336,11 @@ class Metabox {
 		) );
 		if ( ! empty( $db_content ) ) {
 			$post->post_content = $db_content;
-			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Refreshed post content from database', array(
-				'post_id' => $post_id,
-				'content_length' => strlen( $db_content ),
-				'has_wpbakery' => strpos( $db_content, '[vc_' ) !== false,
-				'has_img_tags' => strpos( $db_content, '<img' ) !== false,
-			) );
 		}
+		
+		// Featured image retrieval removed - no longer managing images
+			'has_img_tags' => strpos( $db_content, '<img' ) !== false,
+		) );
 
 		// Render only the images section content
 		if ( $this->renderer === null ) {
@@ -4381,25 +4351,8 @@ class Metabox {
 			wp_send_json_error( array( 'message' => __( 'Renderer not available.', 'fp-seo-performance' ) ), 500 );
 		}
 
-		// Extract images using new isolated ImageExtractor
-		try {
-			$extractor = new ImageExtractor();
-			$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
-			$images = $extractor->extract( $post, $force_refresh );
-			
-			Logger::info( 'FP SEO: handle_reload_images_section_ajax - Images extracted via ImageExtractor', array(
-				'post_id' => $post_id,
-				'images_count' => count( $images ),
-				'force_refresh' => $force_refresh,
-			) );
-		} catch ( \Throwable $e ) {
-			Logger::error( 'FP SEO: Error extracting images in reload handler', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'post_id' => $post_id,
-			) );
-			$images = array();
-		}
+		// Image extraction removed - no longer managing images
+		$images = array(); // No longer extracting images
 
 		// Render images section content HTML
 		ob_start();
@@ -4413,13 +4366,15 @@ class Metabox {
 	}
 
 	/**
-	 * Update images in post content with new alt and title attributes.
+	 * Update images in post content - REMOVED
 	 *
 	 * @param string $content Post content.
 	 * @param array<string, array{alt: string, title: string, description: string}> $images_data Images data.
 	 * @return string Updated content.
 	 */
 	private function update_images_in_content( string $content, array $images_data ): string {
+		// Image content updating removed
+		return $content;
 		if ( empty( $content ) || empty( $images_data ) ) {
 			return $content;
 		}
@@ -4488,12 +4443,14 @@ class Metabox {
 	}
 
 	/**
-	 * Get attachment ID from image URL.
+	 * Get attachment ID from image URL - REMOVED
 	 *
 	 * @param string $url Image URL.
 	 * @return int|null Attachment ID or null if not found.
 	 */
 	private function get_attachment_id_from_url( string $url ): ?int {
+		// Image attachment handling removed
+		return null;
 		// Remove query strings
 		$url = strtok( $url, '?' );
 		
@@ -4538,56 +4495,12 @@ class Metabox {
 	}
 
 	/**
-	 * Handle AJAX request for lazy-loaded image extraction.
-	 * 
-	 * This is the ONLY way images should be extracted - completely isolated and non-interfering.
+	 * Handle AJAX request for lazy-loaded image extraction - REMOVED
 	 *
 	 * @return void
 	 */
 	public function handle_extract_images_ajax(): void {
-		check_ajax_referer( self::NONCE_ACTION, self::NONCE_FIELD );
-		
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
-			return;
-		}
-		
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-		if ( $post_id <= 0 ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
-			return;
-		}
-		
-		$post = get_post( $post_id );
-		if ( ! $post instanceof WP_Post ) {
-			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
-			return;
-		}
-		
-		// Use the new isolated ImageExtractor
-		$extractor = new ImageExtractor();
-		$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
-		
-		try {
-			$images = $extractor->extract( $post, $force_refresh );
-			
-			wp_send_json_success( array(
-				'images' => $images,
-				'count' => count( $images ),
-				'post_id' => $post_id,
-			) );
-		} catch ( \Throwable $e ) {
-			Logger::error( 'FP SEO: Error in handle_extract_images_ajax', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'post_id' => $post_id,
-			) );
-			
-			wp_send_json_error( array(
-				'message' => __( 'Error extracting images.', 'fp-seo-performance' ),
-				'error' => $e->getMessage(),
-			), 500 );
-		}
+		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
 	}
 
 }

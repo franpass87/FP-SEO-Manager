@@ -65,6 +65,7 @@ class GeneralTabRenderer extends SettingsTabRenderer {
 			</tr>
 			</tbody>
 		</table>
+
 		<?php
 	}
 

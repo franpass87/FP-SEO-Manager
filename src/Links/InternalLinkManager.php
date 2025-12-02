@@ -11,6 +11,9 @@ declare(strict_types=1);
 
 namespace FP\SEO\Links;
 
+use FP\SEO\Links\Handlers\InternalLinkAjaxHandler;
+use FP\SEO\Links\Scripts\InternalLinkScriptsManager;
+use FP\SEO\Links\Styles\InternalLinkStylesManager;
 use FP\SEO\Utils\Cache;
 use FP\SEO\Utils\PerformanceConfig;
 
@@ -18,7 +21,6 @@ use FP\SEO\Utils\PerformanceConfig;
  * Handles internal link suggestions and optimization.
  */
 class InternalLinkManager {
-
 	/**
 	 * Link suggestion cache group.
 	 */
@@ -35,13 +37,28 @@ class InternalLinkManager {
 	private const MAX_SUGGESTIONS = 10;
 
 	/**
+	 * @var InternalLinkStylesManager|null
+	 */
+	private $styles_manager;
+
+	/**
+	 * @var InternalLinkScriptsManager|null
+	 */
+	private $scripts_manager;
+
+	/**
+	 * @var InternalLinkAjaxHandler|null
+	 */
+	private $ajax_handler;
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'add_links_menu' ) );
-		add_action( 'wp_ajax_fp_seo_get_link_suggestions', array( $this, 'ajax_get_link_suggestions' ) );
-		add_action( 'wp_ajax_fp_seo_analyze_internal_links', array( $this, 'ajax_analyze_internal_links' ) );
-		add_action( 'wp_ajax_fp_seo_optimize_internal_links', array( $this, 'ajax_optimize_internal_links' ) );
+		// Register AJAX handler
+		$this->ajax_handler = new InternalLinkAjaxHandler( $this );
+		$this->ajax_handler->register();
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_links_metabox' ) );
 		// DISABLED: output_link_analysis causes issues in frontend - only register in admin
@@ -49,6 +66,12 @@ class InternalLinkManager {
 		if ( is_admin() ) {
 			add_action( 'admin_head', array( $this, 'output_link_analysis' ) );
 		}
+
+		// Initialize and register styles and scripts managers
+		$this->styles_manager = new InternalLinkStylesManager();
+		$this->styles_manager->register_hooks();
+		$this->scripts_manager = new InternalLinkScriptsManager();
+		$this->scripts_manager->register_hooks();
 	}
 
 	/**
@@ -465,177 +488,6 @@ class InternalLinkManager {
 				</button>
 			</div>
 		</div>
-
-		<style>
-		.fp-seo-internal-links-metabox {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-		}
-		
-		.fp-seo-links-stats {
-			display: flex;
-			gap: 15px;
-			margin-bottom: 15px;
-		}
-		
-		.fp-seo-link-stat {
-			text-align: center;
-			padding: 10px;
-			background: #f8f9fa;
-			border-radius: 4px;
-			flex: 1;
-		}
-		
-		.fp-seo-link-stat-number {
-			display: block;
-			font-size: 18px;
-			font-weight: 600;
-			color: #0073aa;
-		}
-		
-		.fp-seo-link-stat-label {
-			display: block;
-			font-size: 11px;
-			color: #666;
-			text-transform: uppercase;
-		}
-		
-		.fp-seo-suggestions-list {
-			max-height: 300px;
-			overflow-y: auto;
-		}
-		
-		.fp-seo-suggestion-item {
-			border: 1px solid #ddd;
-			border-radius: 4px;
-			padding: 10px;
-			margin-bottom: 8px;
-			background: #fff;
-		}
-		
-		.fp-seo-suggestion-header {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			margin-bottom: 5px;
-		}
-		
-		.fp-seo-suggestion-title {
-			font-weight: 600;
-			font-size: 12px;
-			color: #1d2129;
-		}
-		
-		.fp-seo-suggestion-score {
-			background: #0073aa;
-			color: #fff;
-			padding: 2px 6px;
-			border-radius: 10px;
-			font-size: 10px;
-			font-weight: 600;
-		}
-		
-		.fp-seo-suggestion-excerpt {
-			font-size: 11px;
-			color: #666;
-			margin-bottom: 8px;
-			line-height: 1.4;
-		}
-		
-		.fp-seo-suggestion-keywords {
-			margin-bottom: 8px;
-		}
-		
-		.fp-seo-keyword-tag {
-			display: inline-block;
-			background: #e3f2fd;
-			color: #1976d2;
-			padding: 2px 6px;
-			border-radius: 10px;
-			font-size: 10px;
-			margin-right: 4px;
-			margin-bottom: 2px;
-		}
-		
-		.fp-seo-suggestion-actions {
-			display: flex;
-			gap: 5px;
-		}
-		
-		.fp-seo-suggestion-actions .button {
-			font-size: 11px;
-			padding: 4px 8px;
-			height: auto;
-		}
-		
-		.fp-seo-no-suggestions {
-			text-align: center;
-			padding: 20px;
-			color: #666;
-		}
-		
-		.fp-seo-links-actions {
-			margin-top: 15px;
-			display: flex;
-			gap: 8px;
-		}
-		
-		.fp-seo-links-actions .button {
-			flex: 1;
-			text-align: center;
-		}
-		</style>
-
-		<script>
-		jQuery(document).ready(function($) {
-			// Insert link functionality
-			$('.fp-seo-insert-link').on('click', function() {
-				var postId = $(this).data('post-id');
-				var anchorText = $(this).data('anchor-text');
-				var url = $(this).data('url');
-				
-				// Insert link into editor
-				if (typeof wp !== 'undefined' && wp.media && wp.media.editor) {
-					wp.media.editor.insert('[[' + anchorText + ']](' + url + ')');
-				} else {
-					// Fallback for classic editor
-					var link = '<a href="' + url + '">' + anchorText + '</a>';
-					// This would need to be implemented based on your editor setup
-					alert('Link: ' + link);
-				}
-			});
-
-			// Preview link functionality
-			$('.fp-seo-preview-link').on('click', function() {
-				var postId = $(this).data('post-id');
-				window.open('<?php echo admin_url( 'post.php?post=' ); ?>' + postId + '&action=edit', '_blank');
-			});
-
-			// Refresh suggestions
-			$('#fp-seo-refresh-suggestions').on('click', function() {
-				location.reload();
-			});
-
-			// Analyze links
-			$('#fp-seo-analyze-links').on('click', function() {
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: 'fp_seo_analyze_internal_links',
-						post_id: <?php echo get_the_ID(); ?>,
-						nonce: '<?php echo wp_create_nonce( 'fp_seo_links_nonce' ); ?>'
-					},
-					success: function(response) {
-						if (response.success) {
-							alert('Link analysis completed: ' + response.data.message);
-						} else {
-							alert('Error: ' + response.data);
-						}
-					}
-				});
-			});
-		});
-		</script>
 		<?php
 	}
 
@@ -1118,38 +970,7 @@ class InternalLinkManager {
 		return $recommendations;
 	}
 
-	/**
-	 * AJAX handler for getting link suggestions.
-	 */
-	public function ajax_get_link_suggestions(): void {
-		check_ajax_referer( 'fp_seo_links_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-		$options = $_POST['options'] ?? array();
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$suggestions = $this->get_link_suggestions( $post_id, $options );
-		wp_send_json_success( $suggestions );
-	}
-
-	/**
-	 * AJAX handler for analyzing internal links.
-	 */
-	public function ajax_analyze_internal_links(): void {
-		check_ajax_referer( 'fp_seo_links_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$analysis = $this->analyze_post_links( $post_id );
-		wp_send_json_success( $analysis );
-	}
+	// AJAX handlers removed - now handled by InternalLinkAjaxHandler
 
 	/**
 	 * Analyze internal links for a specific post.
@@ -1157,7 +978,7 @@ class InternalLinkManager {
 	 * @param int $post_id Post ID.
 	 * @return array<string, mixed>
 	 */
-	private function analyze_post_links( int $post_id ): array {
+	public function analyze_post_links( int $post_id ): array {
 		$existing_links = $this->get_existing_internal_links( $post_id );
 		$suggestions = $this->get_link_suggestions( $post_id );
 		
@@ -1217,21 +1038,7 @@ class InternalLinkManager {
 		return $recommendations;
 	}
 
-	/**
-	 * AJAX handler for optimizing internal links.
-	 */
-	public function ajax_optimize_internal_links(): void {
-		check_ajax_referer( 'fp_seo_links_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$optimization = $this->optimize_post_links( $post_id );
-		wp_send_json_success( $optimization );
-	}
+	// AJAX handler removed - now handled by InternalLinkAjaxHandler
 
 	/**
 	 * Optimize internal links for a post.

@@ -92,15 +92,8 @@ class MultiModalOptimizer {
 			}
 		}
 
-		// Add featured image
-		$featured_image_id = get_post_thumbnail_id( $post->ID );
-
-		if ( $featured_image_id ) {
-			$featured_data = $this->get_attachment_data( $featured_image_id );
-
-			if ( ! empty( $featured_data ) ) {
-				$featured_data['is_featured'] = true;
-				array_unshift( $images, $featured_data ); // Featured image first
+		// Featured image removed - no longer using featured images
+		// Images array will only contain images from content, not featured images
 			}
 		}
 

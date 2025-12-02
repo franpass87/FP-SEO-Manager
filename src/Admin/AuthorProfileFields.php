@@ -13,10 +13,22 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Admin\Scripts\AuthorProfileFieldsScriptsManager;
+use FP\SEO\Admin\Styles\AuthorProfileFieldsStylesManager;
+
 /**
  * Manages author authority fields in user profiles
  */
 class AuthorProfileFields {
+	/**
+	 * @var AuthorProfileFieldsScriptsManager|null
+	 */
+	private $scripts_manager;
+
+	/**
+	 * @var AuthorProfileFieldsStylesManager|null
+	 */
+	private $styles_manager;
 
 	/**
 	 * Register hooks
@@ -27,6 +39,13 @@ class AuthorProfileFields {
 		add_action( 'personal_options_update', array( $this, 'save_fields' ) );
 		add_action( 'edit_user_profile_update', array( $this, 'save_fields' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+
+		// Initialize and register scripts manager
+		$this->scripts_manager = new AuthorProfileFieldsScriptsManager();
+		$this->scripts_manager->register_hooks();
+
+		// Initialize styles manager
+		$this->styles_manager = new AuthorProfileFieldsStylesManager();
 	}
 
 	/**
@@ -45,64 +64,12 @@ class AuthorProfileFields {
 		}
 
 		// Inline styles for better UX
-		wp_add_inline_style( 'wp-admin', $this->get_inline_styles() );
+		if ( $this->styles_manager ) {
+			wp_add_inline_style( 'wp-admin', $this->styles_manager->get_styles() );
+		}
 	}
 
-	/**
-	 * Get inline styles
-	 *
-	 * @return string CSS styles.
-	 */
-	private function get_inline_styles(): string {
-		return '
-			.fp-seo-author-authority {
-				background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-				padding: 20px;
-				border-radius: 8px;
-				border-left: 4px solid #0284c7;
-				margin-top: 20px;
-			}
-			.fp-seo-author-authority h3 {
-				margin-top: 0;
-				color: #0c4a6e;
-			}
-			.fp-seo-author-authority .form-table th {
-				width: 200px;
-			}
-			.fp-seo-author-authority .description {
-				color: #64748b;
-				font-size: 13px;
-			}
-			.fp-seo-tag-input {
-				width: 100%;
-				max-width: 500px;
-			}
-			.fp-seo-expertise-tags {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 8px;
-				margin-top: 10px;
-			}
-			.fp-seo-expertise-tag {
-				display: inline-flex;
-				align-items: center;
-				gap: 6px;
-				padding: 6px 12px;
-				background: #0284c7;
-				color: white;
-				border-radius: 999px;
-				font-size: 12px;
-			}
-			.fp-seo-expertise-tag button {
-				background: transparent;
-				border: none;
-				color: white;
-				cursor: pointer;
-				padding: 0;
-				font-size: 14px;
-			}
-		';
-	}
+	// Inline styles removed - now handled by AuthorProfileFieldsStylesManager
 
 	/**
 	 * Render profile fields
@@ -224,36 +191,6 @@ class AuthorProfileFields {
 						<p class="description">
 							<?php esc_html_e( 'Certificazioni professionali (Google Analytics, Yoast SEO, HubSpot, ecc.)', 'fp-seo-performance' ); ?>
 						</p>
-
-						<script>
-						(function() {
-							const input = document.getElementById('fp_author_certifications_input');
-							const list = document.getElementById('fp-seo-certifications-list');
-							const hidden = document.getElementById('fp_author_certifications');
-
-							function updateHidden() {
-								const tags = Array.from(list.querySelectorAll('.fp-seo-expertise-tag')).map(el => el.textContent.replace('×', '').trim());
-								hidden.value = JSON.stringify(tags);
-							}
-
-							input.addEventListener('keypress', function(e) {
-								if (e.key === 'Enter') {
-									e.preventDefault();
-									const value = this.value.trim();
-									if (value) {
-										const tag = document.createElement('span');
-										tag.className = 'fp-seo-expertise-tag';
-										tag.innerHTML = value + ' <button type="button" onclick="this.parentElement.remove(); document.getElementById(\'fp_author_certifications\').dispatchEvent(new Event(\'change\'))">×</button>';
-										list.appendChild(tag);
-										this.value = '';
-										updateHidden();
-									}
-								}
-							});
-
-							hidden.addEventListener('change', updateHidden);
-						})();
-						</script>
 					</td>
 				</tr>
 

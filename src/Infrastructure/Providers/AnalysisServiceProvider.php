@@ -44,7 +44,7 @@ class AnalysisServiceProvider extends AbstractServiceProvider {
 			\FP\SEO\Analysis\Checks\MetaDescriptionCheck::class,
 			\FP\SEO\Analysis\Checks\H1PresenceCheck::class,
 			\FP\SEO\Analysis\Checks\HeadingsStructureCheck::class,
-			\FP\SEO\Analysis\Checks\ImageAltCheck::class,
+			// ImageAltCheck removed - image optimization features disabled
 			\FP\SEO\Analysis\Checks\InternalLinksCheck::class,
 			\FP\SEO\Analysis\Checks\OgCardsCheck::class,
 			\FP\SEO\Analysis\Checks\TwitterCardsCheck::class,

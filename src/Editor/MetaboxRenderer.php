@@ -11,7 +11,14 @@ declare(strict_types=1);
 
 namespace FP\SEO\Editor;
 
-use FP\SEO\Editor\ImageExtractor;
+use FP\SEO\Editor\Helpers\MetaHelper;
+use FP\SEO\Editor\Helpers\PostValidationHelper;
+use FP\SEO\Editor\Renderers\AnalysisSectionRenderer;
+use FP\SEO\Editor\Renderers\GscMetricsRenderer;
+use FP\SEO\Editor\Renderers\HeaderRenderer;
+use FP\SEO\Editor\Renderers\SerpFieldsRenderer;
+use FP\SEO\Editor\Renderers\SerpPreviewRenderer;
+use FP\SEO\Editor\Services\ImageExtractionService;
 use FP\SEO\Integrations\GscData;
 use FP\SEO\Utils\Logger;
 use FP\SEO\Utils\Options;
@@ -38,6 +45,36 @@ class MetaboxRenderer {
 	private $check_help_text;
 
 	/**
+	 * @var SerpFieldsRenderer
+	 */
+	private $serp_fields_renderer;
+
+	/**
+	 * @var HeaderRenderer
+	 */
+	private $header_renderer;
+
+	/**
+	 * @var SerpPreviewRenderer
+	 */
+	private $serp_preview_renderer;
+
+	/**
+	 * @var AnalysisSectionRenderer
+	 */
+	private $analysis_section_renderer;
+
+	/**
+	 * @var GscMetricsRenderer
+	 */
+	private $gsc_metrics_renderer;
+
+	/**
+	 * @var ImageExtractionService
+	 */
+	private $image_extraction_service;
+
+	/**
 	 * @var string
 	 */
 	private const META_FOCUS_KEYWORD = '_fp_seo_focus_keyword';
@@ -51,6 +88,14 @@ class MetaboxRenderer {
 	 * Constructor.
 	 */
 	public function __construct() {
+		// Initialize services
+		$this->header_renderer = new HeaderRenderer();
+		$this->serp_fields_renderer = new SerpFieldsRenderer();
+		$this->serp_preview_renderer = new SerpPreviewRenderer();
+		$this->analysis_section_renderer = new AnalysisSectionRenderer();
+		$this->gsc_metrics_renderer = new GscMetricsRenderer();
+		$this->image_extraction_service = new ImageExtractionService();
+
 		// Inizializza check_help_text con gestione errori robusta
 		// Le classi sono nello stesso namespace, quindi l'autoloader PSR-4 dovrebbe caricarla automaticamente
 		try {
@@ -138,12 +183,9 @@ class MetaboxRenderer {
 	 * @param bool    $excluded Whether post is excluded.
 	 */
 	public function render( WP_Post $post, array $analysis, bool $excluded ): void {
-		// CRITICAL: Validate $post before proceeding
-		if ( ! $post instanceof WP_Post ) {
-			Logger::error( 'FP SEO: Invalid post object passed to MetaboxRenderer::render()', array(
-				'post_type' => gettype( $post ),
-				'post_value' => is_object( $post ) ? get_class( $post ) : (string) $post,
-			) );
+		// Validate post using helper
+		$post = PostValidationHelper::validate_post( $post );
+		if ( null === $post ) {
 			echo '<div class="notice notice-error"><p><strong>Errore: Oggetto post non valido.</strong></p></div>';
 			return;
 		}
@@ -247,21 +289,15 @@ class MetaboxRenderer {
 		
 		// Wrap entire render method in try-catch to prevent fatal errors
 		try {
-			
-			// Verifica che tutte le dipendenze siano caricate prima di iniziare
+			// Verify required classes are loaded
 			$required_classes = array(
 				'FP\\SEO\\Utils\\Logger',
 				'FP\\SEO\\Utils\\Options',
 			);
 
-			foreach ( $required_classes as $class_name ) {
-				if ( ! class_exists( $class_name, false ) ) {
-					Logger::error( 'FP SEO: Required class not loaded in MetaboxRenderer::render()', array(
-						'class' => $class_name,
-					) );
-					echo '<div class="notice notice-error"><p><strong>Errore: Classe ' . esc_html( $class_name ) . ' non caricata.</strong></p></div>';
-					return;
-				}
+			if ( ! PostValidationHelper::validate_required_classes( $required_classes ) ) {
+				echo '<div class="notice notice-error"><p><strong>Errore: Classi richieste non caricate.</strong></p></div>';
+				return;
 			}
 
 			// Log inizio rendering in debug mode
@@ -276,29 +312,7 @@ class MetaboxRenderer {
 				) );
 			}
 			
-			// Ensure we have a valid post ID
-			if ( empty( $post->ID ) || $post->ID <= 0 ) {
-			// Try to get post ID from request
-			$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : ( isset( $_POST['post_ID'] ) ? absint( $_POST['post_ID'] ) : 0 );
-			if ( $post_id > 0 ) {
-				$post = get_post( $post_id );
-				if ( ! $post instanceof WP_Post ) {
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::error( 'FP SEO: Could not retrieve post in renderer', array(
-							'post_id' => $post_id,
-						) );
-					}
-					return;
-				}
-			} else {
-				// New post - that's OK, continue with empty fields
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: Rendering metabox for new post', array(
-						'post_type' => $post->post_type ?? 'unknown',
-					) );
-				}
-			}
-			}
+			// Post validation already done at the beginning of the method
 			
 			// DISABLED: Cache clearing was interfering with WordPress's post object
 		// WordPress manages its own cache, we should not clear it during rendering
@@ -433,7 +447,12 @@ class MetaboxRenderer {
 		<div class="fp-seo-performance-metabox" data-fp-seo-metabox>
 			<?php
 			try {
-				$this->render_header( $excluded, $score_value, $score_status );
+				if ( $this->header_renderer ) {
+					$this->header_renderer->render( $excluded, $score_value, $score_status );
+				} else {
+					// Fallback to original method
+					$this->render_header( $excluded, $score_value, $score_status );
+				}
 			} catch ( \Throwable $e ) {
 				Logger::error( 'FP SEO: Error rendering header', array( 'error' => $e->getMessage() ) );
 			}
@@ -445,23 +464,29 @@ class MetaboxRenderer {
 			}
 			
 			try {
-				$this->render_serp_preview_section( $post );
+				if ( $this->serp_preview_renderer ) {
+					$this->serp_preview_renderer->render( $post );
+				} else {
+					// Fallback to original method
+					$this->render_serp_preview_section( $post );
+				}
 			} catch ( \Throwable $e ) {
 				Logger::error( 'FP SEO: Error rendering SERP preview', array( 'error' => $e->getMessage() ) );
 			}
 			
 			try {
-				$this->render_analysis_section( $checks );
+				if ( $this->analysis_section_renderer ) {
+					$this->analysis_section_renderer->render( $checks );
+				} else {
+					// Fallback to original method
+					$this->render_analysis_section( $checks );
+				}
 			} catch ( \Throwable $e ) {
 				Logger::error( 'FP SEO: Error rendering analysis', array( 'error' => $e->getMessage() ) );
 				echo '<div class="notice notice-error"><p>Errore nel rendering dell\'analisi: ' . esc_html( $e->getMessage() ) . '</p></div>';
 			}
 			
-			try {
-				$this->render_images_section( $post );
-			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Error rendering images section', array(
-					'error' => $e->getMessage(),
+			// Images section removed - no longer managing images
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
 					'line' => $e->getLine(),
@@ -478,7 +503,12 @@ class MetaboxRenderer {
 			}
 			
 			try {
-				$this->render_gsc_metrics( $post );
+				if ( $this->gsc_metrics_renderer ) {
+					$this->gsc_metrics_renderer->render( $post );
+				} else {
+					// Fallback to original method
+					$this->render_gsc_metrics( $post );
+				}
 			} catch ( \Throwable $e ) {
 				Logger::error( 'FP SEO: Error rendering GSC metrics', array( 'error' => $e->getMessage() ) );
 			}
@@ -607,15 +637,62 @@ class MetaboxRenderer {
 				
 				<!-- CAMPI PRINCIPALI SEMPRE VISIBILI -->
 				<div style="display: grid; gap: 16px; margin-bottom: 20px;">
-					<?php $this->render_seo_title_field( $post ); ?>
-					<?php $this->render_meta_description_field( $post ); ?>
-					<?php $this->render_slug_field( $post ); ?>
-					<?php $this->render_excerpt_field( $post ); ?>
+					<?php $this->serp_fields_renderer->render_seo_title( $post ); ?>
+					<?php
+					// Check if OpenAI API key is configured (show error only if not configured)
+					// Use the same robust check as AiAjaxHandler to ensure consistency
+					$api_key = \FP\SEO\Utils\Options::get_option( 'ai.openai_api_key', '' );
+					
+					// If empty, try direct database check as fallback (same logic as AiAjaxHandler)
+					if ( empty( $api_key ) ) {
+						$direct_check = get_option( 'fp_seo_perf_options', array() );
+						$direct_api_key = $direct_check['ai']['openai_api_key'] ?? '';
+						
+						if ( ! empty( $direct_api_key ) ) {
+							// API key exists in DB but not being read correctly - clear cache
+							if ( class_exists( '\FP\SEO\Utils\Cache' ) ) {
+								\FP\SEO\Utils\Cache::delete( 'options_data' );
+							}
+							wp_cache_delete( 'fp_seo_perf_options', 'options' );
+							wp_cache_delete( 'alloptions', 'options' );
+							
+							// Retry after cache clear
+							$api_key = \FP\SEO\Utils\Options::get_option( 'ai.openai_api_key', '' );
+						}
+					}
+					
+					// Use OpenAiClient to verify (most reliable check)
+					$openai_client = new \FP\SEO\Integrations\OpenAiClient();
+					$is_configured = $openai_client->is_configured();
+					
+					// Final check: if still empty, verify one more time with direct check
+					if ( empty( $api_key ) && ! $is_configured ) {
+						$direct_check = get_option( 'fp_seo_perf_options', array() );
+						$direct_api_key = $direct_check['ai']['openai_api_key'] ?? '';
+						if ( ! empty( $direct_api_key ) ) {
+							$api_key = $direct_api_key;
+							$is_configured = true; // Override if found in direct check
+						}
+					}
+					
+					// Show error notice only if AI is enabled but API key is missing
+					if ( ! $is_configured && empty( $api_key ) ) {
+						$ai_enabled = \FP\SEO\Utils\Options::get_option( 'ai.enable_auto_generation', true );
+						if ( $ai_enabled ) {
+							echo '<div class="notice notice-error" style="margin: 0 0 16px 0; padding: 12px; border-left: 4px solid #dc2626;">';
+							echo '<p style="margin: 0;"><strong>⚠️ Errore:</strong> OpenAI API key non configurata. Vai in <a href="' . esc_url( admin_url( 'admin.php?page=fp-seo-performance-settings' ) ) . '">Impostazioni > FP SEO</a> per configurare la chiave API.</p>';
+							echo '</div>';
+						}
+					}
+					?>
+					<?php $this->serp_fields_renderer->render_meta_description( $post ); ?>
+					<?php $this->serp_fields_renderer->render_slug( $post ); ?>
+					<?php $this->serp_fields_renderer->render_excerpt( $post ); ?>
 					
 					<!-- Separator -->
 					<div style="height: 1px; background: linear-gradient(90deg, transparent 0%, #e5e7eb 50%, transparent 100%); margin: 8px 0;"></div>
 					
-					<?php $this->render_keywords_section( $post ); ?>
+					<?php $this->serp_fields_renderer->render_keywords( $post ); ?>
 				</div>
 				
 				<!-- Advanced Keywords Manager (optional integration) -->
@@ -675,357 +752,8 @@ class MetaboxRenderer {
 		<?php
 	}
 
-	/**
-	 * Render SEO Title field.
-	 *
-	 * @param WP_Post $post Current post.
-	 */
-	private function render_seo_title_field( WP_Post $post ): void {
-		// DISABLED: Cache clearing interferes with WordPress's post object
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
-		
-		$seo_title_value = get_post_meta( $post->ID, '_fp_seo_title', true );
-		
-		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $seo_title_value ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_title' ) );
-			if ( $db_value !== null ) {
-				$seo_title_value = $db_value;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'render_seo_title_field - fallback DB query found value', array(
-						'post_id' => $post->ID,
-						'value_preview' => substr( $seo_title_value, 0, 50 ),
-					) );
-				}
-			}
-		}
-		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'render_seo_title_field - final value', array(
-				'post_id' => $post->ID,
-				'final_value' => $seo_title_value ? substr( $seo_title_value, 0, 50 ) : 'empty',
-			) );
-		}
-		?>
-		<!-- SEO Title -->
-		<div style="position: relative;">
-			<label for="fp-seo-title" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">📝</span>
-					<?php esc_html_e( 'SEO Title', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #10b981; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+15%</span>
-				</span>
-				<span id="fp-seo-title-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/60</span>
-			</label>
-			<div style="display: flex; gap: 8px; align-items: stretch;">
-				<?php
-				?>
-				<input 
-					type="text" 
-					id="fp-seo-title" 
-					name="fp_seo_title"
-					value="<?php echo esc_attr( wp_specialchars_decode( $seo_title_value, ENT_QUOTES ) ); ?>"
-					placeholder="<?php esc_attr_e( 'es: Guida Completa alla SEO WordPress 2025 | Nome Sito', 'fp-seo-performance' ); ?>"
-					maxlength="70"
-					aria-label="<?php esc_attr_e( 'SEO Title - Titolo ottimizzato per SERP', 'fp-seo-performance' ); ?>"
-					style="flex: 1; padding: 10px 14px; font-size: 14px; border: 2px solid #10b981; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-					data-fp-seo-title
-				/>
-				<!-- Hidden field to ensure fp_seo_title is always in POST -->
-				<input type="hidden" name="fp_seo_title_sent" value="1" />
-				<button 
-					type="button" 
-					class="fp-seo-ai-generate-field-btn" 
-					data-field="seo_title"
-					data-target-id="fp-seo-title"
-					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-				>
-					<span>🤖</span>
-					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-				</button>
-			</div>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #059669;">🎯 Alto impatto (+15%)</strong> - Appare come titolo principale in Google. Lunghezza ottimale: 50-60 caratteri con keyword all'inizio.
-			</p>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Render Meta Description field.
-	 *
-	 * @param WP_Post $post Current post.
-	 */
-	private function render_meta_description_field( WP_Post $post ): void {
-		// DISABLED: Cache clearing interferes with WordPress's post object
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
-		
-		$meta_desc_value = get_post_meta( $post->ID, '_fp_seo_meta_description', true );
-		
-		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $meta_desc_value ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_meta_description' ) );
-			if ( $db_value !== null ) {
-				$meta_desc_value = $db_value;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'render_meta_description_field - fallback DB query found value', array(
-						'post_id' => $post->ID,
-						'value_preview' => substr( $meta_desc_value, 0, 50 ),
-					) );
-				}
-			}
-		}
-		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'render_meta_description_field - final value', array(
-				'post_id' => $post->ID,
-				'final_value' => $meta_desc_value ? substr( $meta_desc_value, 0, 50 ) : 'empty',
-			) );
-		}
-		?>
-		<!-- Meta Description -->
-		<div style="position: relative;">
-			<label for="fp-seo-meta-description" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">📄</span>
-					<?php esc_html_e( 'Meta Description', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #10b981; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+10%</span>
-				</span>
-				<span id="fp-seo-meta-description-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/160</span>
-			</label>
-			<div style="display: flex; gap: 8px; align-items: flex-start;">
-				<textarea 
-					id="fp-seo-meta-description" 
-					name="fp_seo_meta_description"
-					placeholder="<?php esc_attr_e( 'es: Scopri come ottimizzare WordPress per la SEO con la nostra guida completa 2025. Aumenta il traffico del 300% seguendo 5 step comprovati.', 'fp-seo-performance' ); ?>"
-					maxlength="200"
-					rows="3"
-					aria-label="<?php esc_attr_e( 'Meta Description - Descrizione per SERP', 'fp-seo-performance' ); ?>"
-					style="flex: 1; padding: 10px 14px; font-size: 13px; border: 2px solid #10b981; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
-					data-fp-seo-meta-description
-					autocomplete="off"
-				><?php echo esc_textarea( wp_specialchars_decode( $meta_desc_value, ENT_QUOTES ) ); ?></textarea>
-				<!-- Hidden field to ensure fp_seo_meta_description is always in POST -->
-				<input type="hidden" name="fp_seo_meta_description_sent" value="1" />
-				<button 
-					type="button" 
-					class="fp-seo-ai-generate-field-btn" 
-					data-field="meta_description"
-					data-target-id="fp-seo-meta-description"
-					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-				>
-					<span>🤖</span>
-					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-				</button>
-			</div>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #059669;">🎯 Medio-Alto impatto (+10%)</strong> - Descrizione sotto il titolo in Google. Include keyword + CTA. Ottimale: 150-160 caratteri.
-			</p>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Render Slug field.
-	 *
-	 * @param WP_Post $post Current post.
-	 */
-	private function render_slug_field( WP_Post $post ): void {
-		?>
-		<!-- Slug (URL Permalink) -->
-		<div style="position: relative;">
-			<label for="fp-seo-slug" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">🔗</span>
-					<?php esc_html_e( 'Slug (URL Permalink)', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #6b7280; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+6%</span>
-				</span>
-				<span id="fp-seo-slug-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0 parole</span>
-			</label>
-			<div style="display: flex; gap: 8px; align-items: stretch;">
-				<input 
-					type="text" 
-					id="fp-seo-slug" 
-					name="fp_seo_slug"
-					value="<?php echo esc_attr( $post->post_name ); ?>"
-					placeholder="<?php esc_attr_e( 'es: guida-seo-wordpress-2025 (lowercase, separate-con-trattini)', 'fp-seo-performance' ); ?>"
-					maxlength="100"
-					aria-label="<?php esc_attr_e( 'Slug URL - Permalink SEO-friendly', 'fp-seo-performance' ); ?>"
-					style="flex: 1; padding: 10px 14px; font-size: 13px; font-family: monospace; border: 2px solid #9ca3af; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-					data-fp-seo-slug
-				/>
-				<button 
-					type="button" 
-					class="fp-seo-ai-generate-field-btn" 
-					data-field="slug"
-					data-target-id="fp-seo-slug"
-					data-post-id="<?php echo esc_attr( (string) $post->ID ); ?>"
-					data-nonce="<?php echo esc_attr( wp_create_nonce( 'fp_seo_ai_generate' ) ); ?>"
-					title="<?php esc_attr_e( 'Genera con AI', 'fp-seo-performance' ); ?>"
-				>
-					<span>🤖</span>
-					<span><?php esc_html_e( 'AI', 'fp-seo-performance' ); ?></span>
-				</button>
-			</div>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #6b7280;">📊 Medio-Basso impatto (+6%)</strong> - URL della pagina (dopo il dominio). Breve, con keyword, solo lowercase e trattini. Es: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 10px;">dominio.it/<strong>questo-e-lo-slug</strong></code>
-			</p>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Render Excerpt field.
-	 *
-	 * @param WP_Post $post Current post.
-	 */
-	private function render_excerpt_field( WP_Post $post ): void {
-		?>
-		<!-- Riassunto (Excerpt) -->
-		<div style="position: relative;">
-			<label for="fp-seo-excerpt" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">📋</span>
-					<?php esc_html_e( 'Riassunto (Excerpt)', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #3b82f6; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+9%</span>
-				</span>
-				<span id="fp-seo-excerpt-counter" style="font-size: 12px; font-weight: 600; color: #6b7280;">0/150</span>
-			</label>
-			<textarea 
-				id="fp-seo-excerpt" 
-				name="fp_seo_excerpt"
-				placeholder="<?php esc_attr_e( 'es: Breve riassunto del contenuto. Usato come fallback per meta description se non compilata. 100-150 caratteri ottimali.', 'fp-seo-performance' ); ?>"
-				maxlength="300"
-				rows="3"
-				aria-label="<?php esc_attr_e( 'Riassunto - Excerpt usato come fallback meta description', 'fp-seo-performance' ); ?>"
-				style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #3b82f6; border-radius: 8px; background: #fff; resize: vertical; line-height: 1.5; transition: all 0.2s ease;"
-				data-fp-seo-excerpt
-			><?php echo esc_textarea( html_entity_decode( $post->post_excerpt, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ); ?></textarea>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #3b82f6;">🎯 Medio impatto (+9%)</strong> - Riassunto breve del contenuto. Usato come fallback se Meta Description è vuota. Appare anche in archivi/elenchi. Ottimale: 100-150 caratteri.
-			</p>
-		</div>
-		<?php
-	}
-
-	/**
-	 * Render Keywords section (Focus and Secondary).
-	 *
-	 * @param WP_Post $post Current post.
-	 */
-	private function render_keywords_section( WP_Post $post ): void {
-		// DISABLED: Cache clearing interferes with WordPress's post object
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
-		
-		$focus_keyword_value = get_post_meta( $post->ID, self::META_FOCUS_KEYWORD, true );
-		$secondary_keywords_value = get_post_meta( $post->ID, self::META_SECONDARY_KEYWORDS, true );
-		
-		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $focus_keyword_value ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_FOCUS_KEYWORD ) );
-			if ( $db_value !== null ) {
-				$focus_keyword_value = $db_value;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'render_keywords_section - fallback DB query found focus keyword', array(
-						'post_id' => $post->ID,
-						'focus_keyword' => $focus_keyword_value,
-					) );
-				}
-			}
-		}
-		
-		if ( empty( $secondary_keywords_value ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_SECONDARY_KEYWORDS ) );
-			if ( $db_value !== null ) {
-				$unserialized = maybe_unserialize( $db_value );
-				$secondary_keywords_value = is_array( $unserialized ) ? $unserialized : $db_value;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'render_keywords_section - fallback DB query found secondary keywords', array(
-						'post_id' => $post->ID,
-					) );
-				}
-			}
-		}
-		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'render_keywords_section - final values', array(
-				'post_id' => $post->ID,
-				'focus_keyword' => $focus_keyword_value ?: 'empty',
-				'secondary_keywords' => is_array( $secondary_keywords_value ) ? implode( ', ', $secondary_keywords_value ) : ( $secondary_keywords_value ?: 'empty' ),
-			) );
-		}
-		?>
-		<!-- Focus Keyword -->
-		<div style="position: relative;">
-			<label for="fp-seo-focus-keyword" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">🔑</span>
-					<?php esc_html_e( 'Focus Keyword (Principale)', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #3b82f6; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+8%</span>
-				</span>
-			</label>
-			<input 
-				type="text" 
-				id="fp-seo-focus-keyword" 
-				name="fp_seo_focus_keyword"
-				value="<?php echo esc_attr( $focus_keyword_value ); ?>"
-				placeholder="<?php esc_attr_e( 'es: seo wordpress, ottimizzazione motori ricerca', 'fp-seo-performance' ); ?>"
-				aria-label="<?php esc_attr_e( 'Focus Keyword - Parola chiave principale per ottimizzazione SEO', 'fp-seo-performance' ); ?>"
-				aria-describedby="fp-seo-focus-keyword-hint"
-				style="width: 100%; padding: 10px 14px; font-size: 14px; border: 2px solid #3b82f6; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-				data-fp-seo-focus-keyword
-			/>
-			<span id="fp-seo-focus-keyword-hint" class="screen-reader-text">
-				<?php esc_html_e( 'Inserisci la parola chiave principale che vuoi ottimizzare per questo contenuto. Verrà analizzata nei title, meta description e contenuto.', 'fp-seo-performance' ); ?>
-			</span>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #3b82f6;">🎯 Medio impatto (+8%)</strong> - Keyword principale che guida l'analisi SEO. Usala nel title, description e contenuto.
-			</p>
-		</div>
-		
-		<!-- Secondary Keywords -->
-		<div style="position: relative;">
-			<label for="fp-seo-secondary-keywords" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
-				<span style="display: flex; align-items: center; gap: 8px;">
-					<span style="font-size: 16px;">🔐</span>
-					<?php esc_html_e( 'Secondary Keywords', 'fp-seo-performance' ); ?>
-					<span style="display: inline-flex; padding: 2px 8px; background: #6b7280; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">+5%</span>
-				</span>
-			</label>
-			<input 
-				type="text" 
-				id="fp-seo-secondary-keywords" 
-				name="fp_seo_secondary_keywords"
-				value="<?php echo esc_attr( is_array( $secondary_keywords_value ) ? implode( ', ', $secondary_keywords_value ) : ( $secondary_keywords_value ?: '' ) ); ?>"
-				placeholder="<?php esc_attr_e( 'es: plugin seo, guida ottimizzazione, wordpress performance (separate con virgola)', 'fp-seo-performance' ); ?>"
-				aria-label="<?php esc_attr_e( 'Keyword Secondarie - Separate con virgola', 'fp-seo-performance' ); ?>"
-				aria-describedby="fp-seo-secondary-keywords-hint"
-				style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #9ca3af; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
-				data-fp-seo-secondary-keywords
-			/>
-			<span id="fp-seo-secondary-keywords-hint" class="screen-reader-text">
-				<?php esc_html_e( 'Inserisci keyword secondarie separate da virgola. Aiutano l\'analisi a valutare la copertura semantica del contenuto.', 'fp-seo-performance' ); ?>
-			</span>
-			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-				<strong style="color: #6b7280;">📊 Basso-Medio impatto (+5%)</strong> - Keyword correlate per copertura semantica. Separate con virgola.
-			</p>
-		</div>
-		<?php
-	}
+	// Metodi render_seo_title_field, render_meta_description_field, render_slug_field, 
+	// render_excerpt_field, render_keywords_section rimossi - ora gestiti da SerpFieldsRenderer
 
 	/**
 	 * Render Analysis section.
@@ -1585,26 +1313,13 @@ class MetaboxRenderer {
 	}
 
 	/**
-	 * Render Images Management section.
+	 * Render Images Management section - REMOVED
 	 *
 	 * @param WP_Post $post Current post.
 	 */
 	private function render_images_section( WP_Post $post ): void {
-		// CRITICAL: Do NOT extract images during initial rendering
-		// Images will be loaded lazily via AJAX to avoid any interference
-		Logger::info( 'FP SEO: render_images_section called (lazy-loaded)', array(
-			'post_id' => $post->ID,
-			'has_content' => ! empty( $post->post_content ),
-		) );
-		
-		// Get AJAX URL and nonce for lazy loading
-		$ajax_url = admin_url( 'admin-ajax.php' );
-		// Use the nonce action string directly (cannot access private constant)
-		$nonce = wp_create_nonce( 'fp_seo_performance_meta' );
-		$post_id = $post->ID;
-		
-		?>
-		<!-- Section: Images Optimization -->
+		// Images section completely removed - no longer managing images
+		return;
 		<div class="fp-seo-performance-metabox__section" style="border-left: 4px solid #8b5cf6;">
 			<h4 class="fp-seo-performance-metabox__section-heading" style="display: flex; justify-content: space-between; align-items: center;">
 				<span style="display: flex; align-items: center; gap: 8px;">
@@ -1826,31 +1541,16 @@ class MetaboxRenderer {
 	}
 	
 	/**
-	 * Legacy method to render image items (used by render_images_section_content).
-	 * 
-	 * This is kept separate to avoid interference with lazy loading.
+	 * Legacy method to render image items - REMOVED
 	 *
 	 * @param WP_Post $post Post object.
 	 * @param array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}> $images Images array.
 	 * @return void
 	 */
 	private function render_image_items_legacy( WP_Post $post, array $images ): void {
-		if ( empty( $images ) ) {
-			return;
-		}
-		
-		// Get featured image ID
-		$featured_thumbnail_id = get_post_thumbnail_id( $post->ID );
-		
-		foreach ( $images as $index => $image ) :
-			if ( empty( $image['src'] ) ) {
-				continue;
-			}
-			
-			$is_featured = false;
-			if ( $featured_thumbnail_id && ! empty( $image['attachment_id'] ) ) {
-				$is_featured = ( (int) $image['attachment_id'] === (int) $featured_thumbnail_id );
-			}
+		// Image rendering removed
+		return;
+		// Image rendering removed - no longer managing images
 			
 			$preview_url = $image['src'];
 			if ( strpos( $preview_url, 'http' ) !== 0 ) {
@@ -1985,17 +1685,14 @@ class MetaboxRenderer {
 	}
 
 	/**
-	 * Extract all images from post content.
+	 * Extract all images from post content - REMOVED
 	 *
 	 * @param WP_Post $post Current post.
 	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
 	 */
 	private function extract_images_from_content( WP_Post $post ): array {
-		// Verifica che DOMDocument sia disponibile
-		if ( ! class_exists( 'DOMDocument' ) ) {
-			Logger::error( 'FP SEO: DOMDocument class not available for image extraction' );
-			return array();
-		}
+		// Image extraction removed - no longer managing images
+		return array();
 
 		// DISABLED: Cache clearing and post refresh interferes with WordPress's post object
 		// WordPress manages its own cache, we should not clear it during rendering
@@ -2050,28 +1747,7 @@ class MetaboxRenderer {
 			'content_empty' => empty( $content ),
 			) );
 		
-		// First, add featured image if available (most important for SEO)
-		try {
-		$featured_image = $this->get_featured_image_data( $post->ID );
-		if ( ! empty( $featured_image ) && ! empty( $featured_image['src'] ) ) {
-			$images[] = $featured_image;
-			$seen_srcs[ $featured_image['src'] ] = true;
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'extract_images_from_content - Featured image added', array(
-					'post_id' => $post->ID,
-					'featured_image_src' => $featured_image['src'],
-					'featured_image_id' => $featured_image['attachment_id'] ?? null,
-				) );
-			}
-			}
-		} catch ( \Throwable $e ) {
-			Logger::error( 'FP SEO: Error getting featured image data', array(
-				'error' => $e->getMessage(),
-				'post_id' => $post->ID,
-			) );
-			// Continua senza featured image
-		}
+		// Featured image extraction removed - no longer adding featured images
 		
 		if ( empty( $content ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -2660,12 +2336,14 @@ class MetaboxRenderer {
 	}
 	
 	/**
-	 * Extract image IDs or URLs from an array (recursively).
+	 * Extract image IDs or URLs from an array (recursively) - REMOVED
 	 *
 	 * @param array $array Array to search.
 	 * @return array Array of image IDs or URLs found.
 	 */
 	private function extract_image_from_array( array $array ): array {
+		// Image extraction removed
+		return array();
 		$results = array();
 		foreach ( $array as $key => $value ) {
 			if ( is_array( $value ) ) {
@@ -2703,6 +2381,8 @@ class MetaboxRenderer {
 	 * @param array  $seen_srcs Seen sources array (passed by reference).
 	 */
 	private function process_meta_image_value( $value, string $meta_key, int $post_id, array &$images, array &$seen_srcs ): void {
+		// Image processing removed
+		return;
 		Logger::info( 'FP SEO: process_meta_image_value called', array(
 			'post_id' => $post_id,
 			'meta_key' => $meta_key,
@@ -3023,7 +2703,8 @@ class MetaboxRenderer {
 	 * @return void
 	 */
 	public function render_images_section_content( WP_Post $post, array $images = array() ): void {
-		// Use new isolated ImageExtractor (ONLY way to extract images - completely safe)
+		// Images section completely removed - no longer managing images
+		return;
 		// CRITICAL: Only extract images via AJAX, never during initial rendering
 		// This prevents interference with WordPress post loading
 		if ( empty( $images ) ) {
@@ -3031,7 +2712,8 @@ class MetaboxRenderer {
 			// During initial metabox rendering, images are loaded lazily via AJAX
 			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 				try {
-					$extractor = new ImageExtractor();
+					// ImageExtractor removed - no longer extracting images
+					// $extractor = new ImageExtractor(); // REMOVED
 					$force_refresh = isset( $_POST['force_refresh'] ) && $_POST['force_refresh'] === 'true';
 					$images = $extractor->extract( $post, $force_refresh );
 					
@@ -3639,12 +3321,14 @@ class MetaboxRenderer {
 	}
 
 	/**
-	 * Get attachment ID from image URL.
+	 * Get attachment ID from image URL - REMOVED
 	 *
 	 * @param string $url Image URL.
 	 * @return int|null Attachment ID or null if not found.
 	 */
 	private function get_attachment_id_from_url( string $url ): ?int {
+		// Image attachment handling removed
+		return null;
 		// Remove query strings
 		$url = strtok( $url, '?' );
 		
@@ -3689,23 +3373,68 @@ class MetaboxRenderer {
 	}
 
 	/**
-	 * Get featured image data for a post.
-	 *
-	 * Uses modern WordPress APIs to get featured image with all metadata.
+	 * Get featured image data for a post - REMOVED
 	 *
 	 * @param int $post_id Post ID.
 	 * @return array{src: string, alt: string, title: string, description: string, attachment_id: int|null}|null Featured image data or null if not set.
 	 */
 	private function get_featured_image_data( int $post_id ): ?array {
-		// Get featured image attachment ID using modern WordPress API
+		// Featured image handling removed
+		return null;
+		// Clear cache first to ensure we get the latest thumbnail
+		clean_post_cache( $post_id );
 		$thumbnail_id = get_post_thumbnail_id( $post_id );
+		
+		// If not found via API, try direct DB query to bypass cache completely
+		// This handles race conditions where image was just set but cache isn't updated yet
+		if ( ! $thumbnail_id || $thumbnail_id <= 0 ) {
+			global $wpdb;
+			$thumbnail_id = $wpdb->get_var( $wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_thumbnail_id' LIMIT 1",
+				$post_id
+			) );
+			
+			if ( $thumbnail_id ) {
+				$thumbnail_id = (int) $thumbnail_id;
+				// If found in DB but not in cache, update cache for consistency
+				if ( $thumbnail_id > 0 ) {
+					// Verify attachment exists before using it
+					$attachment_exists = $wpdb->get_var( $wpdb->prepare(
+						"SELECT ID FROM {$wpdb->posts} WHERE ID = %d AND post_type = 'attachment' LIMIT 1",
+						$thumbnail_id
+					) );
+					
+					if ( $attachment_exists ) {
+						// Update cache for next time
+						update_post_meta( $post_id, '_thumbnail_id', $thumbnail_id );
+						clean_post_cache( $post_id );
+						
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							Logger::debug( 'get_featured_image_data - Found thumbnail via DB query', array( 
+								'post_id' => $post_id,
+								'thumbnail_id' => $thumbnail_id 
+							) );
+						}
+					} else {
+						// Attachment doesn't exist, invalid thumbnail ID
+						$thumbnail_id = null;
+					}
+				}
+			}
+		}
 		
 		if ( ! $thumbnail_id || $thumbnail_id <= 0 ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'get_featured_image_data - No thumbnail ID', array( 'post_id' => $post_id ) );
+				Logger::debug( 'get_featured_image_data - No thumbnail ID found (checked both cache and DB)', array( 
+					'post_id' => $post_id,
+					'checked_db' => true
+				) );
 			}
 			return null;
 		}
+		
+		// Clear attachment cache to ensure fresh data
+		clean_post_cache( $thumbnail_id );
 		
 		// Get image URL - usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
 		$image_url = wp_get_attachment_url( $thumbnail_id );
@@ -3722,16 +3451,34 @@ class MetaboxRenderer {
 		// Get attachment post for metadata
 		$attachment = get_post( $thumbnail_id );
 		
+		if ( ! $attachment ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'get_featured_image_data - Attachment not found', array( 
+					'post_id' => $post_id,
+					'thumbnail_id' => $thumbnail_id 
+				) );
+			}
+			return null;
+		}
+		
 		// Get alt text from attachment meta
 		$alt = get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) ?: '';
 		
 		// Get title from attachment post title
-		$title = $attachment ? $attachment->post_title : '';
+		$title = $attachment->post_title ?: '';
 		
 		// Get description from attachment content or excerpt
-		$description = '';
-		if ( $attachment ) {
-			$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+		$description = $attachment->post_content ?: $attachment->post_excerpt ?: '';
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			Logger::debug( 'get_featured_image_data - Featured image data retrieved', array( 
+				'post_id' => $post_id,
+				'thumbnail_id' => $thumbnail_id,
+				'image_url' => $image_url,
+				'has_alt' => ! empty( $alt ),
+				'has_title' => ! empty( $title ),
+				'has_description' => ! empty( $description )
+			) );
 		}
 		
 		// Check for saved custom data from post meta

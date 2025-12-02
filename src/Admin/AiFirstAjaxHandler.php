@@ -13,6 +13,9 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Admin\Helpers\CacheHelper;
+use FP\SEO\Admin\Traits\AjaxValidationTrait;
+use FP\SEO\AI\HowToGenerator;
 use FP\SEO\AI\QAPairExtractor;
 use FP\SEO\AI\ConversationalVariants;
 use FP\SEO\AI\EmbeddingsGenerator;
@@ -23,6 +26,7 @@ use FP\SEO\GEO\MultiModalOptimizer;
  * Handles AJAX for AI-first features
  */
 class AiFirstAjaxHandler {
+	use AjaxValidationTrait;
 
 	/**
 	 * Register AJAX hooks
@@ -43,19 +47,15 @@ class AiFirstAjaxHandler {
 	 * Handle Q&A generation request
 	 */
 	public function handle_generate_qa(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
 
+		$post_id = $validation['post_id'];
+		$post    = $validation['post'];
+
 		try {
-			$post = get_post( $post_id );
-			if ( ! $post ) {
-				wp_send_json_error( array( 'message' => 'Post not found' ), 404 );
-			}
 			
 			// Debug logging
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -89,14 +89,7 @@ class AiFirstAjaxHandler {
 			) );
 
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'AiFirstAjaxHandler::handle_generate_qa - Error', array(
-					'post_id' => $post_id,
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-				) );
-			}
-			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
+			$this->handle_ajax_exception( $e, $post_id, 'AiFirstAjaxHandler::handle_generate_qa' );
 		}
 	}
 
@@ -104,19 +97,15 @@ class AiFirstAjaxHandler {
 	 * Handle FAQ Schema generation request
 	 */
 	public function handle_generate_faq(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
 
+		$post_id = $validation['post_id'];
+		$post    = $validation['post'];
+
 		try {
-			$post = get_post( $post_id );
-			if ( ! $post ) {
-				wp_send_json_error( array( 'message' => 'Post not found' ), 404 );
-			}
 
 			// Generate Q&A pairs using AI
 			$extractor = new QAPairExtractor();
@@ -145,12 +134,7 @@ class AiFirstAjaxHandler {
 			// Save FAQ Schema data
 			if ( ! empty( $faq_questions ) ) {
 				update_post_meta( $post_id, '_fp_seo_faq_questions', $faq_questions );
-				
-				// Clear cache
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'post_meta' );
-				$cache_key = 'fp_seo_schemas_' . $post_id . '_' . get_current_blog_id();
-				wp_cache_delete( $cache_key );
+				CacheHelper::clear_schema_cache( $post_id );
 			}
 
 			wp_send_json_success( array(
@@ -160,14 +144,7 @@ class AiFirstAjaxHandler {
 			) );
 
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'AiFirstAjaxHandler::handle_generate_faq - Error', array(
-					'post_id' => $post_id,
-					'error'   => $e->getMessage(),
-					'trace'   => $e->getTraceAsString(),
-				) );
-			}
-			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
+			$this->handle_ajax_exception( $e, $post_id, 'AiFirstAjaxHandler::handle_generate_faq' );
 		}
 	}
 
@@ -175,164 +152,30 @@ class AiFirstAjaxHandler {
 	 * Handle HowTo Schema generation request
 	 */
 	public function handle_generate_howto(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
 
+		$post_id = $validation['post_id'];
+		$post    = $validation['post'];
+
 		try {
-			$post = get_post( $post_id );
-			if ( ! $post ) {
-				wp_send_json_error( array( 'message' => 'Post not found' ), 404 );
-			}
-
-			// Generate HowTo steps using AI
-			$openai_client = new \FP\SEO\Integrations\OpenAiClient();
-			
-			if ( ! $openai_client->is_configured() ) {
-				wp_send_json_error( array( 'message' => 'OpenAI API key non configurata. Vai in Impostazioni > FP SEO.' ), 400 );
-			}
-
-			// Prepare content
-			$content = $post->post_content;
-			if ( strpos( $content, '[vc_' ) !== false ) {
-				if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
-					$wpbakery_text = \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $content );
-					if ( ! empty( $wpbakery_text ) ) {
-						$content = $wpbakery_text;
-					} else {
-						$content = do_shortcode( $content );
-					}
-				} else {
-					$content = do_shortcode( $content );
-				}
-			}
-			$content = wp_strip_all_tags( $content );
-			$content = trim( $content );
-
-			if ( empty( $content ) ) {
-				wp_send_json_error( array( 'message' => 'Il contenuto del post è vuoto. Aggiungi contenuto prima di generare gli step.' ), 400 );
-			}
-
-			// Build prompt for HowTo steps generation
-			$title = $post->post_title;
-			$prompt = sprintf(
-				'Analizza il seguente contenuto e genera una guida step-by-step in formato HowTo Schema.
-
-Titolo: %s
-
-Contenuto:
-%s
-
-Istruzioni:
-1. Estrai 4-8 step logici e sequenziali dal contenuto
-2. Ogni step deve avere:
-   - Un nome chiaro e conciso (max 60 caratteri) che inizia con un verbo d\'azione (es: "Installa...", "Apri...", "Clicca...", "Inserisci...")
-   - Una descrizione dettagliata (50-200 parole) che spiega come completare lo step
-3. Gli step devono essere in ordine logico e sequenziale
-4. Ogni step deve essere autonomo e comprensibile
-5. Usa un linguaggio chiaro e diretto
-
-Rispondi SOLO con JSON valido in questo formato:
-{
-  "steps": [
-    {
-      "name": "Nome dello step (verbo d\'azione)",
-      "text": "Descrizione dettagliata e completa dello step (50-200 parole)"
-    }
-  ]
-}
-
-Rispondi SOLO con il JSON, senza testo aggiuntivo.',
-				esc_html( $title ),
-				esc_html( mb_substr( $content, 0, 4000 ) ) // Limit content to avoid token limits
-			);
-
-			// Generate with AI
-			$response = $openai_client->generate_content( $prompt, array(
-				'model'                => 'gpt-4o-mini',
-				'temperature'          => 0.3,
-				'max_completion_tokens' => 2000,
-			) );
-
-			// Parse response
-			$response = preg_replace( '/```json\s*/', '', $response );
-			$response = preg_replace( '/```\s*$/', '', $response );
-			$response = trim( $response );
-
-			$data = json_decode( $response, true );
-
-			if ( ! is_array( $data ) || ! isset( $data['steps'] ) || ! is_array( $data['steps'] ) ) {
-				wp_send_json_error( array( 'message' => 'Errore nel parsing della risposta AI. Riprova.' ), 500 );
-			}
-
-			// Convert to HowTo format
-			$howto_steps = array();
-			foreach ( $data['steps'] as $step ) {
-				if ( ! isset( $step['name'] ) || ! isset( $step['text'] ) ) {
-					continue;
-				}
-
-				$name = sanitize_text_field( $step['name'] );
-				$text = wp_kses_post( $step['text'] );
-
-				if ( empty( $name ) || empty( $text ) ) {
-					continue;
-				}
-
-				$howto_steps[] = array(
-					'name' => $name,
-					'text' => $text,
-					'url'  => '', // Image URL is optional, leave empty
-				);
-			}
-
-			if ( empty( $howto_steps ) ) {
-				wp_send_json_error( array( 'message' => 'Nessuno step generato. Assicurati che il contenuto contenga istruzioni o procedure.' ), 400 );
-			}
-
-			// Get existing HowTo data
-			$howto_data = get_post_meta( $post_id, '_fp_seo_howto', true );
-			if ( ! is_array( $howto_data ) ) {
-				$howto_data = array(
-					'name'        => '',
-					'description' => '',
-					'total_time'  => '',
-					'steps'       => array(),
-				);
-			}
-
-			// Merge with existing steps (append new steps)
-			$howto_data['steps'] = array_merge( $howto_data['steps'] ?? array(), $howto_steps );
-
-			// Save HowTo data
-			update_post_meta( $post_id, '_fp_seo_howto', $howto_data );
+			$generator = new HowToGenerator();
+			$result    = $generator->generate_steps( $post_id, $post );
 
 			// Clear cache
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'post_meta' );
-			$cache_key = 'fp_seo_schemas_' . $post_id . '_' . get_current_blog_id();
-			wp_cache_delete( $cache_key );
+			CacheHelper::clear_schema_cache( $post_id );
 
 			wp_send_json_success( array(
-				'message'     => sprintf( 'Generate %d step della guida', count( $howto_steps ) ),
-				'steps'       => $howto_steps,
-				'total'       => count( $howto_steps ),
-				'all_steps'   => $howto_data['steps'], // Return all steps (existing + new)
+				'message'   => sprintf( 'Generate %d step della guida', count( $result['steps'] ) ),
+				'steps'     => $result['steps'],
+				'total'     => count( $result['steps'] ),
+				'all_steps' => $result['all_steps'], // Return all steps (existing + new)
 			) );
 
 		} catch ( \Exception $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'AiFirstAjaxHandler::handle_generate_howto - Error', array(
-					'post_id' => $post_id,
-					'error'   => $e->getMessage(),
-					'trace'   => $e->getTraceAsString(),
-				) );
-			}
-			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
+			$this->handle_ajax_exception( $e, $post_id, 'AiFirstAjaxHandler::handle_generate_howto' );
 		}
 	}
 
@@ -340,13 +183,12 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * Handle variants generation request
 	 */
 	public function handle_generate_variants(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
+
+		$post_id = $validation['post_id'];
 
 		try {
 			$generator = new ConversationalVariants();
@@ -366,13 +208,12 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * Handle entities generation request
 	 */
 	public function handle_generate_entities(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
+
+		$post_id = $validation['post_id'];
 
 		try {
 			$graph = new EntityGraph();
@@ -397,13 +238,12 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * Handle embeddings generation request
 	 */
 	public function handle_generate_embeddings(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
+
+		$post_id = $validation['post_id'];
 
 		try {
 			$generator = new EmbeddingsGenerator();
@@ -428,40 +268,20 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * Handle image optimization request
 	 */
 	public function handle_optimize_images(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
-		}
-
-		try {
-			$optimizer = new MultiModalOptimizer();
-			$data      = $optimizer->optimize_images( $post_id );
-
-			wp_send_json_success( array(
-				'message'            => sprintf( 'Optimized %d images', $data['total_images'] ?? 0 ),
-				'total_images'       => $data['total_images'] ?? 0,
-				'optimization_score' => $data['optimization_score'] ?? 0,
-			) );
-
-		} catch ( \Exception $e ) {
-			wp_send_json_error( array( 'message' => $e->getMessage() ), 500 );
-		}
+		// Image optimization removed - no longer managing images
+		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
 	}
 
 	/**
 	 * Handle clear cache request
 	 */
 	public function handle_clear_cache(): void {
-		check_ajax_referer( 'fp_seo_ai_first', 'nonce' );
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid post ID or insufficient permissions' ), 403 );
+		$validation = $this->validate_ajax_post_request( 'fp_seo_ai_first' );
+		if ( null === $validation ) {
+			return; // Error already sent
 		}
+
+		$post_id = $validation['post_id'];
 
 		// Clear all AI-first caches
 		delete_post_meta( $post_id, '_fp_seo_qa_pairs' );

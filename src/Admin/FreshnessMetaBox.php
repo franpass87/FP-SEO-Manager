@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Admin\Styles\FreshnessMetaBoxStylesManager;
 use FP\SEO\GEO\FreshnessSignals;
 use FP\SEO\Utils\PostTypes;
 
@@ -20,13 +21,17 @@ use FP\SEO\Utils\PostTypes;
  * Manages freshness settings metabox
  */
 class FreshnessMetaBox {
-
 	/**
 	 * Freshness signals instance
 	 *
 	 * @var FreshnessSignals
 	 */
 	private FreshnessSignals $freshness;
+
+	/**
+	 * @var FreshnessMetaBoxStylesManager|null
+	 */
+	private $styles_manager;
 
 	/**
 	 * Constructor
@@ -49,6 +54,10 @@ class FreshnessMetaBox {
 				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 1 );
 			}
 		}
+
+		// Initialize and register styles manager
+		$this->styles_manager = new FreshnessMetaBoxStylesManager();
+		$this->styles_manager->register_hooks();
 	}
 
 	/**
@@ -204,18 +213,6 @@ class FreshnessMetaBox {
 				</span>
 			</p>
 		</div>
-
-		<style>
-		.fp-seo-freshness-metabox p {
-			margin: 12px 0;
-		}
-		.fp-seo-freshness-metabox .description {
-			display: block;
-			margin-top: 5px;
-			font-size: 12px;
-			color: #6b7280;
-		}
-		</style>
 		<?php
 	}
 

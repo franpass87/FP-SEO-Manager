@@ -247,48 +247,22 @@ class AutoSeoOptimizer {
 
 		// Update post title if it's auto-generated and we have an SEO title suggestion
 		// (Only for new posts with default title)
-		// IMPORTANT: Remove and re-add hook to prevent infinite loop
 		if ( ! empty( $ai_data['seo_title'] ) && $post->post_title === 'Auto Draft' ) {
-			// Remove our hooks temporarily (post-type-specific only)
-			foreach ( $supported_types as $post_type ) {
-				remove_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20 );
-			}
-			
-			wp_update_post( array(
-				'ID'         => $post_id,
-				'post_title' => sanitize_text_field( $ai_data['seo_title'] ),
-			) );
-			
-			// Re-add our hooks (post-type-specific only)
-			foreach ( $supported_types as $post_type ) {
-				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
-					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
-				}
-			}
-			
+			$this->update_post_without_hooks(
+				$post_id,
+				array( 'post_title' => sanitize_text_field( $ai_data['seo_title'] ) ),
+				$supported_types
+			);
 			$updated_fields[] = 'Post Title';
 		}
 
 		// Update slug if it's auto-generated (only for new posts)
-		// IMPORTANT: Remove and re-add hook to prevent infinite loop
 		if ( $post->post_name === sanitize_title( $post->post_title ) && ! empty( $ai_data['slug'] ) ) {
-			// Remove our hooks temporarily (post-type-specific only)
-			foreach ( $supported_types as $post_type ) {
-				remove_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20 );
-			}
-			
-			wp_update_post( array(
-				'ID'        => $post_id,
-				'post_name' => sanitize_title( $ai_data['slug'] ),
-			) );
-			
-			// Re-add our hooks (post-type-specific only)
-			foreach ( $supported_types as $post_type ) {
-				if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
-					add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
-				}
-			}
-			
+			$this->update_post_without_hooks(
+				$post_id,
+				array( 'post_name' => sanitize_title( $ai_data['slug'] ) ),
+				$supported_types
+			);
 			$updated_fields[] = 'URL Slug';
 		}
 
@@ -401,6 +375,33 @@ class AutoSeoOptimizer {
 		}
 
 		return $post_types;
+	}
+
+	/**
+	 * Update post while temporarily removing hooks to prevent infinite loops.
+	 *
+	 * IMPORTANT: Remove and re-add hook to prevent infinite loop.
+	 *
+	 * @param int                $post_id        Post ID.
+	 * @param array<string, mixed> $post_data     Post data to update.
+	 * @param array<string>     $supported_types Supported post types.
+	 * @return void
+	 */
+	private function update_post_without_hooks( int $post_id, array $post_data, array $supported_types ): void {
+		// Remove our hooks temporarily (post-type-specific only)
+		foreach ( $supported_types as $post_type ) {
+			remove_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20 );
+		}
+		
+		$post_data['ID'] = $post_id;
+		wp_update_post( $post_data );
+		
+		// Re-add our hooks (post-type-specific only)
+		foreach ( $supported_types as $post_type ) {
+			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ) ) ) {
+				add_action( 'save_post_' . $post_type, array( $this, 'maybe_auto_optimize' ), 20, 3 );
+			}
+		}
 	}
 }
 

@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Admin\Scripts\GeoMetaBoxScriptsManager;
+use FP\SEO\Admin\Styles\GeoMetaBoxStylesManager;
 use FP\SEO\Utils\Options;
 use FP\SEO\Utils\PostTypes;
 
@@ -18,6 +20,15 @@ use FP\SEO\Utils\PostTypes;
  * GEO metabox with claims editor
  */
 class GeoMetaBox {
+	/**
+	 * @var GeoMetaBoxStylesManager|null
+	 */
+	private $styles_manager;
+
+	/**
+	 * @var GeoMetaBoxScriptsManager|null
+	 */
+	private $scripts_manager;
 
 	/**
 	 * Register hooks
@@ -35,6 +46,11 @@ class GeoMetaBox {
 		}
 		
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+
+		// Initialize and register styles and scripts managers
+		$this->styles_manager = new GeoMetaBoxStylesManager();
+		$this->styles_manager->register_hooks();
+		$this->scripts_manager = new GeoMetaBoxScriptsManager();
 	}
 
 	/**
@@ -189,64 +205,8 @@ class GeoMetaBox {
 		</script>
 
 		<script>
-		var fpSeoGeoClaimIndex = <?php echo count( $claims ); ?>;
-
-		function fpSeoGeoAddClaim() {
-			var template = document.getElementById('fp-seo-geo-claim-template').innerHTML;
-			var html = template.replace(/{INDEX}/g, fpSeoGeoClaimIndex);
-			
-			var list = document.getElementById('fp-seo-geo-claims-list');
-			var div = document.createElement('div');
-			div.innerHTML = html;
-			list.appendChild(div.firstChild);
-			
-			fpSeoGeoClaimIndex++;
-		}
-
-		function fpSeoGeoRemoveClaim(index) {
-			if (confirm('<?php esc_html_e( 'Remove this claim?', 'fp-seo-performance' ); ?>')) {
-				document.getElementById('fp-seo-geo-claim-' + index).remove();
-			}
-		}
-
-		function fpSeoGeoAddEvidence(claimIndex) {
-			var container = document.getElementById('fp-seo-geo-claim-' + claimIndex + '-evidence');
-			var evidenceIndex = container.children.length;
-			
-			var html = '<div class="fp-seo-geo-evidence-item" style="padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px;">';
-			html += '<input type="url" name="fp_seo_geo_claims[' + claimIndex + '][evidence][' + evidenceIndex + '][url]" placeholder="<?php esc_attr_e( 'Evidence URL', 'fp-seo-performance' ); ?>" class="regular-text" style="width: 100%; margin-bottom: 4px;" />';
-			html += '<input type="text" name="fp_seo_geo_claims[' + claimIndex + '][evidence][' + evidenceIndex + '][title]" placeholder="<?php esc_attr_e( 'Evidence Title', 'fp-seo-performance' ); ?>" class="regular-text" style="width: 100%; margin-bottom: 4px;" />';
-			html += '<input type="text" name="fp_seo_geo_claims[' + claimIndex + '][evidence][' + evidenceIndex + '][publisher]" placeholder="<?php esc_attr_e( 'Publisher', 'fp-seo-performance' ); ?>" style="width: 32%; margin-right: 1%;" />';
-			html += '<input type="text" name="fp_seo_geo_claims[' + claimIndex + '][evidence][' + evidenceIndex + '][author]" placeholder="<?php esc_attr_e( 'Author', 'fp-seo-performance' ); ?>" style="width: 32%; margin-right: 1%;" />';
-			html += '<input type="date" name="fp_seo_geo_claims[' + claimIndex + '][evidence][' + evidenceIndex + '][accessed]" placeholder="<?php esc_attr_e( 'Accessed Date', 'fp-seo-performance' ); ?>" style="width: 32%;" />';
-			html += '</div>';
-			
-			container.insertAdjacentHTML('beforeend', html);
-		}
+		<?php echo $this->scripts_manager->get_inline_js( count( $claims ) ); ?>
 		</script>
-
-		<style>
-		.fp-seo-geo-claim {
-			padding: 16px;
-			background: #fff;
-			border: 1px solid #c3c4c7;
-			border-radius: 4px;
-			margin-bottom: 12px;
-		}
-		.fp-seo-geo-claim-header {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			margin-bottom: 12px;
-			padding-bottom: 8px;
-			border-bottom: 1px solid #ddd;
-		}
-		.fp-seo-geo-evidence-container {
-			margin-top: 12px;
-			padding-top: 12px;
-			border-top: 1px solid #ddd;
-		}
-		</style>
 		<?php
 	}
 

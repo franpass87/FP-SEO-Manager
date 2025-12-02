@@ -11,6 +11,10 @@ declare(strict_types=1);
 
 namespace FP\SEO\Keywords;
 
+use FP\SEO\Keywords\Handlers\KeywordsAjaxHandler;
+use FP\SEO\Keywords\Scripts\KeywordsMetaboxScriptsManager;
+use FP\SEO\Keywords\Styles\KeywordsMetaboxStylesManager;
+use FP\SEO\Keywords\Styles\KeywordsPageStylesManager;
 use FP\SEO\Utils\Cache;
 use FP\SEO\Utils\PerformanceConfig;
 
@@ -18,6 +22,25 @@ use FP\SEO\Utils\PerformanceConfig;
  * Handles multiple focus keywords management and optimization.
  */
 class MultipleKeywordsManager {
+	/**
+	 * @var KeywordsMetaboxStylesManager|null
+	 */
+	private $metabox_styles_manager;
+
+	/**
+	 * @var KeywordsMetaboxScriptsManager|null
+	 */
+	private $metabox_scripts_manager;
+
+	/**
+	 * @var KeywordsPageStylesManager|null
+	 */
+	private $page_styles_manager;
+
+	/**
+	 * @var KeywordsAjaxHandler|null
+	 */
+	private $ajax_handler;
 
 	/**
 	 * Keywords cache group.
@@ -50,10 +73,19 @@ class MultipleKeywordsManager {
 			}
 		}
 		
-		add_action( 'wp_ajax_fp_seo_analyze_keywords', array( $this, 'ajax_analyze_keywords' ) );
-		add_action( 'wp_ajax_fp_seo_suggest_keywords', array( $this, 'ajax_suggest_keywords' ) );
-		add_action( 'wp_ajax_fp_seo_optimize_keywords', array( $this, 'ajax_optimize_keywords' ) );
+		// Register AJAX handler
+		$this->ajax_handler = new KeywordsAjaxHandler( $this );
+		$this->ajax_handler->register();
+
 		add_action( 'wp_head', array( $this, 'output_keywords_meta' ) );
+
+		// Initialize and register styles and scripts managers
+		$this->metabox_styles_manager = new KeywordsMetaboxStylesManager();
+		$this->metabox_styles_manager->register_hooks();
+		$this->metabox_scripts_manager = new KeywordsMetaboxScriptsManager();
+		$this->metabox_scripts_manager->register_hooks();
+		$this->page_styles_manager = new KeywordsPageStylesManager();
+		$this->page_styles_manager->register_hooks();
 	}
 
 	/**
@@ -441,9 +473,7 @@ class MultipleKeywordsManager {
 				</div>
 			</div>
 		</div>
-
-		<style>
-		.fp-seo-keywords-metabox {
+		<?php
 			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 		}
 		
@@ -678,130 +708,6 @@ class MultipleKeywordsManager {
 			flex: 1;
 			text-align: center;
 		}
-		</style>
-
-		<script>
-		jQuery(document).ready(function($) {
-			// Tab switching
-			$('.fp-seo-keywords-tab').on('click', function() {
-				var tab = $(this).data('tab');
-				$('.fp-seo-keywords-tab').removeClass('active');
-				$('.fp-seo-keywords-tab-content').removeClass('active');
-				$(this).addClass('active');
-				$('#' + tab).addClass('active');
-			});
-
-			// Add keyword functionality
-			function addKeyword(inputId, listId, nameAttr) {
-				$('#' + inputId).on('keypress', function(e) {
-					if (e.which === 13) { // Enter key
-						e.preventDefault();
-						addKeywordToList($(this).val(), listId, nameAttr);
-						$(this).val('');
-					}
-				});
-
-				$('#fp-seo-add-' + inputId.replace('fp-seo-', '').replace('-input', '') + '-keyword').on('click', function() {
-					var keyword = $('#' + inputId).val();
-					if (keyword.trim()) {
-						addKeywordToList(keyword, listId, nameAttr);
-						$('#' + inputId).val('');
-					}
-				});
-			}
-
-			function addKeywordToList(keyword, listId, nameAttr) {
-				if (!keyword.trim()) return;
-
-				var keywordItem = $('<div class="fp-seo-keyword-item">' +
-					'<input type="hidden" name="' + nameAttr + '[]" value="' + keyword + '">' +
-					'<span class="fp-seo-keyword-text">' + keyword + '</span>' +
-					'<button type="button" class="fp-seo-remove-keyword">×</button>' +
-					'</div>');
-
-				$('#' + listId).append(keywordItem);
-			}
-
-			// Remove keyword functionality
-			$(document).on('click', '.fp-seo-remove-keyword', function() {
-				$(this).closest('.fp-seo-keyword-item').remove();
-			});
-
-			// Use suggestion functionality
-			$(document).on('click', '.fp-seo-use-suggestion', function() {
-				var keyword = $(this).closest('.fp-seo-suggestion-item').data('keyword');
-				var currentTab = $('.fp-seo-keywords-tab.active').data('tab');
-				
-				switch (currentTab) {
-					case 'primary':
-						$('#fp-seo-primary-keyword').val(keyword);
-						break;
-					case 'secondary':
-						addKeywordToList(keyword, 'fp-seo-secondary-keywords-list', 'fp_seo_secondary_keywords');
-						break;
-					case 'long-tail':
-						addKeywordToList(keyword, 'fp-seo-long-tail-keywords-list', 'fp_seo_long_tail_keywords');
-						break;
-					case 'semantic':
-						addKeywordToList(keyword, 'fp-seo-semantic-keywords-list', 'fp_seo_semantic_keywords');
-						break;
-				}
-			});
-
-			// Initialize add keyword functionality
-			addKeyword('fp-seo-secondary-keyword-input', 'fp-seo-secondary-keywords-list', 'fp_seo_secondary_keywords');
-			addKeyword('fp-seo-long-tail-keyword-input', 'fp-seo-long-tail-keywords-list', 'fp_seo_long_tail_keywords');
-			addKeyword('fp-seo-semantic-keyword-input', 'fp-seo-semantic-keywords-list', 'fp_seo_semantic_keywords');
-
-			// Analyze keywords
-			$('#fp-seo-analyze-keywords').on('click', function() {
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: 'fp_seo_analyze_keywords',
-						post_id: <?php echo get_the_ID(); ?>,
-						nonce: '<?php echo wp_create_nonce( 'fp_seo_keywords_nonce' ); ?>'
-					},
-					success: function(response) {
-						if (response.success) {
-							location.reload(); // Refresh to show analysis
-						} else {
-							alert('Error: ' + response.data);
-						}
-					}
-				});
-			});
-
-			// Optimize keywords
-			$('#fp-seo-optimize-keywords').on('click', function() {
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: 'fp_seo_optimize_keywords',
-						post_id: <?php echo get_the_ID(); ?>,
-						nonce: '<?php echo wp_create_nonce( 'fp_seo_keywords_nonce' ); ?>'
-					},
-					success: function(response) {
-						if (response.success) {
-							// Update fields with AI suggestions
-							if (response.data.primary) {
-								$('#fp-seo-primary-keyword').val(response.data.primary);
-							}
-							if (response.data.secondary) {
-								response.data.secondary.forEach(function(keyword) {
-									addKeywordToList(keyword, 'fp-seo-secondary-keywords-list', 'fp_seo_secondary_keywords');
-								});
-							}
-						} else {
-							alert('Error: ' + response.data);
-						}
-					}
-				});
-			});
-		});
-		</script>
 		<?php
 	}
 
@@ -1108,170 +1014,6 @@ class MultipleKeywordsManager {
 				</div>
 			</div>
 		</div>
-
-		<style>
-		/* Container principale */
-		.fp-seo-keywords-wrap {
-			max-width: 1400px;
-			margin: 0 auto;
-		}
-
-		.fp-seo-keywords-wrap > .description {
-			font-size: 16px;
-			color: #666;
-			margin-bottom: 24px;
-		}
-
-		/* Banner introduttivo (riuso stili) */
-		.fp-seo-intro-banner {
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-			color: white;
-			padding: 30px;
-			border-radius: 12px;
-			margin: 20px 0 30px;
-			display: flex;
-			gap: 24px;
-			box-shadow: 0 8px 16px rgba(102, 126, 234, 0.2);
-		}
-
-		.fp-seo-intro-icon {
-			font-size: 48px;
-			line-height: 1;
-		}
-
-		.fp-seo-intro-content h2 {
-			color: white;
-			margin: 0 0 16px;
-			font-size: 24px;
-		}
-
-		.fp-seo-intro-content p {
-			margin: 0 0 16px;
-			font-size: 15px;
-			opacity: 0.95;
-		}
-
-		.fp-seo-intro-list {
-			margin: 0;
-			padding-left: 0;
-			list-style: none;
-		}
-
-		.fp-seo-intro-list li {
-			padding: 6px 0;
-			font-size: 14px;
-			opacity: 0.9;
-		}
-
-		.fp-seo-tip {
-			margin: 16px 0 0;
-			padding: 12px 16px;
-			background: rgba(255, 255, 255, 0.15);
-			border-radius: 6px;
-			font-size: 14px;
-		}
-
-		/* Dashboard */
-		.fp-seo-keywords-dashboard {
-			margin-top: 20px;
-		}
-		
-		/* Stats Grid */
-		.fp-seo-keywords-stats-grid {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-			gap: 20px;
-			margin-bottom: 32px;
-		}
-		
-		.fp-seo-stat-card {
-			background: white;
-			padding: 24px;
-			border-radius: 12px;
-			box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-			border: 2px solid #e5e7eb;
-			transition: all 0.3s ease;
-			text-align: center;
-		}
-
-		.fp-seo-stat-card:hover {
-			transform: translateY(-4px);
-			box-shadow: 0 8px 12px rgba(0,0,0,0.1);
-		}
-
-		.fp-seo-stat-icon {
-			font-size: 32px;
-			margin-bottom: 12px;
-		}
-
-		.fp-seo-stat-content {}
-
-		.fp-seo-stat-card h3 {
-			margin: 0 0 12px;
-			font-size: 14px;
-			color: #6b7280;
-			font-weight: 600;
-			text-transform: uppercase;
-			letter-spacing: 0.5px;
-		}
-
-		.fp-seo-stat-number {
-			display: block;
-			font-size: 42px;
-			font-weight: 700;
-			color: #2563eb;
-			line-height: 1;
-			margin-bottom: 8px;
-		}
-
-		.fp-seo-stat-desc {
-			margin: 0;
-			font-size: 13px;
-			color: #6b7280;
-		}
-
-		.fp-seo-tooltip-trigger {
-			display: inline-block;
-			margin-left: 4px;
-			cursor: help;
-			opacity: 0.7;
-			font-size: 12px;
-			transition: opacity 0.2s;
-		}
-
-		.fp-seo-tooltip-trigger:hover {
-			opacity: 1;
-		}
-
-		/* Analysis section */
-		.fp-seo-keywords-analysis {
-			background: white;
-			border-radius: 8px;
-			padding: 20px;
-			text-align: center;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-		}
-		
-		.fp-seo-stat-card h3 {
-			margin: 0 0 10px 0;
-			font-size: 14px;
-			color: #666;
-			text-transform: uppercase;
-		}
-		
-		.fp-seo-stat-number {
-			font-size: 32px;
-			font-weight: 600;
-			color: #0073aa;
-		}
-		
-		.fp-seo-keywords-analysis {
-			background: #fff;
-			border: 1px solid #ddd;
-			border-radius: 8px;
-			padding: 20px;
-		}
-		</style>
 		<?php
 	}
 
@@ -1432,81 +1174,7 @@ class MultipleKeywordsManager {
 		return $recommendations;
 	}
 
-	/**
-	 * AJAX handler for analyzing keywords.
-	 */
-	public function ajax_analyze_keywords(): void {
-		check_ajax_referer( 'fp_seo_keywords_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$keywords_data = $this->get_post_keywords( $post_id );
-		if ( empty( $keywords_data ) ) {
-			wp_send_json_error( 'No keywords found for this post' );
-		}
-
-		$analysis = $this->analyze_keywords_in_content( $post_id, $keywords_data );
-		
-		// Update keywords data with analysis
-		$keywords_data['keyword_density'] = $analysis['density'];
-		$keywords_data['keyword_positions'] = $analysis['positions'];
-		$keywords_data['last_analyzed'] = current_time( 'mysql' );
-		
-		update_post_meta( $post_id, '_fp_seo_multiple_keywords', $keywords_data );
-		Cache::delete( 'fp_seo_keywords_' . $post_id );
-
-		wp_send_json_success( array(
-			'message' => __( 'Keywords analyzed successfully', 'fp-seo-performance' ),
-			'analysis' => $analysis
-		) );
-	}
-
-	/**
-	 * AJAX handler for suggesting keywords.
-	 */
-	public function ajax_suggest_keywords(): void {
-		check_ajax_referer( 'fp_seo_keywords_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-		$type = sanitize_text_field( $_POST['type'] ?? 'all' );
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$suggestions = $this->get_keyword_suggestions( $post_id );
-		
-		if ( $type !== 'all' && isset( $suggestions[ $type ] ) ) {
-			$suggestions = array( $type => $suggestions[ $type ] );
-		}
-
-		wp_send_json_success( $suggestions );
-	}
-
-	/**
-	 * AJAX handler for optimizing keywords.
-	 */
-	public function ajax_optimize_keywords(): void {
-		check_ajax_referer( 'fp_seo_keywords_nonce', 'nonce' );
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-
-		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
-		}
-
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			wp_send_json_error( 'Post not found' );
-		}
-
-		$optimized = $this->optimize_keywords_with_ai( $post );
-		wp_send_json_success( $optimized );
-	}
+	// AJAX handlers removed - now handled by KeywordsAjaxHandler
 
 	/**
 	 * Optimize keywords with AI.

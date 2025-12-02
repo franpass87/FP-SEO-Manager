@@ -17,7 +17,7 @@ use FP\SEO\Analysis\Checks\FaqSchemaCheck;
 use FP\SEO\Analysis\Checks\H1PresenceCheck;
 use FP\SEO\Analysis\Checks\HeadingsStructureCheck;
 use FP\SEO\Analysis\Checks\HowToSchemaCheck;
-use FP\SEO\Analysis\Checks\ImageAltCheck;
+// ImageAltCheck removed - image optimization features disabled
 use FP\SEO\Analysis\Checks\InternalLinksCheck;
 use FP\SEO\Analysis\Checks\MetaDescriptionCheck;
 use FP\SEO\Analysis\Checks\OgCardsCheck;

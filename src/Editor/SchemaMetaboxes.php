@@ -11,12 +11,23 @@ declare(strict_types=1);
 
 namespace FP\SEO\Editor;
 
+use FP\SEO\Editor\Scripts\SchemaMetaboxesScriptsManager;
+use FP\SEO\Editor\Styles\SchemaMetaboxesStylesManager;
 use function wp_unslash;
 
 /**
  * Handles FAQ and HowTo Schema metaboxes in the editor.
  */
 class SchemaMetaboxes {
+	/**
+	 * @var SchemaMetaboxesStylesManager|null
+	 */
+	private $styles_manager;
+
+	/**
+	 * @var SchemaMetaboxesScriptsManager|null
+	 */
+	private $scripts_manager;
 
 	/**
 	 * Register hooks.
@@ -36,6 +47,13 @@ class SchemaMetaboxes {
 		}
 		
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+
+		// Initialize and register styles manager
+		$this->styles_manager = new SchemaMetaboxesStylesManager();
+		$this->styles_manager->register_hooks();
+		
+		// Initialize scripts manager (will be used in render methods)
+		$this->scripts_manager = new SchemaMetaboxesScriptsManager();
 	}
 
 	/**
@@ -150,7 +168,7 @@ class SchemaMetaboxes {
 		</script>
 		
 		<script type="text/javascript">
-		<?php echo $this->get_inline_js( $post->ID ); ?>
+		<?php echo $this->scripts_manager->get_inline_js( $post->ID ); ?>
 		</script>
 		<?php
 	}
@@ -341,7 +359,7 @@ class SchemaMetaboxes {
 		</script>
 		
 		<script type="text/javascript">
-		<?php echo $this->get_inline_js( $post->ID ); ?>
+		<?php echo $this->scripts_manager->get_inline_js( $post->ID ); ?>
 		</script>
 		<?php
 	}
@@ -590,524 +608,8 @@ class SchemaMetaboxes {
 			return;
 		}
 
-		// Enqueue CSS
-		wp_add_inline_style( 'wp-admin', $this->get_inline_css() );
-
-		// Enqueue JavaScript - we need post ID, so we'll add it inline in the metabox
-		// wp_add_inline_script( 'jquery', $this->get_inline_js() );
-	}
-
-	/**
-	 * Get inline CSS for metaboxes.
-	 *
-	 * @return string
-	 */
-	private function get_inline_css(): string {
-		return '
-		.fp-seo-schema-metabox {
-			padding: 0;
-		}
-
-		.fp-seo-schema-intro {
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-			color: white;
-			padding: 16px;
-			margin: -12px -12px 20px;
-			border-radius: 4px 4px 0 0;
-		}
-
-		.fp-seo-schema-intro .description {
-			color: white;
-			margin: 0;
-			line-height: 1.6;
-		}
-
-		.fp-seo-faq-item,
-		.fp-seo-howto-step {
-			background: #f9fafb;
-			border: 2px solid #e5e7eb;
-			border-radius: 8px;
-			margin-bottom: 16px;
-			transition: all 0.3s ease;
-		}
-
-		.fp-seo-faq-item:hover,
-		.fp-seo-howto-step:hover {
-			border-color: #3b82f6;
-			box-shadow: 0 4px 6px rgba(59, 130, 246, 0.1);
-		}
-
-		.fp-seo-faq-item-header,
-		.fp-seo-howto-step-header {
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			padding: 12px 16px;
-			background: white;
-			border-bottom: 1px solid #e5e7eb;
-			border-radius: 6px 6px 0 0;
-		}
-
-		.fp-seo-faq-number,
-		.fp-seo-howto-number {
-			display: flex;
-			align-items: center;
-			gap: 6px;
-			font-weight: 600;
-			color: #374151;
-		}
-
-		.fp-seo-faq-number .dashicons,
-		.fp-seo-howto-number .dashicons {
-			color: #3b82f6;
-		}
-
-		/* Stili bottoni rimossi - ora gestiti da admin.css per uniformità */
-
-		.fp-seo-howto-actions {
-			display: flex;
-			gap: 4px;
-		}
-
-		.fp-seo-faq-item-content,
-		.fp-seo-howto-step-content {
-			padding: 16px;
-		}
-
-		.fp-seo-form-group {
-			margin-bottom: 16px;
-		}
-
-		.fp-seo-form-group:last-child {
-			margin-bottom: 0;
-		}
-
-		.fp-seo-form-group label {
-			display: block;
-			margin-bottom: 6px;
-			color: #374151;
-		}
-
-		.fp-seo-form-group .required {
-			color: #dc2626;
-		}
-
-		.fp-seo-form-group input[type="text"],
-		.fp-seo-form-group input[type="url"],
-		.fp-seo-form-group textarea {
-			width: 100%;
-			padding: 8px 12px;
-			border: 1px solid #d1d5db;
-			border-radius: 6px;
-			font-size: 14px;
-			transition: all 0.2s ease;
-		}
-
-		.fp-seo-form-group input:focus,
-		.fp-seo-form-group textarea:focus {
-			border-color: #3b82f6;
-			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-			outline: none;
-		}
-
-		.fp-seo-form-group .description {
-			margin-top: 6px;
-			font-size: 12px;
-			color: #6b7280;
-		}
-
-		.fp-seo-char-count {
-			font-weight: 600;
-			color: #3b82f6;
-		}
-
-		.fp-seo-add-faq,
-		.fp-seo-add-step {
-			margin-top: 12px;
-		}
-
-		/* Stili bottoni uniformati - ora gestiti da admin.css */
-
-		.fp-seo-schema-tips {
-			background: #fef3c7;
-			border-left: 4px solid #f59e0b;
-			padding: 16px;
-			margin-top: 20px;
-			border-radius: 4px;
-		}
-
-		.fp-seo-schema-tips h4 {
-			margin: 0 0 12px;
-			color: #92400e;
-			font-size: 14px;
-		}
-
-		.fp-seo-schema-tips ul {
-			margin: 0;
-			padding-left: 20px;
-		}
-
-		.fp-seo-schema-tips li {
-			margin-bottom: 6px;
-			color: #78350f;
-			font-size: 13px;
-		}
-
-		.fp-seo-howto-header {
-			margin-bottom: 24px;
-			padding-bottom: 16px;
-			border-bottom: 2px solid #e5e7eb;
-		}
-		';
-	}
-
-	/**
-	 * Get inline JavaScript for metaboxes.
-	 *
-	 * @param int $post_id Post ID.
-	 * @return string
-	 */
-	private function get_inline_js( int $post_id = 0 ): string {
-		return "
-		jQuery(document).ready(function($) {
-			// FAQ Management
-			var faqIndex = $('.fp-seo-faq-item').length;
-
-			// Generate FAQ with AI
-			$('#fp-seo-generate-faq-ai').on('click', function() {
-				var $btn = $(this);
-				var postId = " . ( $post_id > 0 ? absint( $post_id ) : '0' ) . ";
-				
-				// Prevent multiple clicks
-				if ($btn.prop('disabled')) {
-					return;
-				}
-				
-				// Show loading state
-				if (typeof FPSeoUI !== 'undefined') {
-					FPSeoUI.showLoading($btn, 'Generando FAQ con AI...');
-				} else {
-					$btn.prop('disabled', true).text('Generando...');
-				}
-				
-				// Safety timeout
-				var safetyTimeout = setTimeout(function() {
-					if (typeof FPSeoUI !== 'undefined') {
-						FPSeoUI.hideLoading($btn);
-					} else {
-						$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-					}
-					if (typeof FPSeoUI !== 'undefined') {
-						FPSeoUI.showNotification('Timeout. Riprova.', 'error');
-					}
-				}, 30000);
-				
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					timeout: 25000,
-					data: {
-						action: 'fp_seo_generate_faq',
-						post_id: postId,
-						nonce: '" . wp_create_nonce( 'fp_seo_ai_first' ) . "'
-					},
-					success: function(response) {
-						clearTimeout(safetyTimeout);
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.hideLoading($btn);
-						} else {
-							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-						}
-						
-						if (response && response.success && response.data && response.data.faq_questions) {
-							// Clear existing FAQs
-							$('#fp-seo-faq-list').empty();
-							faqIndex = 0;
-							
-							// Add generated FAQs
-							var template = $('#fp-seo-faq-template').html();
-							response.data.faq_questions.forEach(function(faq) {
-								var newItem = template.replace(/__INDEX__/g, faqIndex);
-								var $newItem = $(newItem);
-								$newItem.find('input[name*=\"[question]\"').val(faq.question || '');
-								$newItem.find('textarea[name*=\"[answer]\"').val(faq.answer || '');
-								$('#fp-seo-faq-list').append($newItem);
-								faqIndex++;
-							});
-							
-							updateFaqNumbers();
-							
-							// Initialize character counts
-							$('.fp-seo-faq-item textarea').each(function() {
-								var count = $(this).val().length;
-								$(this).closest('.fp-seo-form-group').find('.fp-seo-char-count').text(count);
-							});
-							
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.showNotification('Generate ' + response.data.total + ' FAQ con successo!', 'success');
-							} else {
-								alert('Generate ' + response.data.total + ' FAQ con successo!');
-							}
-						} else {
-							var errorMsg = (response && response.data && response.data.message) ? response.data.message : 'Errore durante la generazione delle FAQ';
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.showNotification(errorMsg, 'error');
-							} else {
-								alert(errorMsg);
-							}
-						}
-					},
-					error: function(xhr, status, error) {
-						clearTimeout(safetyTimeout);
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.hideLoading($btn);
-						} else {
-							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-						}
-						
-						var errorMsg = 'Errore durante la generazione delle FAQ. Riprova.';
-						if (status === 'timeout') {
-							errorMsg = 'Timeout. Riprova.';
-						} else if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-							errorMsg = xhr.responseJSON.data.message;
-						}
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.showNotification(errorMsg, 'error');
-						} else {
-							alert(errorMsg);
-						}
-					},
-					complete: function() {
-						// Always ensure button is restored
-						clearTimeout(safetyTimeout);
-						setTimeout(function() {
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.hideLoading($btn);
-							} else {
-								$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-							}
-						}, 100);
-					}
-				});
-			});
-
-			// Add FAQ
-			$('.fp-seo-add-faq').on('click', function() {
-				var template = $('#fp-seo-faq-template').html();
-				var newItem = template.replace(/__INDEX__/g, faqIndex);
-				$('#fp-seo-faq-list').append(newItem);
-				faqIndex++;
-				updateFaqNumbers();
-			});
-
-			// Remove FAQ
-			$(document).on('click', '.fp-seo-remove-faq', function() {
-				if (confirm('Sei sicuro di voler rimuovere questa FAQ?')) {
-					$(this).closest('.fp-seo-faq-item').fadeOut(300, function() {
-						$(this).remove();
-						updateFaqNumbers();
-					});
-				}
-			});
-
-			// Character count for FAQ answers
-			$(document).on('input', '.fp-seo-faq-item textarea', function() {
-				var count = $(this).val().length;
-				$(this).closest('.fp-seo-form-group').find('.fp-seo-char-count').text(count);
-			});
-
-			// Initialize character counts
-			$('.fp-seo-faq-item textarea').each(function() {
-				var count = $(this).val().length;
-				$(this).closest('.fp-seo-form-group').find('.fp-seo-char-count').text(count);
-			});
-
-			function updateFaqNumbers() {
-				$('.fp-seo-faq-item').each(function(index) {
-					$(this).find('.faq-num').text(index + 1);
-				});
-			}
-
-			// HowTo Management
-			var stepIndex = $('.fp-seo-howto-step').length;
-
-			// Generate HowTo steps with AI
-			$('#fp-seo-generate-howto-ai').on('click', function() {
-				var $btn = $(this);
-				var postId = " . ( $post_id > 0 ? absint( $post_id ) : '0' ) . ";
-				
-				// Prevent multiple clicks
-				if ($btn.prop('disabled')) {
-					return;
-				}
-				
-				// Show loading state
-				if (typeof FPSeoUI !== 'undefined') {
-					FPSeoUI.showLoading($btn, 'Generando step con AI...');
-				} else {
-					$btn.prop('disabled', true).text('Generando...');
-				}
-				
-				// Safety timeout
-				var safetyTimeout = setTimeout(function() {
-					if (typeof FPSeoUI !== 'undefined') {
-						FPSeoUI.hideLoading($btn);
-					} else {
-						$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-					}
-					if (typeof FPSeoUI !== 'undefined') {
-						FPSeoUI.showNotification('Timeout. Riprova.', 'error');
-					}
-				}, 30000);
-				
-				$.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					timeout: 25000,
-					data: {
-						action: 'fp_seo_generate_howto',
-						post_id: postId,
-						nonce: '" . wp_create_nonce( 'fp_seo_ai_first' ) . "'
-					},
-					success: function(response) {
-						clearTimeout(safetyTimeout);
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.hideLoading($btn);
-						} else {
-							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-						}
-						
-						if (response && response.success && response.data && response.data.steps) {
-							// Add generated steps (append to existing)
-							var template = $('#fp-seo-howto-step-template').html();
-							response.data.steps.forEach(function(step) {
-								var newStep = template.replace(/__INDEX__/g, stepIndex);
-								var $newStep = $(newStep);
-								$newStep.find('input[name*=\"[name]\"').val(step.name || '');
-								$newStep.find('textarea[name*=\"[text]\"').val(step.text || '');
-								if (step.url) {
-									$newStep.find('input[name*=\"[url]\"').val(step.url || '');
-								}
-								$('#fp-seo-howto-steps-list').append($newStep);
-								stepIndex++;
-							});
-							
-							updateStepNumbers();
-							
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.showNotification('Generate ' + response.data.total + ' step con successo!', 'success');
-							} else {
-								alert('Generate ' + response.data.total + ' step con successo!');
-							}
-						} else {
-							var errorMsg = (response && response.data && response.data.message) ? response.data.message : 'Errore durante la generazione degli step';
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.showNotification(errorMsg, 'error');
-							} else {
-								alert(errorMsg);
-							}
-						}
-					},
-					error: function(xhr, status, error) {
-						clearTimeout(safetyTimeout);
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.hideLoading($btn);
-						} else {
-							$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-						}
-						
-						var errorMsg = 'Errore durante la generazione degli step. Riprova.';
-						if (status === 'timeout') {
-							errorMsg = 'Timeout. Riprova.';
-						} else if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-							errorMsg = xhr.responseJSON.data.message;
-						}
-						
-						if (typeof FPSeoUI !== 'undefined') {
-							FPSeoUI.showNotification(errorMsg, 'error');
-						} else {
-							alert(errorMsg);
-						}
-					},
-					complete: function() {
-						// Always ensure button is restored
-						clearTimeout(safetyTimeout);
-						setTimeout(function() {
-							if (typeof FPSeoUI !== 'undefined') {
-								FPSeoUI.hideLoading($btn);
-							} else {
-								$btn.prop('disabled', false).html('<span class=\"dashicons dashicons-admin-generic\"></span> Genera con AI');
-							}
-						}, 100);
-					}
-				});
-			});
-
-			// Add Step
-			$('.fp-seo-add-step').on('click', function() {
-				var template = $('#fp-seo-howto-step-template').html();
-				var newStep = template.replace(/__INDEX__/g, stepIndex);
-				$('#fp-seo-howto-steps-list').append(newStep);
-				stepIndex++;
-				updateStepNumbers();
-			});
-
-			// Remove Step
-			$(document).on('click', '.fp-seo-remove-step', function() {
-				if (confirm('Sei sicuro di voler rimuovere questo step?')) {
-					$(this).closest('.fp-seo-howto-step').fadeOut(300, function() {
-						$(this).remove();
-						updateStepNumbers();
-					});
-				}
-			});
-
-			// Move Step Up
-			$(document).on('click', '.fp-seo-move-up', function() {
-				var step = $(this).closest('.fp-seo-howto-step');
-				var prev = step.prev('.fp-seo-howto-step');
-				if (prev.length) {
-					step.fadeOut(200, function() {
-						step.insertBefore(prev).fadeIn(200);
-						updateStepNumbers();
-					});
-				}
-			});
-
-			// Move Step Down
-			$(document).on('click', '.fp-seo-move-down', function() {
-				var step = $(this).closest('.fp-seo-howto-step');
-				var next = step.next('.fp-seo-howto-step');
-				if (next.length) {
-					step.fadeOut(200, function() {
-						step.insertAfter(next).fadeIn(200);
-						updateStepNumbers();
-					});
-				}
-			});
-
-			function updateStepNumbers() {
-				$('.fp-seo-howto-step').each(function(index) {
-					$(this).find('.step-num').text(index + 1);
-					
-					// Update input names
-					var newIndex = index;
-					$(this).find('input, textarea').each(function() {
-						var name = $(this).attr('name');
-						if (name) {
-							var baseName = name.replace(/\[\d+\]/, '[' + newIndex + ']');
-							$(this).attr('name', baseName);
-						}
-					});
-				});
-			}
-		});
-		";
+		// CSS is now handled by SchemaMetaboxesStylesManager
+		// JavaScript is handled inline in render methods via SchemaMetaboxesScriptsManager
 	}
 }
 
