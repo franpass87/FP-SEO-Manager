@@ -54,3 +54,17 @@ class WebSiteSchemaGenerator extends AbstractSchemaGenerator {
 }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

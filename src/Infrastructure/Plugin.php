@@ -12,9 +12,9 @@ declare(strict_types=1);
 namespace FP\SEO\Infrastructure;
 
 use FP\SEO\Infrastructure\Providers\CoreServiceProvider;
+use FP\SEO\Infrastructure\Providers\DataServiceProvider;
 use FP\SEO\Infrastructure\Providers\PerformanceServiceProvider;
 use FP\SEO\Infrastructure\Providers\AnalysisServiceProvider;
-use FP\SEO\Infrastructure\Providers\EditorServiceProvider;
 use FP\SEO\Infrastructure\Providers\AIServiceProvider;
 use FP\SEO\Infrastructure\Providers\GEOServiceProvider;
 use FP\SEO\Infrastructure\Providers\IntegrationServiceProvider;
@@ -24,11 +24,15 @@ use FP\SEO\Infrastructure\Providers\Admin\AdminPagesServiceProvider;
 use FP\SEO\Infrastructure\Providers\Admin\AdminUIServiceProvider;
 use FP\SEO\Infrastructure\Providers\Admin\AISettingsServiceProvider;
 use FP\SEO\Infrastructure\Providers\Admin\TestSuiteServiceProvider;
+use FP\SEO\Infrastructure\Providers\Metaboxes\MetaboxServicesProvider;
 use FP\SEO\Infrastructure\Providers\Metaboxes\SchemaMetaboxServiceProvider;
 use FP\SEO\Infrastructure\Providers\Metaboxes\MainMetaboxServiceProvider;
 use FP\SEO\Infrastructure\Providers\Metaboxes\QAMetaboxServiceProvider;
 use FP\SEO\Infrastructure\Providers\Metaboxes\FreshnessMetaboxServiceProvider;
 use FP\SEO\Infrastructure\Providers\Metaboxes\AuthorProfileMetaboxServiceProvider;
+use FP\SEO\Infrastructure\Providers\RESTServiceProvider;
+use FP\SEO\Infrastructure\Providers\CLIServiceProvider;
+use FP\SEO\Infrastructure\Providers\CronServiceProvider;
 
 /**
  * Central plugin bootstrapper wiring services together via service providers.
@@ -124,65 +128,81 @@ class Plugin {
 	/**
 	 * Boots plugin services after all plugins load.
 	 *
-	 * Registers all service providers in the correct order and boots them.
+	 * Registers all service providers with automatic dependency resolution and boots them.
+	 * Dependencies are resolved automatically based on get_dependencies() declarations.
 	 *
 	 * @return void
 	 */
 	public function boot(): void {
-		// Register service providers in order (dependencies first)
-		// 1. Core services (foundational: Cache, Logger, Health)
-		$this->registry->register( new CoreServiceProvider() );
+		// Register all service providers with automatic dependency resolution
+		// The registry will resolve dependencies and register providers in the correct order
+		$this->registry->register_with_dependencies( array(
+			// Core services (foundational: Cache, Logger, Health)
+			new CoreServiceProvider(),
 
-		// 2. Performance services (optimizations)
-		$this->registry->register( new PerformanceServiceProvider() );
+			// Data services (repositories, migrations)
+			new DataServiceProvider(),
 
-		// 3. Analysis services (SEO analysis system)
-		$this->registry->register( new AnalysisServiceProvider() );
+			// Performance services (optimizations)
+			new PerformanceServiceProvider(),
 
-		// 4. Schema Metaboxes (must be first, before main metabox)
-		$this->registry->register( new SchemaMetaboxServiceProvider() );
+			// Analysis services (SEO analysis system - depends on CoreServiceProvider)
+			new AnalysisServiceProvider(),
 
-		// 5. Main SEO Metabox (core editor functionality)
-		$this->registry->register( new MainMetaboxServiceProvider() );
+			// Metabox Services (FieldSaver, Analysis)
+			new MetaboxServicesProvider(),
 
-		// 6. QA Metabox (Q&A pairs management)
-		$this->registry->register( new QAMetaboxServiceProvider() );
+			// Schema Metaboxes (must be first, before main metabox)
+			new SchemaMetaboxServiceProvider(),
 
-		// 7. Freshness Metabox (Temporal signals)
-		$this->registry->register( new FreshnessMetaboxServiceProvider() );
+			// Main SEO Metabox (core editor functionality - depends on MetaboxServicesProvider)
+			new MainMetaboxServiceProvider(),
 
-		// 8. Author Profile Fields (Authority signals - user profile fields)
-		$this->registry->register( new AuthorProfileMetaboxServiceProvider() );
+			// QA Metabox (Q&A pairs management)
+			new QAMetaboxServiceProvider(),
 
-		// 9. Editor Service Provider (kept for backward compatibility, now empty)
-		$this->registry->register( new EditorServiceProvider() );
+			// Freshness Metabox (Temporal signals)
+			new FreshnessMetaboxServiceProvider(),
 
-		// 10. Admin Assets (must be first for admin_enqueue_scripts)
-		$this->registry->register( new AdminAssetsServiceProvider() );
+			// Author Profile Fields (Authority signals - user profile fields)
+			new AuthorProfileMetaboxServiceProvider(),
 
-		// 11. Admin Pages (Menu, Settings, Bulk Audit, Performance Dashboard)
-		$this->registry->register( new AdminPagesServiceProvider() );
+			// Admin Assets (must be first for admin_enqueue_scripts)
+			new AdminAssetsServiceProvider(),
 
-		// 12. Admin UI components (Notices, Admin Bar)
-		$this->registry->register( new AdminUIServiceProvider() );
+			// Admin Pages (Menu, Settings, Bulk Audit, Performance Dashboard)
+			new AdminPagesServiceProvider(),
 
-		// 13. AI services (Core AI)
-		$this->registry->register( new AIServiceProvider() );
+			// Admin UI components (Notices, Admin Bar)
+			new AdminUIServiceProvider(),
 
-		// 14. AI Settings (Admin AI features)
-		$this->registry->register( new AISettingsServiceProvider() );
+			// AI services (Core AI)
+			new AIServiceProvider(),
 
-		// 15. GEO services (conditional - only if enabled)
-		$this->registry->register( new GEOServiceProvider() );
+			// AI Settings (Admin AI features)
+			new AISettingsServiceProvider(),
 
-		// 16. Integration services (GSC, Indexing - conditional)
-		$this->registry->register( new IntegrationServiceProvider() );
+			// GEO services (conditional - only if enabled)
+			new GEOServiceProvider(),
 
-		// 17. Frontend services (renderers)
-		$this->registry->register( new FrontendServiceProvider() );
+			// Integration services (GSC, Indexing - conditional)
+			new IntegrationServiceProvider(),
 
-		// 18. Test Suite (only for admins with manage_options)
-		$this->registry->register( new TestSuiteServiceProvider() );
+			// Frontend services (renderers)
+			new FrontendServiceProvider(),
+
+			// Test Suite (only for admins with manage_options)
+			new TestSuiteServiceProvider(),
+
+			// REST API services
+			new RESTServiceProvider(),
+
+			// WP-CLI services (conditional - only if WP-CLI is available)
+			new CLIServiceProvider(),
+
+			// Cron services (scheduled tasks)
+			new CronServiceProvider(),
+		) );
 
 		// Boot all providers
 		$this->registry->boot();

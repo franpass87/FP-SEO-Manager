@@ -34,30 +34,14 @@ class ScoreHistory {
 
 	/**
 	 * Create database table
+	 *
+	 * @deprecated Use DataServiceProvider migrations instead. This method is kept for backward compatibility.
+	 * @return void
 	 */
 	public function create_table(): void {
-		global $wpdb;
-
-		$table_name = $wpdb->prefix . self::TABLE_NAME;
-		$charset_collate = $wpdb->get_charset_collate();
-
-		$sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-			post_id bigint(20) unsigned NOT NULL,
-			score tinyint(3) unsigned NOT NULL,
-			status varchar(20) NOT NULL,
-			checks_passed tinyint(3) unsigned NOT NULL DEFAULT 0,
-			checks_warned tinyint(3) unsigned NOT NULL DEFAULT 0,
-			checks_failed tinyint(3) unsigned NOT NULL DEFAULT 0,
-			recorded_at datetime NOT NULL,
-			PRIMARY KEY  (id),
-			KEY post_id (post_id),
-			KEY recorded_at (recorded_at),
-			KEY post_recorded (post_id, recorded_at)
-		) {$charset_collate};";
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		// Table creation is now handled by DataServiceProvider via migrations
+		// This method is kept for backward compatibility but does nothing
+		// The CreateScoreHistoryTable migration handles table creation
 	}
 
 	/**
@@ -179,7 +163,8 @@ class ScoreHistory {
 		global $wpdb;
 
 		$table_name = $wpdb->prefix . self::TABLE_NAME;
-		$cutoff_date = gmdate( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
+		$cutoff_ts   = strtotime( "-{$days} days" );
+		$cutoff_date = gmdate( 'Y-m-d H:i:s', false !== $cutoff_ts ? $cutoff_ts : 0 );
 
 		// Use a more efficient query with proper indexing
 		$results = $wpdb->get_results(

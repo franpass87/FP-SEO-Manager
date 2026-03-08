@@ -1,6 +1,6 @@
 <?php
 /**
- * GEO Router - Handles all /geo/* and /.well-known/ai.txt endpoints
+ * GEO Router - Handles all /geo/*, /.well-known/ai.txt, and /llms.txt endpoints
  *
  * @package FP\SEO
  * @author Francesco Passeri
@@ -33,6 +33,13 @@ class Router {
 		add_rewrite_rule(
 			'^\.well-known/ai\.txt$',
 			'index.php?fp_geo_route=ai_txt',
+			'top'
+		);
+
+		// /llms.txt (for LLM guidance, similar to Yoast)
+		add_rewrite_rule(
+			'^llms\.txt$',
+			'index.php?fp_geo_route=llms_txt',
 			'top'
 		);
 
@@ -155,6 +162,10 @@ class Router {
 				$this->serve_ai_txt();
 				break;
 
+			case 'llms_txt':
+				$this->serve_llms_txt();
+				break;
+
 			case 'geo_sitemap':
 				$this->serve_geo_sitemap();
 				break;
@@ -216,28 +227,72 @@ class Router {
 	 * Serve /.well-known/ai.txt
 	 */
 	private function serve_ai_txt(): void {
+		// Prevent any output before text
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
+		
 		$generator = new AiTxt();
 		$content   = $generator->generate();
 
+		// Set proper headers before any output
 		header( 'Content-Type: text/plain; charset=utf-8' );
 		header( 'Cache-Control: public, max-age=3600' );
 		header( 'X-Robots-Tag: noindex' );
 
-		echo $content;
+		// Output content
+		echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		
+		// Exit to prevent any additional output
+		exit;
+	}
+
+	/**
+	 * Serve /llms.txt
+	 */
+	private function serve_llms_txt(): void {
+		// Prevent any output before text
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
+		
+		$generator = new LlmsTxt();
+		$content   = $generator->generate();
+
+		// Set proper headers before any output
+		header( 'Content-Type: text/plain; charset=utf-8' );
+		header( 'Cache-Control: public, max-age=3600' );
+		header( 'X-Robots-Tag: noindex' );
+
+		// Output content
+		echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		
+		// Exit to prevent any additional output
+		exit;
 	}
 
 	/**
 	 * Serve /geo-sitemap.xml
 	 */
 	private function serve_geo_sitemap(): void {
+		// Prevent any output before XML
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
+		
 		$generator = new GeoSitemap();
 		$xml       = $generator->generate();
 
+		// Set proper headers before any output
 		header( 'Content-Type: application/xml; charset=utf-8' );
 		header( 'Cache-Control: public, max-age=900' );
 		header( 'X-Robots-Tag: noindex' );
 
-		echo $xml;
+		// Output XML
+		echo $xml; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		
+		// Exit to prevent any additional output
+		exit;
 	}
 
 	/**
@@ -289,6 +344,11 @@ class Router {
 	 * @param int                 $post_id Optional post ID for ETag.
 	 */
 	private function send_json_response( array $data, int $post_id = 0 ): void {
+		// Prevent any output before JSON
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
+		
 		$options = get_option( 'fp_seo_performance', array() );
 		$geo     = $options['geo'] ?? array();
 		$pretty  = ! empty( $geo['pretty_print'] );
@@ -296,6 +356,11 @@ class Router {
 		$json = $pretty
 			? wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
 			: wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+		if ( false === $json ) {
+			$this->send_404();
+			return;
+		}
 
 		// Generate ETag
 		$etag = 'W/"' . md5( $json ) . '"';
@@ -308,6 +373,7 @@ class Router {
 			exit;
 		}
 
+		// Set proper headers before any output
 		header( 'Content-Type: application/json; charset=utf-8' );
 		header( 'Cache-Control: public, max-age=300' );
 		header( 'ETag: ' . $etag );
@@ -318,12 +384,14 @@ class Router {
 			$post = get_post( $post_id );
 			if ( $post ) {
 				$modified = strtotime( $post->post_modified_gmt );
-				header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified ) . ' GMT' );
+				if ( false !== $modified ) {
+					header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', $modified ) . ' GMT' );
+				}
 			}
 		}
 
 		header( 'Content-Length: ' . strlen( $json ) );
-		echo $json;
+		echo $json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		exit;
 	}
 
@@ -331,11 +399,16 @@ class Router {
 	 * Send 404 response
 	 */
 	private function send_404(): void {
+		// Prevent any output before JSON
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
+		
 		http_response_code( 404 );
 		header( 'Content-Type: application/json; charset=utf-8' );
-		$payload = wp_json_encode( array( 'error' => 'Not Found' ) );
+		$payload = wp_json_encode( array( 'error' => 'Not Found' ) ) ?: '{"error":"Not Found"}';
 		header( 'Content-Length: ' . strlen( $payload ) );
-		echo $payload;
+		echo $payload; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		exit;
 	}
 
@@ -507,6 +580,9 @@ class Router {
 	 * Serve /geo/training-data.jsonl
 	 */
 	private function serve_training_data(): void {
+		if ( ob_get_level() ) {
+			ob_clean();
+		}
 		$formatter = new TrainingDatasetFormatter();
 		$jsonl     = $formatter->export_site_dataset( 50 ); // Export 50 most recent posts
 
@@ -515,7 +591,8 @@ class Router {
 		header( 'X-Robots-Tag: noindex' );
 		header( 'Content-Disposition: inline; filename="training-data.jsonl"' );
 
-		echo $jsonl;
+		echo $jsonl; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		exit;
 	}
 }
 

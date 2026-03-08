@@ -55,9 +55,19 @@ class MetaboxSaver {
 	private const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
 
 	/**
+	 * Meta key for schema type.
+	 */
+	private const META_SCHEMA_TYPE = '_fp_seo_schema_type';
+
+	/**
 	 * Meta key for exclude flag.
 	 */
 	private const META_EXCLUDE = '_fp_seo_performance_exclude';
+
+	/**
+	 * Meta key for Q&A pairs.
+	 */
+	private const META_QA_PAIRS = '_fp_seo_qa_pairs';
 
 	/**
 	 * Nonce field name.
@@ -83,9 +93,34 @@ class MetaboxSaver {
 	 * @return bool True if saved successfully, false otherwise.
 	 */
 	public function save_all_fields( int $post_id ): bool {
-		// CRITICAL: Check post type FIRST, before any processing
-		// This is a double protection - even if called from somewhere else, we won't interfere
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] MetaboxSaver::save_all_fields - Entry point, post_id: ' . $post_id );
+			if ( isset( $_POST ) && is_array( $_POST ) ) {
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - $_POST keys: ' . implode( ', ', array_keys( $_POST ) ) );
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - fp_seo_qa_pairs_data in $_POST: ' . ( isset( $_POST['fp_seo_qa_pairs_data'] ) ? 'YES, length: ' . strlen( $_POST['fp_seo_qa_pairs_data'] ) : 'NO' ) );
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - fp_seo_performance_metabox_present in $_POST: ' . ( isset( $_POST['fp_seo_performance_metabox_present'] ) ? 'YES' : 'NO' ) );
+			} else {
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - $_POST is not set or not an array' );
+			}
+		}
+
+		if ( ! $post_id || $post_id <= 0 ) {
+			if ( $debug ) {
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - Invalid post_id: ' . $post_id );
+			}
+			return false;
+		}
+
 		$post_type = get_post_type( $post_id );
+		if ( ! $post_type ) {
+			if ( $debug ) {
+				error_log( '[FP-SEO] MetaboxSaver::save_all_fields - Could not get post type for post_id: ' . $post_id );
+			}
+			return false;
+		}
+		
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		
 		// If not a supported post type, return immediately without any processing
@@ -108,7 +143,34 @@ class MetaboxSaver {
 			) );
 		}
 		
-		// DISABLED - Homepage status protection removed - the plugin should NOT touch post_status
+		// Verify nonce before processing any SEO fields (CSRF protection)
+		$nonce_value = isset( $_POST[ self::NONCE_FIELD ] ) ? sanitize_text_field( wp_unslash( $_POST[ self::NONCE_FIELD ] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce_value, 'fp_seo_performance_meta' ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'MetaboxSaver::save_all_fields - nonce verification failed', array( 'post_id' => $post_id ) );
+			}
+			return false;
+		}
+
+		// Check if there are SEO fields being saved
+		// If no SEO fields, simply return - WordPress will handle the save normally
+		$has_seo_fields_in_post = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
+								  isset( $_POST['fp_seo_title_sent'] ) || 
+								  isset( $_POST['fp_seo_meta_description_sent'] ) ||
+								  isset( $_POST['fp_seo_title'] ) ||
+								  isset( $_POST['fp_seo_meta_description'] ) ||
+								  isset( $_POST['fp_seo_qa_pairs_data'] );
+		
+		// If no SEO fields, simply return - WordPress will handle the save normally
+		if ( ! $has_seo_fields_in_post ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::debug( 'MetaboxSaver::save_all_fields - No SEO fields, allowing WordPress to save normally' );
+			}
+			return false; // No SEO fields to process, but allow WordPress to save the post
+		}
+		
+		
+		
 		
 		// Prevent multiple saves in the same request
 		if ( isset( self::$saved_posts[ $post_id ] ) ) {
@@ -173,20 +235,32 @@ class MetaboxSaver {
 		$this->save_slug( $post_id );
 		$this->save_excerpt( $post_id );
 		$this->save_keywords( $post_id );
+		$this->save_schema_type( $post_id );
 		$this->save_exclude_flag( $post_id );
+		$this->save_qa_pairs( $post_id );
 
-		// Clear cache after saving all fields - IMPORTANT: do this multiple times
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id, 'posts' );
-		// Force refresh meta cache (se la funzione esiste)
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
-		}
+		// CRITICAL: Selective cache clearing to prevent interference with featured image saving
+		// WordPress saves featured image (_thumbnail_id) during save_post hook
+		// We must NOT clear the entire post_meta cache as it can interfere with _thumbnail_id
+		// Instead, we only clear cache for our specific meta keys
 		
-		// Also clear object cache if available
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
+		// CRITICAL: Selective cache clearing to prevent interference with featured image saving
+		// WordPress saves featured image (_thumbnail_id) during save_post hook or via AJAX
+		// We must NOT clear any cache that could interfere with _thumbnail_id
+		// CRITICAL: Do NOT clear any cache during save_post hook
+		// WordPress saves featured image (_thumbnail_id) during save_post hook
+		// Clearing cache (even selectively) can interfere with WordPress core saving _thumbnail_id
+		// We completely skip cache clearing to ensure zero interference with featured image
+		
+		// Cache will be naturally refreshed on next access via WordPress core mechanisms
+		// No manual cache clearing needed - WordPress handles this automatically
+
+		// Clear schema cache when schema type changes
+		$cache_key = 'fp_seo_schemas_' . $post_id . '_' . get_current_blog_id();
+		delete_transient( $cache_key );
+		// Also clear via CacheHelper if available
+		if ( class_exists( '\FP\SEO\Utils\CacheHelper' ) ) {
+			\FP\SEO\Utils\CacheHelper::forget( $cache_key, 'default' );
 		}
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -203,7 +277,7 @@ class MetaboxSaver {
 	 * @return bool True if should save, false otherwise.
 	 */
 	private function should_save( int $post_id ): bool {
-		// Skip autosave (ma solo se non è un autosave esplicito con campi SEO)
+// Skip autosave (ma solo se non è un autosave esplicito con campi SEO)
 		$has_seo_fields = isset( $_POST['fp_seo_performance_metabox_present'] ) || 
 						  isset( $_POST['fp_seo_title_sent'] ) || 
 						  isset( $_POST['fp_seo_meta_description_sent'] );
@@ -272,8 +346,10 @@ class MetaboxSaver {
 		$has_excerpt = isset( $_POST['fp_seo_excerpt'] );
 		$has_focus = isset( $_POST['fp_seo_focus_keyword'] );
 		$has_secondary = isset( $_POST['fp_seo_secondary_keywords'] );
+		$has_schema_type = isset( $_POST['fp_seo_schema_type'] ) || isset( $_POST['fp_seo_schema_type_sent'] );
+		$has_qa_pairs = isset( $_POST['fp_seo_qa_pairs_data'] );
 		
-		$has_any = $has_title || $has_desc || $has_slug || $has_excerpt || $has_focus || $has_secondary;
+		$has_any = $has_title || $has_desc || $has_slug || $has_excerpt || $has_focus || $has_secondary || $has_schema_type || $has_qa_pairs;
 		
 		if ( $has_any ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -431,9 +507,8 @@ class MetaboxSaver {
 			);
 			
 			if ( $updated !== false ) {
-				// Clear cache after direct update
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'posts' );
+				// CRITICAL: Do NOT clear cache here - can interfere with featured image saving
+				// Cache will be naturally refreshed on next access via WordPress core mechanisms
 				
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					Logger::debug( 'FP SEO: Slug saved via direct DB update', array(
@@ -476,9 +551,8 @@ class MetaboxSaver {
 		);
 		
 		if ( $updated !== false ) {
-			// Clear cache after direct update
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'posts' );
+			// CRITICAL: Do NOT clear cache here - can interfere with featured image saving
+			// Cache will be naturally refreshed on next access via WordPress core mechanisms
 			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::debug( 'FP SEO: Excerpt saved via direct DB update', array(
@@ -528,6 +602,42 @@ class MetaboxSaver {
 	}
 
 	/**
+	 * Save schema type.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private function save_schema_type( int $post_id ): void {
+		if ( ! isset( $_POST['fp_seo_schema_type'] ) && ! isset( $_POST['fp_seo_schema_type_sent'] ) ) {
+			return;
+		}
+
+		$schema_type = isset( $_POST['fp_seo_schema_type'] ) 
+			? trim( sanitize_text_field( wp_unslash( (string) $_POST['fp_seo_schema_type'] ) ) )
+			: '';
+
+		// Valid schema types
+		$valid_types = array( 'Article', 'BlogPosting', 'NewsArticle', 'WebPage', 'ContactPage', 'AboutPage', 'Product', 'TouristTrip', 'Event', 'TouristAttraction', 'Service', 'Offer' );
+		
+		if ( '' !== $schema_type && in_array( $schema_type, $valid_types, true ) ) {
+			update_post_meta( $post_id, self::META_SCHEMA_TYPE, $schema_type );
+		} else {
+			// If explicitly sent but empty, use default based on post type
+			if ( isset( $_POST['fp_seo_schema_type_sent'] ) ) {
+				$post_type = get_post_type( $post_id );
+				$default = 'WebPage';
+				if ( $post_type === 'post' ) {
+					$default = 'Article';
+				} elseif ( $post_type === 'product' ) {
+					$default = 'Product';
+				} elseif ( $post_type === 'fp_experience' ) {
+					$default = 'TouristTrip';
+				}
+				update_post_meta( $post_id, self::META_SCHEMA_TYPE, $default );
+			}
+		}
+	}
+
+	/**
 	 * Save exclude flag.
 	 *
 	 * @param int $post_id Post ID.
@@ -539,6 +649,88 @@ class MetaboxSaver {
 			update_post_meta( $post_id, self::META_EXCLUDE, '1' );
 		} else {
 			delete_post_meta( $post_id, self::META_EXCLUDE );
+		}
+	}
+
+	/**
+	 * Save Q&A pairs.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return void
+	 */
+	private function save_qa_pairs( int $post_id ): void {
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
+		if ( ! isset( $_POST['fp_seo_qa_pairs_data'] ) ) {
+			return;
+		}
+
+		$qa_pairs_data = wp_unslash( $_POST['fp_seo_qa_pairs_data'] );
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] MetaboxSaver::save_qa_pairs - Entry, post_id: ' . $post_id . ', data length: ' . strlen( $qa_pairs_data ) );
+		}
+
+		$qa_pairs = json_decode( $qa_pairs_data, true );
+
+		if ( ! is_array( $qa_pairs ) ) {
+			if ( $debug ) {
+				Logger::debug( 'MetaboxSaver::save_qa_pairs - Invalid Q&A pairs data', array(
+					'post_id'        => $post_id,
+					'json_error'     => json_last_error_msg(),
+				) );
+			}
+			return;
+		}
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] MetaboxSaver::save_qa_pairs - Parsed array count: ' . count( $qa_pairs ) );
+		}
+
+		// Sanitize and validate each Q&A pair
+		$sanitized_pairs = array();
+		foreach ( $qa_pairs as $pair ) {
+			if ( ! is_array( $pair ) ) {
+				continue;
+			}
+
+			$question = isset( $pair['question'] ) ? sanitize_text_field( $pair['question'] ) : '';
+			$answer = isset( $pair['answer'] ) ? sanitize_textarea_field( $pair['answer'] ) : '';
+
+			// Only add pairs with both question and answer
+			if ( ! empty( $question ) && ! empty( $answer ) ) {
+				$sanitized_pairs[] = array(
+					'question' => $question,
+					'answer' => $answer,
+					'confidence' => isset( $pair['confidence'] ) ? floatval( $pair['confidence'] ) : 1.0,
+					'question_type' => isset( $pair['question_type'] ) ? sanitize_text_field( $pair['question_type'] ) : 'manual',
+					'keywords' => isset( $pair['keywords'] ) && is_array( $pair['keywords'] ) 
+						? array_map( 'sanitize_text_field', $pair['keywords'] ) 
+						: array(),
+				);
+			}
+		}
+
+		// Save Q&A pairs
+		if ( ! empty( $sanitized_pairs ) ) {
+			update_post_meta( $post_id, self::META_QA_PAIRS, $sanitized_pairs );
+
+			if ( class_exists( '\FP\SEO\Admin\Helpers\CacheHelper' ) ) {
+				\FP\SEO\Admin\Helpers\CacheHelper::clear_schema_cache( $post_id );
+			}
+
+			if ( $debug ) {
+				Logger::debug( 'MetaboxSaver::save_qa_pairs - Saved Q&A pairs', array(
+					'post_id' => $post_id,
+					'count'   => count( $sanitized_pairs ),
+				) );
+			}
+		} else {
+			delete_post_meta( $post_id, self::META_QA_PAIRS );
+
+			if ( class_exists( '\FP\SEO\Admin\Helpers\CacheHelper' ) ) {
+				\FP\SEO\Admin\Helpers\CacheHelper::clear_schema_cache( $post_id );
+			}
 		}
 	}
 }

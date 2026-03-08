@@ -17,6 +17,7 @@ use FP\SEO\Infrastructure\Container;
 use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Infrastructure\Traits\HookHelperTrait;
 use FP\SEO\Infrastructure\Traits\ServiceRegistrationTrait;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Admin\TestSuitePage;
 use FP\SEO\Admin\TestSuiteAjax;
 
@@ -30,17 +31,34 @@ class TestSuiteServiceProvider extends AbstractAdminServiceProvider {
 	use ServiceRegistrationTrait;
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			\FP\SEO\Infrastructure\Providers\CoreServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Register test suite services in the container.
 	 *
 	 * @param Container $container The container instance.
 	 * @return void
 	 */
 	protected function register_admin( Container $container ): void {
-		// Register test suite services as singletons
-		$this->register_singletons( $container, array(
-			TestSuitePage::class,
-			TestSuiteAjax::class,
-		) );
+		// Register TestSuiteAjax with HookManager dependency
+		$container->singleton( TestSuiteAjax::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			return new TestSuiteAjax( $hook_manager );
+		} );
+
+		// Register TestSuitePage with HookManager dependency
+		$container->singleton( TestSuitePage::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			return new TestSuitePage( $hook_manager );
+		} );
 	}
 
 	/**

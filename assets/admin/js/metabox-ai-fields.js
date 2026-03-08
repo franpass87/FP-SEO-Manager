@@ -160,8 +160,9 @@
 					const content = getEditorContent();
 					const title = getPostTitle();
 					
-					if (!content || !title) {
-						alert('Contenuto o titolo mancante. Assicurati di aver scritto del contenuto prima di generare.');
+					// Require at least one of content or title (matching backend validation)
+					if (!content && !title) {
+						alert('Contenuto o titolo mancante. Assicurati di aver scritto del contenuto o un titolo prima di generare.');
 						return;
 					}
 

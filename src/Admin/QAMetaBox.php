@@ -17,17 +17,26 @@ use FP\SEO\Admin\Scripts\QAMetaBoxScriptsManager;
 use FP\SEO\Admin\Styles\QAMetaBoxStylesManager;
 use FP\SEO\AI\QAPairExtractor;
 use FP\SEO\Utils\PostTypes;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Integrations\OpenAiClient;
 
 /**
  * Manages Q&A pairs metabox
  */
-class QAMetaBox {
+class QAMetabox {
 	/**
 	 * Q&A extractor instance
 	 *
 	 * @var QAPairExtractor
 	 */
 	private QAPairExtractor $extractor;
+
+	/**
+	 * OpenAI client instance
+	 *
+	 * @var OpenAiClient
+	 */
+	private OpenAiClient $openai_client;
 
 	/**
 	 * @var QAMetaBoxStylesManager|null
@@ -40,10 +49,23 @@ class QAMetaBox {
 	private $scripts_manager;
 
 	/**
-	 * Constructor
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
 	 */
-	public function __construct() {
-		$this->extractor = new QAPairExtractor();
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor
+	 *
+	 * @param QAPairExtractor           $extractor     Q&A pair extractor instance.
+	 * @param OpenAiClient              $openai_client OpenAI client instance.
+	 * @param HookManagerInterface|null $hook_manager  Optional hook manager instance.
+	 */
+	public function __construct( QAPairExtractor $extractor, OpenAiClient $openai_client, ?HookManagerInterface $hook_manager = null ) {
+		$this->extractor     = $extractor;
+		$this->openai_client = $openai_client;
+		$this->hook_manager  = $hook_manager;
 	}
 
 	/**
@@ -52,7 +74,11 @@ class QAMetaBox {
 	public function register(): void {
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		} else {
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		}
 
 		// Initialize and register styles and scripts managers
 		$this->styles_manager = new QAMetaBoxStylesManager();
@@ -97,25 +123,23 @@ class QAMetaBox {
 		wp_nonce_field( 'fp_seo_qa_metabox', 'fp_seo_qa_nonce' );
 
 		$qa_pairs = $this->extractor->get_qa_pairs( $post->ID );
-		$has_openai = ( new \FP\SEO\Integrations\OpenAiClient() )->is_configured();
+		$has_openai = $this->openai_client->is_configured();
 		
 		// Set post context for scripts manager
 		if ( $this->scripts_manager ) {
 			$this->scripts_manager->set_post( $post );
 		}
 		
-		// Debug logging
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			\FP\SEO\Utils\Logger::debug( 'QAMetaBox::render', array(
-				'post_id' => $post->ID,
-				'qa_pairs_count' => count( $qa_pairs ),
-				'has_openai' => $has_openai,
-				'qa_pairs_preview' => ! empty( $qa_pairs ) ? array_slice( $qa_pairs, 0, 2 ) : array(),
-			) );
-		}
+		// Debug logging removed - use injected logger if needed
 
 		?>
-		<div class="fp-seo-qa-metabox">
+	<div class="fp-seo-qa-metabox">
+		<!-- Hidden field to ensure metabox is recognized in POST -->
+		<input type="hidden" name="fp_seo_performance_metabox_present" value="1" />
+		<!-- Hidden field to store Q&A pairs for saving -->
+		<?php $qa_pairs_json = wp_json_encode( $qa_pairs ); ?>
+		<input type="hidden" id="fp-seo-qa-pairs-data" name="fp_seo_qa_pairs_data" value="<?php echo esc_attr( false !== $qa_pairs_json ? $qa_pairs_json : '[]' ); ?>">
+			
 			<p class="description">
 				<?php esc_html_e( 'Le coppie domanda-risposta aiutano gli AI (ChatGPT, Gemini, Claude, Perplexity) a citare il tuo contenuto nelle risposte agli utenti.', 'fp-seo-performance' ); ?>
 			</p>
@@ -130,7 +154,7 @@ class QAMetaBox {
 						🤖 <?php esc_html_e( 'Genera Q&A Automaticamente con AI', 'fp-seo-performance' ); ?>
 					</button>
 					<p class="description" style="margin-top: 10px;">
-						<?php esc_html_e( 'Usa GPT-5 Nano per estrarre automaticamente 8-12 coppie domanda-risposta dal contenuto.', 'fp-seo-performance' ); ?>
+						<?php esc_html_e( 'Usa GPT-4o Mini per estrarre automaticamente 8-12 coppie domanda-risposta dal contenuto.', 'fp-seo-performance' ); ?>
 					</p>
 				<?php else : ?>
 					<p class="description">
@@ -159,7 +183,7 @@ class QAMetaBox {
 										<span><?php echo esc_html( $pair['answer'] ); ?></span>
 									</div>
 									<div style="font-size: 12px; color: #6b7280;">
-										<span title="Confidence Score">⭐ <?php echo esc_html( number_format( $pair['confidence'], 2 ) ); ?></span>
+										<span title="Confidence Score">⭐ <?php echo esc_html( number_format( (float) ( $pair['confidence'] ?? 0.0 ), 2 ) ); ?></span>
 										<span style="margin-left: 15px;" title="Type">🏷️ <?php echo esc_html( $pair['question_type'] ?? 'informational' ); ?></span>
 										<?php if ( ! empty( $pair['keywords'] ) ) : ?>
 											<span style="margin-left: 15px;" title="Keywords">🔑 <?php echo esc_html( implode( ', ', array_slice( $pair['keywords'], 0, 3 ) ) ); ?></span>

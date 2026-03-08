@@ -15,6 +15,7 @@ use FP\SEO\Admin\Renderers\TestSuitePageRenderer;
 use FP\SEO\Admin\Scripts\TestSuiteScriptsManager;
 use FP\SEO\Admin\Styles\TestSuiteStylesManager;
 use FP\SEO\Utils\Options;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Pagina admin per eseguire la test suite del plugin.
@@ -36,10 +37,26 @@ class TestSuitePage {
 	private $renderer;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_test_page' ) );
+		$this->hook_manager->add_action( 'admin_menu', array( $this, 'add_test_page' ) );
 
 		// Initialize and register styles and scripts managers
 		$this->styles_manager = new TestSuiteStylesManager();

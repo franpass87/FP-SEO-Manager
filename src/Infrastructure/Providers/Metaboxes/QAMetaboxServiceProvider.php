@@ -14,7 +14,9 @@ declare(strict_types=1);
 namespace FP\SEO\Infrastructure\Providers\Metaboxes;
 
 use FP\SEO\Infrastructure\Container;
-use FP\SEO\Admin\QAMetaBox;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Admin\QAMetabox;
+use FP\SEO\Integrations\OpenAiClient;
 
 /**
  * QA Metabox service provider.
@@ -26,12 +28,23 @@ use FP\SEO\Admin\QAMetaBox;
 class QAMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			\FP\SEO\Infrastructure\Providers\CoreServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Get the metabox class name that this provider manages.
 	 *
 	 * @return string The metabox class name.
 	 */
 	protected function get_metabox_class(): string {
-		return QAMetaBox::class;
+		return QAMetabox::class;
 	}
 
 	/**
@@ -41,8 +54,13 @@ class QAMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 	 * @return void
 	 */
 	protected function register_admin( Container $container ): void {
-		// Register QA metabox as singleton
-		$container->singleton( QAMetaBox::class );
+		// Register QA metabox with QAPairExtractor, OpenAiClient, and HookManager dependencies
+		$container->singleton( QAMetabox::class, function( Container $container ) {
+			$extractor     = $container->get( \FP\SEO\AI\QAPairExtractor::class );
+			$openai_client = $container->get( OpenAiClient::class );
+			$hook_manager  = $container->get( HookManagerInterface::class );
+			return new QAMetabox( $extractor, $openai_client, $hook_manager );
+		} );
 	}
 }
 

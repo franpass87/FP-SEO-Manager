@@ -14,7 +14,8 @@ namespace FP\SEO\Admin;
 use FP\SEO\Admin\Renderers\GeoSettingsRenderer;
 use FP\SEO\Admin\Scripts\GeoSettingsScriptsManager;
 use FP\SEO\GEO\GeoSitemap;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Renders GEO settings tab
@@ -32,12 +33,34 @@ class GeoSettings {
 	private $scripts_manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks
 	 */
 	public function register(): void {
-		add_filter( 'fpseo_settings_tabs', array( $this, 'add_geo_tab' ) );
-		add_action( 'fpseo_settings_render_tab_geo', array( $this, 'render' ) );
-		add_action( 'update_option_fp_seo_performance', array( $this, 'on_settings_update' ), 10, 2 );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_filter( 'fpseo_settings_tabs', array( $this, 'add_geo_tab' ) );
+			$this->hook_manager->add_action( 'fpseo_settings_render_tab_geo', array( $this, 'render' ) );
+			$this->hook_manager->add_action( 'update_option_fp_seo_performance', array( $this, 'on_settings_update' ), 10, 2 );
+		} else {
+			add_filter( 'fpseo_settings_tabs', array( $this, 'add_geo_tab' ) );
+			add_action( 'fpseo_settings_render_tab_geo', array( $this, 'render' ) );
+			add_action( 'update_option_fp_seo_performance', array( $this, 'on_settings_update' ), 10, 2 );
+		}
 
 		// Initialize renderer and scripts manager
 		$this->renderer = new GeoSettingsRenderer();
@@ -59,7 +82,7 @@ class GeoSettings {
 	 * Render GEO settings tab
 	 */
 	public function render(): void {
-		$options = Options::get();
+		$options = OptionsHelper::get();
 		$geo     = $options['geo'] ?? array();
 
 		if ( $this->renderer ) {

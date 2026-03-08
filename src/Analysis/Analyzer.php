@@ -17,7 +17,7 @@ use FP\SEO\Analysis\Checks\FaqSchemaCheck;
 use FP\SEO\Analysis\Checks\H1PresenceCheck;
 use FP\SEO\Analysis\Checks\HeadingsStructureCheck;
 use FP\SEO\Analysis\Checks\HowToSchemaCheck;
-// ImageAltCheck removed - image optimization features disabled
+use FP\SEO\Analysis\Checks\ImageAltCheck;
 use FP\SEO\Analysis\Checks\InternalLinksCheck;
 use FP\SEO\Analysis\Checks\MetaDescriptionCheck;
 use FP\SEO\Analysis\Checks\OgCardsCheck;
@@ -76,11 +76,24 @@ class Analyzer {
 		 */
 		$checks = apply_filters( 'fp_seo_analyzer_checks', $checks, $context );
 
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
+		if ( $debug ) {
+			error_log( 'FP SEO DEBUG: Analyzer::analyze() - total_checks=' . count( $checks ) );
+		}
+
 		// Use CheckRegistry to filter enabled checks.
 		$enabled_checks = CheckRegistry::filter_enabled_checks( $checks, $context );
 
+		if ( $debug ) {
+			error_log( 'FP SEO DEBUG: Analyzer::analyze() - enabled_checks=' . count( $enabled_checks ) );
+		}
+
 		// Handle empty result case.
 		if ( empty( $enabled_checks ) ) {
+			if ( $debug ) {
+				error_log( 'FP SEO DEBUG: Analyzer::analyze() - NO ENABLED CHECKS! Returning empty result.' );
+			}
 			$empty_result = array(
 				'status'  => Result::STATUS_PASS,
 				'summary' => array(

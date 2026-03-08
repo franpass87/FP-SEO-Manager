@@ -13,7 +13,6 @@ declare(strict_types=1);
 
 namespace FP\SEO\Analysis;
 
-use FP\SEO\Utils\Options;
 use function apply_filters;
 use function array_keys;
 use function function_exists;
@@ -64,8 +63,9 @@ class CheckRegistry {
 	 * @return array<string, bool> Map of check ID to enabled status.
 	 */
 	private static function get_configured_checks(): array {
-		$options    = Options::get();
-		$configured = array();
+		$raw_options = get_option( \FP\SEO\Utils\Options::OPTION_KEY, array() );
+		$options     = is_array( $raw_options ) ? $raw_options : array();
+		$configured  = array();
 
 		if ( isset( $options['analysis']['checks'] ) && is_array( $options['analysis']['checks'] ) ) {
 			foreach ( $options['analysis']['checks'] as $id => $enabled ) {
@@ -118,12 +118,9 @@ class CheckRegistry {
 	private static function apply_filter_hook( array $enabled_ids, Context $context ): array {
 		$filtered_array = array_keys( $enabled_ids );
 
-		if ( function_exists( 'apply_filters' ) ) {
-			$maybe_filtered = apply_filters( 'fp_seo_perf_checks_enabled', $filtered_array, $context );
-
-			if ( is_array( $maybe_filtered ) ) {
-				$filtered_array = $maybe_filtered;
-			}
+		$maybe_filtered = apply_filters( 'fp_seo_perf_checks_enabled', $filtered_array, $context );
+		if ( is_array( $maybe_filtered ) ) {
+			$filtered_array = $maybe_filtered;
 		}
 
 		// Convert back to associative array.

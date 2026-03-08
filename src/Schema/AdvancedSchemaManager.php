@@ -18,9 +18,18 @@ use FP\SEO\Schema\Generators\HowToSchemaGenerator;
 use FP\SEO\Schema\Generators\OrganizationSchemaGenerator;
 use FP\SEO\Schema\Generators\ProductSchemaGenerator;
 use FP\SEO\Schema\Generators\WebSiteSchemaGenerator;
+use FP\SEO\Schema\Generators\WebPageSchemaGenerator;
+use FP\SEO\Schema\Generators\ContactPageSchemaGenerator;
+use FP\SEO\Schema\Generators\AboutPageSchemaGenerator;
+use FP\SEO\Schema\Generators\TouristTripSchemaGenerator;
+use FP\SEO\Schema\Generators\EventSchemaGenerator;
+use FP\SEO\Schema\Generators\TouristAttractionSchemaGenerator;
+use FP\SEO\Schema\Generators\ServiceSchemaGenerator;
+use FP\SEO\Schema\Generators\OfferSchemaGenerator;
 use FP\SEO\Schema\Handlers\SchemaAjaxHandler;
 use FP\SEO\Schema\Renderers\SchemaPageRenderer;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Utils\CacheHelper;
 use FP\SEO\Utils\PerformanceConfig;
 use function get_current_blog_id;
 use function get_post_type;
@@ -51,6 +60,10 @@ class AdvancedSchemaManager {
 		'Event' => 'Event',
 		'Person' => 'Person',
 		'LocalBusiness' => 'LocalBusiness',
+		'TouristTrip' => 'TouristTrip',
+		'TouristAttraction' => 'TouristAttraction',
+		'Service' => 'Service',
+		'Offer' => 'Offer',
 	);
 
 	/**
@@ -64,15 +77,58 @@ class AdvancedSchemaManager {
 	private $ajax_handler;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks.
+	 *
+	 * @deprecated Frontend schema rendering is now handled by Frontend/Renderers/SchemaRenderer.
+	 *             Admin menu registration is now handled by AdminPagesServiceProvider.
+	 *             This method is kept for backward compatibility.
 	 */
 	public function register(): void {
-		add_action( 'wp_head', array( $this, 'output_schema_markup' ), 1 );
-		add_action( 'admin_menu', array( $this, 'add_schema_menu' ) );
+		// Frontend schema rendering moved to Frontend/Renderers/SchemaRenderer
+		// Admin menu moved to AdminPagesServiceProvider
+		// Only register AJAX handler if not already registered
+		if ( ! $this->ajax_handler ) {
+			$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+			$this->ajax_handler = new SchemaAjaxHandler( $this, $hook_manager );
+			$this->ajax_handler->register();
+		}
+	}
 
-		// Initialize and register AJAX handler
-		$this->ajax_handler = new SchemaAjaxHandler( $this );
-		$this->ajax_handler->register();
+	/**
+	 * Get hook manager from container.
+	 *
+	 * @return HookManagerInterface
+	 */
+	private function get_hook_manager(): HookManagerInterface {
+		if ( $this->hook_manager ) {
+			return $this->hook_manager;
+		}
+		
+		// Fallback: get from container
+		try {
+			$plugin = \FP\SEO\Infrastructure\Plugin::instance();
+			$container = $plugin->get_container();
+			$this->hook_manager = $container->get( HookManagerInterface::class );
+		} catch ( \Throwable $e ) {
+			throw new \RuntimeException( 'HookManager not available: ' . $e->getMessage(), 0, $e );
+		}
+		return $this->hook_manager;
 	}
 
 	/**
@@ -103,25 +159,14 @@ class AdvancedSchemaManager {
 
 	/**
 	 * Output schema markup in head.
+	 *
+	 * @deprecated This method has been moved to Frontend/Renderers/SchemaRenderer.
+	 *             This method is kept for backward compatibility but does nothing.
+	 * @return void
 	 */
 	public function output_schema_markup(): void {
-		if ( is_admin() ) {
-			return;
-		}
-
-		$schemas = $this->get_active_schemas();
-		
-		if ( empty( $schemas ) ) {
-			return;
-		}
-
-		echo "\n<!-- FP SEO Performance Schema Markup -->\n";
-		foreach ( $schemas as $schema ) {
-			echo '<script type="application/ld+json">' . "\n";
-			echo wp_json_encode( $schema, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-			echo "\n" . '</script>' . "\n";
-		}
-		echo "<!-- End FP SEO Performance Schema Markup -->\n";
+		// Schema rendering is now handled by Frontend/Renderers/SchemaRenderer
+		// This method is kept for backward compatibility
 	}
 
 	/**
@@ -129,10 +174,27 @@ class AdvancedSchemaManager {
 	 *
 	 * @return array<array<string, mixed>>
 	 */
-	private function get_active_schemas(): array {
-		$cache_key = 'fp_seo_schemas_' . get_the_ID() . '_' . get_current_blog_id();
+	private function get_active_schemas( int $post_id = 0 ): array {
+		// Get post ID before cache closure to ensure it's available
+		$current_post_id = $post_id;
+
+		if ( ! $current_post_id ) {
+			if ( is_singular() ) {
+				$current_post_id = (int) get_the_ID();
+			}
+			// Fallback: try to get from global $post
+			if ( ! $current_post_id && isset( $GLOBALS['post'] ) && $GLOBALS['post'] instanceof \WP_Post ) {
+				$current_post_id = (int) $GLOBALS['post']->ID;
+			}
+		}
 		
-		return Cache::remember( $cache_key, function() {
+		$cache_key = 'fp_seo_schemas_' . $current_post_id . '_' . get_current_blog_id();
+		
+		// Note: Cache is cleared in MetaboxSaver when post is saved
+		// We don't clear cache here to avoid performance issues
+		// If schema type was recently changed, MetaboxSaver will have cleared the cache
+		
+		return CacheHelper::remember( $cache_key, function() use ( $current_post_id ) {
 			$schemas = array();
 
 			// Organization schema (global)
@@ -144,20 +206,94 @@ class AdvancedSchemaManager {
 			$schemas[] = $website_generator->generate();
 
 			// Page-specific schemas
-			if ( is_singular() ) {
-				$post_id = get_the_ID();
+			if ( $current_post_id > 0 ) {
+				$post_id = $current_post_id;
 				$post_type = get_post_type( $post_id );
 
-				// Article/BlogPosting schema
-				if ( in_array( $post_type, array( 'post', 'page' ), true ) ) {
-					$article_generator = new ArticleSchemaGenerator();
-					$schemas[] = $article_generator->generate( $post_id );
+				// Get selected schema type from post meta
+				$selected_schema_type = get_post_meta( $post_id, '_fp_seo_schema_type', true );
+				
+				// Default schema types based on post type
+				if ( empty( $selected_schema_type ) ) {
+					if ( $post_type === 'post' ) {
+						$selected_schema_type = 'Article';
+					} elseif ( $post_type === 'product' ) {
+						$selected_schema_type = 'Product';
+					} elseif ( $post_type === 'fp_experience' ) {
+						$selected_schema_type = 'TouristTrip';
+					} else {
+						$selected_schema_type = 'WebPage';
+					}
 				}
 
-				// Product schema for WooCommerce
-				if ( class_exists( 'WooCommerce' ) && 'product' === $post_type ) {
-					$product_generator = new ProductSchemaGenerator();
-					$schemas[] = $product_generator->generate( $post_id );
+				// Generate schema based on selected type
+				switch ( $selected_schema_type ) {
+					case 'Article':
+					case 'BlogPosting':
+					case 'NewsArticle':
+						$article_generator = new ArticleSchemaGenerator();
+						$schema = $article_generator->generate( $post_id );
+						
+						// Override @type if needed
+						if ( $selected_schema_type !== 'Article' && ! empty( $schema ) ) {
+							$schema['@type'] = $selected_schema_type;
+						}
+						// Always add schema if generated
+						if ( ! empty( $schema ) && isset( $schema['@type'] ) ) {
+							$schemas[] = $schema;
+						}
+						break;
+
+				case 'Product':
+					if ( class_exists( 'WooCommerce' ) && 'product' === $post_type ) {
+						$product_generator = new ProductSchemaGenerator();
+						$product_schema    = $product_generator->generate( $post_id );
+						if ( ! empty( $product_schema ) ) {
+							$schemas[] = $product_schema;
+						}
+					}
+					break;
+
+					case 'ContactPage':
+						$contact_generator = new ContactPageSchemaGenerator();
+						$schemas[] = $contact_generator->generate( $post_id );
+						break;
+
+					case 'AboutPage':
+						$about_generator = new AboutPageSchemaGenerator();
+						$schemas[] = $about_generator->generate( $post_id );
+						break;
+
+					case 'TouristTrip':
+						$tourist_trip_generator = new TouristTripSchemaGenerator();
+						$schemas[] = $tourist_trip_generator->generate( $post_id );
+						break;
+
+					case 'Event':
+						$event_generator = new EventSchemaGenerator();
+						$schemas[] = $event_generator->generate( $post_id );
+						break;
+
+					case 'TouristAttraction':
+						$tourist_attraction_generator = new TouristAttractionSchemaGenerator();
+						$schemas[] = $tourist_attraction_generator->generate( $post_id );
+						break;
+
+					case 'Service':
+						$service_generator = new ServiceSchemaGenerator();
+						$schemas[] = $service_generator->generate( $post_id );
+						break;
+
+					case 'Offer':
+						$offer_generator = new OfferSchemaGenerator();
+						$schemas[] = $offer_generator->generate( $post_id );
+						break;
+
+					case 'WebPage':
+					default:
+						$webpage_generator = new WebPageSchemaGenerator();
+						$schemas[] = $webpage_generator->generate( $post_id );
+						break;
 				}
 
 				// FAQ schema if present
@@ -189,10 +325,11 @@ class AdvancedSchemaManager {
 	/**
 	 * Get active schemas (public accessor).
 	 *
+	 * @param int $post_id Optional post ID to generate schemas for. Defaults to current post.
 	 * @return array<array<string, mixed>>
 	 */
-	public function get_active_schemas_public(): array {
-		return $this->get_active_schemas();
+	public function get_active_schemas_public( int $post_id = 0 ): array {
+		return $this->get_active_schemas( $post_id );
 	}
 
 	/**
@@ -239,20 +376,3 @@ class AdvancedSchemaManager {
 	}
 }
 
-/**
- * Get custom logo URL.
- *
- * @return string Logo URL or empty string if not set.
- */
-function get_custom_logo_url(): string {
-	$custom_logo_id = get_theme_mod( 'custom_logo' );
-	
-	if ( ! $custom_logo_id ) {
-		return '';
-	}
-	
-	// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze
-	$logo_url = wp_get_attachment_url( $custom_logo_id );
-	
-	return $logo_url ? (string) $logo_url : '';
-}

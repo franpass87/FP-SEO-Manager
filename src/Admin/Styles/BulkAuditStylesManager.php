@@ -11,35 +11,21 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin\Styles;
 
+use FP\SEO\Admin\Assets\AbstractStylesManager;
 use FP\SEO\Admin\BulkAuditPage;
-use function get_current_screen;
 
 /**
  * Manages styles for the Bulk Audit page.
  */
-class BulkAuditStylesManager {
+class BulkAuditStylesManager extends AbstractStylesManager {
 	/**
-	 * Register hooks.
+	 * Check if styles should be injected.
 	 *
-	 * @return void
+	 * @return bool True if should inject, false otherwise.
 	 */
-	public function register_hooks(): void {
-		add_action( 'admin_head', array( $this, 'inject_styles' ) );
-	}
-
-	/**
-	 * Inject styles in admin head.
-	 *
-	 * @return void
-	 */
-	public function inject_styles(): void {
-		$screen = get_current_screen();
-		
-		if ( ! $screen || 'fp-seo-performance_page_' . BulkAuditPage::PAGE_SLUG !== $screen->id ) {
-			return;
-		}
-		
-		$this->render_styles();
+	protected function should_inject_styles(): bool {
+		$target_screen = 'fp-seo-performance_page_' . BulkAuditPage::PAGE_SLUG;
+		return $this->is_target_screen( $target_screen );
 	}
 
 	/**
@@ -47,24 +33,22 @@ class BulkAuditStylesManager {
 	 *
 	 * @return void
 	 */
-	private function render_styles(): void {
-		?>
-		<style id="fp-seo-bulk-modern-ui">
-		<?php $this->render_wrap_styles(); ?>
-		<?php $this->render_filters_styles(); ?>
-		<?php $this->render_toolbar_styles(); ?>
-		<?php $this->render_table_styles(); ?>
-		</style>
-		<?php
+	protected function render_styles(): void {
+		$styles = $this->get_wrap_styles() .
+				  $this->get_filters_styles() .
+				  $this->get_toolbar_styles() .
+				  $this->get_table_styles();
+		
+		$this->output_style_tag( 'fp-seo-bulk-modern-ui', $styles );
 	}
 
 	/**
-	 * Render wrap styles.
+	 * Get wrap styles.
 	 *
-	 * @return void
+	 * @return string CSS styles.
 	 */
-	private function render_wrap_styles(): void {
-		?>
+	private function get_wrap_styles(): string {
+		return '
 		:root {
 			--fp-seo-primary: #2563eb;
 			--fp-seo-gray-50: #f9fafb;
@@ -87,16 +71,16 @@ class BulkAuditStylesManager {
 			font-weight: 700 !important;
 			margin-bottom: 16px !important;
 		}
-		<?php
+		';
 	}
 
 	/**
-	 * Render filters styles.
+	 * Get filters styles.
 	 *
-	 * @return void
+	 * @return string CSS styles.
 	 */
-	private function render_filters_styles(): void {
-		?>
+	private function get_filters_styles(): string {
+		return '
 		.fp-seo-performance-bulk__filters {
 			background: #fff !important;
 			border: 1px solid #e5e7eb !important;
@@ -120,16 +104,16 @@ class BulkAuditStylesManager {
 			padding: 8px 12px !important;
 			min-width: 200px !important;
 		}
-		<?php
+		';
 	}
 
 	/**
-	 * Render toolbar styles.
+	 * Get toolbar styles.
 	 *
-	 * @return void
+	 * @return string CSS styles.
 	 */
-	private function render_toolbar_styles(): void {
-		?>
+	private function get_toolbar_styles(): string {
+		return '
 		.fp-seo-performance-bulk__toolbar {
 			display: flex !important;
 			gap: 12px !important;
@@ -153,16 +137,16 @@ class BulkAuditStylesManager {
 			color: #991b1b !important;
 			border: 1px solid #fca5a5 !important;
 		}
-		<?php
+		';
 	}
 
 	/**
-	 * Render table styles.
+	 * Get table styles.
 	 *
-	 * @return void
+	 * @return string CSS styles.
 	 */
-	private function render_table_styles(): void {
-		?>
+	private function get_table_styles(): string {
+		return '
 		.fp-seo-performance-bulk table.widefat {
 			border: 1px solid #e5e7eb !important;
 			border-radius: 8px !important;
@@ -191,7 +175,7 @@ class BulkAuditStylesManager {
 		.fp-seo-performance-bulk table.widefat tbody tr:hover {
 			background-color: #f9fafb !important;
 		}
-		<?php
+		';
 	}
 }
 

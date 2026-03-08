@@ -13,13 +13,14 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Admin\Scripts\GeoMetaBoxScriptsManager;
 use FP\SEO\Admin\Styles\GeoMetaBoxStylesManager;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 use FP\SEO\Utils\PostTypes;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * GEO metabox with claims editor
  */
-class GeoMetaBox {
+class GeoMetabox {
 	/**
 	 * @var GeoMetaBoxStylesManager|null
 	 */
@@ -31,6 +32,22 @@ class GeoMetaBox {
 	private $scripts_manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks
 	 */
 	public function register(): void {
@@ -40,12 +57,22 @@ class GeoMetaBox {
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 1 );
+			$hook = 'save_post_' . $post_type;
+			if ( $this->hook_manager ) {
+				// HookManager handles duplicate prevention internally
+				$this->hook_manager->add_action( $hook, array( $this, 'save_meta' ), 10, 1 );
+			} else {
+				if ( ! has_action( $hook, array( $this, 'save_meta' ) ) ) {
+					add_action( $hook, array( $this, 'save_meta' ), 10, 1 );
+				}
 			}
 		}
 		
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		} else {
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		}
 
 		// Initialize and register styles and scripts managers
 		$this->styles_manager = new GeoMetaBoxStylesManager();
@@ -102,16 +129,9 @@ class GeoMetaBox {
 	public function render( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_geo_metabox', 'fp_seo_geo_nonce' );
 
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		// Get existing data
 		$claims      = get_post_meta( $post->ID, '_fp_seo_geo_claims', true );
@@ -303,6 +323,14 @@ class GeoMetaBox {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_meta( int $post_id ): void {
+		// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO: GeoMetabox::save_meta BLOCKED - WordPress native operation detected' );
+			}
+			return;
+		}
+		
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
@@ -385,7 +413,7 @@ class GeoMetaBox {
 	 * @return array<string>
 	 */
 	private function get_enabled_post_types(): array {
-		$options = Options::get();
+		$options = OptionsHelper::get();
 		$geo     = $options['geo'] ?? array();
 
 		$enabled = array();

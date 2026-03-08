@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Social\Handlers;
 
 use FP\SEO\Social\ImprovedSocialMediaManager;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Utils\Logger;
 use WP_Post;
 use function absint;
@@ -39,12 +40,21 @@ class SocialAjaxHandler {
 	private $manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ImprovedSocialMediaManager $manager Social media manager instance.
+	 * @param HookManagerInterface       $hook_manager Hook manager instance.
 	 */
-	public function __construct( ImprovedSocialMediaManager $manager ) {
+	public function __construct( ImprovedSocialMediaManager $manager, HookManagerInterface $hook_manager ) {
 		$this->manager = $manager;
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
@@ -53,8 +63,8 @@ class SocialAjaxHandler {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'handle_preview' ) );
-		add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'handle_optimize' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'handle_preview' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'handle_optimize' ) );
 	}
 
 	/**
@@ -69,17 +79,20 @@ class SocialAjaxHandler {
 
 		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {
 			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
+			return;
 		}
 
 		$preview_data = $this->manager->get_preview_data( $post );
 
 		wp_send_json_success( $preview_data );
+		return;
 	}
 
 	/**
@@ -95,17 +108,20 @@ class SocialAjaxHandler {
 
 		if ( $post_id <= 0 || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {
 			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
+			return;
 		}
 
 		try {
 			$optimized = $this->optimize_social_with_ai( $post, $platform );
 			wp_send_json_success( $optimized );
+			return;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				Logger::error( 'FP SEO: Error optimizing social media', array(
@@ -116,6 +132,7 @@ class SocialAjaxHandler {
 				) );
 			}
 			wp_send_json_error( array( 'message' => __( 'Error optimizing social media content.', 'fp-seo-performance' ) ), 500 );
+			return;
 		}
 	}
 
@@ -126,7 +143,7 @@ class SocialAjaxHandler {
 	 * @param string $platform Social platform.
 	 * @return array<string, mixed>
 	 */
-	private function optimize_social_with_ai( WP_Post $post, string $platform ): array {
+	protected function optimize_social_with_ai( WP_Post $post, string $platform ): array {
 		$title = get_the_title( $post->ID );
 		
 		// Extract clean content, handling WPBakery shortcodes properly
@@ -192,22 +209,38 @@ class SocialAjaxHandler {
 			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
 				$text = \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $post_content );
 				
-				if ( ! empty( $text ) ) {
-					// Clean up the extracted text (already cleaned by extract_text, but normalize whitespace)
-					$text = preg_replace( '/\s+/', ' ', $text ); // Normalize whitespace
-					return trim( $text );
-				}
+			if ( ! empty( $text ) ) {
+				// Clean up the extracted text (already cleaned by extract_text, but normalize whitespace)
+				$replaced = preg_replace( '/\s+/', ' ', $text );
+				$text     = ( $replaced !== null && $replaced !== false ) ? $replaced : $text;
+				return trim( $text );
+			}
 			}
 		}
 
 		// Fallback: standard WordPress shortcode removal
 		// First render shortcodes, then strip tags
-		$rendered = do_shortcode( $post_content );
-		$content = wp_strip_all_tags( $rendered );
-		$content = preg_replace( '/\s+/', ' ', $content ); // Normalize whitespace
-		
+		$rendered   = do_shortcode( $post_content );
+		$content    = wp_strip_all_tags( $rendered );
+		$replaced   = preg_replace( '/\s+/', ' ', $content );
+		$content    = ( $replaced !== null && $replaced !== false ) ? $replaced : $content;
+
 		return trim( $content );
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

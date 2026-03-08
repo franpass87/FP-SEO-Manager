@@ -11,8 +11,6 @@ declare(strict_types=1);
 
 namespace FP\SEO\Utils;
 
-use FP\SEO\Utils\Logger;
-
 /**
  * Performance monitoring system with detailed metrics.
  */
@@ -384,7 +382,8 @@ class PerformanceMonitor {
 	 * @return string
 	 */
 	public function export_json(): string {
-		return wp_json_encode( $this->get_summary(), JSON_PRETTY_PRINT );
+		$json = wp_json_encode( $this->get_summary(), JSON_PRETTY_PRINT );
+		return false !== $json ? $json : '{}';
 	}
 
 	/**
@@ -397,7 +396,8 @@ class PerformanceMonitor {
 			return;
 		}
 
-		$summary = $this->get_summary();
-		Logger::debug( 'Performance Metrics', array( 'metrics' => $this->export_json() ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO PerformanceMonitor: ' . $this->export_json() );
+		}
 	}
 }

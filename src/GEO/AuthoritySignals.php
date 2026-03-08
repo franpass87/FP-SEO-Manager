@@ -160,9 +160,10 @@ class AuthoritySignals {
 		$verified    = (bool) get_user_meta( $author_id, 'fp_author_verified', true );
 		$verified_at = get_user_meta( $author_id, 'fp_author_verified_at', true );
 
+		$verified_ts = ( $verified && $verified_at ) ? strtotime( $verified_at ) : false;
 		return array(
 			'type'        => $verified ? 'domain_verified' : 'unverified',
-			'verified_at' => $verified && $verified_at ? gmdate( 'c', strtotime( $verified_at ) ) : null,
+			'verified_at' => false !== $verified_ts ? gmdate( 'c', $verified_ts ) : null,
 			'verified'    => $verified,
 		);
 	}
@@ -233,7 +234,10 @@ class AuthoritySignals {
 		$content = $post->post_content;
 
 		// Count external links (excluding own domain)
-		preg_match_all( '/<a[^>]+href=["\']([^"\']+)["\']/i', $content, $matches );
+		$preg_result = preg_match_all( '/<a[^>]+href=["\']([^"\']+)["\']/i', $content, $matches );
+		if ( false === $preg_result || empty( $matches[1] ) ) {
+			return 0;
+		}
 
 		$external_links = 0;
 		$home_url       = home_url();
@@ -270,9 +274,10 @@ class AuthoritySignals {
 		// For now, estimate based on engagement metrics
 		$views    = (int) get_post_meta( $post->ID, '_fp_seo_views', true );
 		$shares   = (int) get_post_meta( $post->ID, '_fp_seo_shares', true );
-		$comments = wp_count_comments( $post->ID );
+		$comments_obj      = wp_count_comments( $post->ID );
+		$approved_comments = ( is_object( $comments_obj ) && isset( $comments_obj->approved ) ) ? (int) $comments_obj->approved : 0;
 
-		$engagement = $views + ( $shares * 10 ) + ( $comments->approved * 5 );
+		$engagement = $views + ( $shares * 10 ) + ( $approved_comments * 5 );
 
 		// Normalize to 0-1 (assume 1000 engagement is excellent)
 		return min( 1.0, $engagement / 1000 );
@@ -393,7 +398,10 @@ class AuthoritySignals {
 		}
 
 		$published_timestamp = strtotime( $oldest_post[0]->post_date );
-		$years               = ( time() - $published_timestamp ) / YEAR_IN_SECONDS;
+		if ( false === $published_timestamp ) {
+			return 0;
+		}
+		$years = ( time() - $published_timestamp ) / YEAR_IN_SECONDS;
 
 		return (int) $years;
 	}
@@ -507,7 +515,7 @@ class AuthoritySignals {
 				'url'             => esc_url_raw( $source['url'] ?? '' ),
 				'title'           => sanitize_text_field( $source['title'] ?? '' ),
 				'authority_score' => $this->estimate_source_authority( $source['url'] ?? '' ),
-				'date'            => isset( $source['date'] ) ? gmdate( 'c', strtotime( $source['date'] ) ) : null,
+				'date'            => isset( $source['date'] ) && ( $ts_src = strtotime( $source['date'] ) ) ? gmdate( 'c', $ts_src ) : null,
 			);
 		}, $sources );
 	}
@@ -554,7 +562,7 @@ class AuthoritySignals {
 		return array(
 			'shares'   => (int) get_post_meta( $post->ID, '_fp_seo_shares', true ),
 			'likes'    => (int) get_post_meta( $post->ID, '_fp_seo_likes', true ),
-			'comments' => wp_count_comments( $post->ID )->approved,
+			'comments' => (int) ( wp_count_comments( $post->ID )->approved ?? 0 ),
 		);
 	}
 

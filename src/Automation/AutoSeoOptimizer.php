@@ -15,7 +15,7 @@ namespace FP\SEO\Automation;
 use FP\SEO\Utils\Logger;
 
 use FP\SEO\Integrations\OpenAiClient;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 
 /**
  * Handles automatic SEO optimization for posts and pages.
@@ -71,6 +71,16 @@ class AutoSeoOptimizer {
 	 * @param bool     $update  Whether this is an update or new post.
 	 */
 	public function maybe_auto_optimize( int $post_id, \WP_Post $post, bool $update ): void {
+// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( class_exists( 'FP\SEO\Editor\Helpers\WordPressNativeProtection' ) ) {
+			if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::any_native_meta_field_being_saved() ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					Logger::debug( 'AutoSeoOptimizer::maybe_auto_optimize BLOCKED - WordPress native meta field operation detected', array( 'post_id' => $post_id ) );
+				}
+				return;
+			}
+		}
+		
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
@@ -201,15 +211,23 @@ class AutoSeoOptimizer {
 		$existing_keyword = get_post_meta( $post_id, self::META_FOCUS_KEYWORD, true );
 
 		// Generate AI suggestions
-		$result = $this->ai_client->generate_seo_suggestions(
-			$post_id,
-			$content,
-			$title,
-			$existing_keyword
-		);
+		try {
+			$result = $this->ai_client->generate_seo_suggestions(
+				$post_id,
+				$content,
+				$title,
+				$existing_keyword
+			);
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Auto-Optimizer threw an exception generating suggestions', array(
+				'post_id' => $post_id,
+				'error'   => $e->getMessage(),
+			) );
+			return;
+		}
 
 		// Check if AI generation was successful
-		if ( ! $result['success'] || empty( $result['data'] ) ) {
+		if ( ! is_array( $result ) || ! $result['success'] || empty( $result['data'] ) ) {
 			// Log error for debugging
 			Logger::error( 'Auto-Optimizer failed to generate suggestions', array(
 				'post_id' => $post_id,
@@ -295,10 +313,25 @@ class AutoSeoOptimizer {
 	 *
 	 * This is called via scheduled event to cleanup the transient.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int $post_id Post ID (optional, for backward compatibility).
 	 */
-	public function clear_optimization_flag( int $post_id ): void {
-		delete_transient( 'fp_seo_auto_optimized_' . $post_id );
+	public function clear_optimization_flag( int $post_id = 0 ): void {
+		if ( $post_id > 0 ) {
+			delete_transient( 'fp_seo_auto_optimized_' . $post_id );
+		} else {
+			// If called without argument, clear all optimization flags
+			// This handles cases where the hook is called without arguments
+			global $wpdb;
+			$prefix1 = '%' . $wpdb->esc_like( '_transient_fp_seo_auto_optimized_' ) . '%';
+			$prefix2 = '%' . $wpdb->esc_like( '_transient_timeout_fp_seo_auto_optimized_' ) . '%';
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+					$prefix1,
+					$prefix2
+				)
+			);
+		}
 	}
 
 	/**
@@ -342,7 +375,8 @@ class AutoSeoOptimizer {
 	 * @return bool
 	 */
 	private function is_auto_optimization_enabled(): bool {
-		return (bool) Options::get_option( 'automation.auto_seo_optimization', false );
+		$options = OptionsHelper::get();
+		return (bool) ( $options['automation']['auto_seo_optimization'] ?? false );
 	}
 
 	/**
@@ -351,9 +385,9 @@ class AutoSeoOptimizer {
 	 * @return array<string>
 	 */
 	private function get_auto_optimize_fields(): array {
-		$fields = Options::get_option( 'automation.auto_optimize_fields', array() );
-		
-		// Default to all fields if not set
+		$opts   = OptionsHelper::get();
+		$fields = $opts['automation']['auto_optimize_fields'] ?? array();
+
 		if ( empty( $fields ) || ! is_array( $fields ) ) {
 			return array( 'focus_keyword', 'meta_description' );
 		}
@@ -367,7 +401,8 @@ class AutoSeoOptimizer {
 	 * @return array<string>
 	 */
 	private function get_allowed_post_types(): array {
-		$post_types = Options::get_option( 'automation.auto_optimize_post_types', array() );
+		$opts       = OptionsHelper::get();
+		$post_types = $opts['automation']['auto_optimize_post_types'] ?? array();
 		
 		// Default to post and page if not set
 		if ( empty( $post_types ) || ! is_array( $post_types ) ) {

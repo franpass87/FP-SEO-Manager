@@ -91,7 +91,7 @@ class DatabaseOptimizer {
 			}
 			
 			// Get table status (use prepared statement for security)
-			$status = $this->wpdb->get_row( $this->wpdb->prepare( "SHOW TABLE STATUS LIKE %s", $safe_table ), ARRAY_A );
+			$status = $this->wpdb->get_row( $this->wpdb->prepare( "SHOW TABLE STATUS LIKE %s", $this->wpdb->esc_like( $safe_table ) ), ARRAY_A );
 			
 			$execution_time = microtime( true ) - $start_time;
 
@@ -140,7 +140,7 @@ class DatabaseOptimizer {
 
 		// Get all tables with our prefix (use prepared statement)
 		$results = $this->wpdb->get_results( 
-			$this->wpdb->prepare( "SHOW TABLES LIKE %s", $prefix . '%' ),
+			$this->wpdb->prepare( "SHOW TABLES LIKE %s", $this->wpdb->esc_like( $prefix ) . '%' ),
 			ARRAY_N 
 		);
 
@@ -256,8 +256,12 @@ class DatabaseOptimizer {
 	 * @return array<string, mixed>
 	 */
 	public function cleanup_old_data( int $days_old = 30 ): array {
-		$results = [];
-		$cutoff_date = date( 'Y-m-d H:i:s', strtotime( "-{$days_old} days" ) );
+		$results    = [];
+		$cutoff_ts  = strtotime( "-{$days_old} days" );
+		if ( false === $cutoff_ts ) {
+			return array( 'error' => 'invalid_date_calculation' );
+		}
+		$cutoff_date = date( 'Y-m-d H:i:s', $cutoff_ts );
 
 		// Clean up old score history
 		$start_time = microtime( true );

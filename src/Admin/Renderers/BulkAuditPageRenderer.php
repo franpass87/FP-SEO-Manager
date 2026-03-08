@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin\Renderers;
 
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 use WP_Post;
 use function admin_url;
 use function esc_attr;
@@ -57,7 +57,7 @@ class BulkAuditPageRenderer {
 		string $nonce_action,
 		string $export_action
 	): void {
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
 		}
 
@@ -179,7 +179,14 @@ class BulkAuditPageRenderer {
 						</tr>
 					<?php else : ?>
 						<?php foreach ( $posts as $post ) : ?>
-							<?php $this->render_table_row( $post, $results, $format_timestamp ); ?>
+							<?php
+							// Convert post ID to WP_Post object if needed
+							$post_object = $post instanceof WP_Post ? $post : get_post( $post );
+							if ( ! $post_object ) {
+								continue;
+							}
+							$this->render_table_row( $post_object, $results, $format_timestamp );
+							?>
 						<?php endforeach; ?>
 					<?php endif; ?>
 				</tbody>
@@ -236,4 +243,18 @@ class BulkAuditPageRenderer {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

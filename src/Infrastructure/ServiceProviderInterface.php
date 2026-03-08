@@ -50,6 +50,16 @@ interface ServiceProviderInterface {
 	 * @return void
 	 */
 	public function deactivate(): void;
+
+	/**
+	 * Get dependencies for this service provider.
+	 *
+	 * Returns an array of class names that this provider depends on.
+	 * These providers will be registered before this one.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> Array of dependency class names.
+	 */
+	public function get_dependencies(): array;
 }
 
 

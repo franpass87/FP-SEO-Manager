@@ -59,14 +59,25 @@ class GeoSitemap {
 		$content_urls = $this->get_content_urls();
 		$urls         = array_merge( $urls, $content_urls );
 
-		// Build XML
+		// Build XML using proper XML escaping
 		$xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 		$xml .= '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
 		foreach ( $urls as $url ) {
+			// Validate URL structure
+			if ( empty( $url['loc'] ) || ! is_string( $url['loc'] ) ) {
+				continue;
+			}
+
+			// Use proper XML escaping for URLs and dates
+			$loc = htmlspecialchars( $url['loc'], ENT_XML1 | ENT_COMPAT, 'UTF-8' );
+			$lastmod = ! empty( $url['lastmod'] ) && is_string( $url['lastmod'] ) 
+				? htmlspecialchars( $url['lastmod'], ENT_XML1 | ENT_COMPAT, 'UTF-8' )
+				: current_time( 'c' );
+			
 			$xml .= '  <sitemap>' . "\n";
-			$xml .= '    <loc>' . esc_url( $url['loc'] ) . '</loc>' . "\n";
-			$xml .= '    <lastmod>' . esc_html( $url['lastmod'] ) . '</lastmod>' . "\n";
+			$xml .= '    <loc>' . $loc . '</loc>' . "\n";
+			$xml .= '    <lastmod>' . $lastmod . '</lastmod>' . "\n";
 			$xml .= '  </sitemap>' . "\n";
 		}
 

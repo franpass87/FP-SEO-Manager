@@ -14,14 +14,15 @@ namespace FP\SEO\Editor;
 use FP\SEO\Analysis\Analyzer;
 use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
-use FP\SEO\Editor\Services\HomepageAutoDraftPrevention;
 use FP\SEO\Editor\Services\SeoFieldsSaver;
+use FP\SEO\Editor\Services\AnalysisDataService;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\MetadataResolver;
-use FP\SEO\Utils\Options;
 use FP\SEO\Utils\PostTypes;
 use FP\SEO\Integrations\GscData;
-use FP\SEO\Utils\Logger;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Infrastructure\Contracts\LoggerInterface;
+use FP\SEO\Infrastructure\Contracts\OptionsInterface;
 use WP_Post;
 use function absint;
 use function admin_url;
@@ -54,8 +55,8 @@ use function wp_verify_nonce;
 class Metabox {
 	private const NONCE_ACTION = 'fp_seo_performance_meta';
 	private const NONCE_FIELD  = 'fp_seo_performance_nonce';
-	private const AJAX_ACTION  = 'fp_seo_performance_analyze';
-	private const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
+	public const AJAX_ACTION  = 'fp_seo_performance_analyze';
+	public const AJAX_SAVE_FIELDS = 'fp_seo_performance_save_fields';
 	public const META_EXCLUDE         = '_fp_seo_performance_exclude';
 	public const META_FOCUS_KEYWORD   = '_fp_seo_focus_keyword';
 	public const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
@@ -65,10 +66,6 @@ class Metabox {
 	 */
 	private $renderer;
 
-	/**
-	 * @var HomepageProtection
-	 */
-	private $homepage_protection;
 
 	/**
 	 * @var MetaboxDiagnostics
@@ -91,6 +88,11 @@ class Metabox {
 	private $analysis_runner;
 
 	/**
+	 * @var \FP\SEO\Editor\Services\AnalysisDataService|null
+	 */
+	private $analysis_data_service;
+
+	/**
 	 * @var SeoFieldsSaver|null
 	 */
 	private $fields_saver;
@@ -106,12 +108,61 @@ class Metabox {
 	private $styles_manager;
 
 	/**
-	 * Costruttore - registra gli hook immediatamente e inizializza il renderer
+	 * @var HookManagerInterface
 	 */
-	public function __construct() {
+	private $hook_manager;
+
+	/**
+	 * @var LoggerInterface
+	 */
+	private $logger;
+
+	/**
+	 * @var OptionsInterface
+	 */
+	private $options;
+
+	/**
+	 * Lazy service loader for heavy services (AI, GSC).
+	 *
+	 * @var \FP\SEO\Editor\Services\LazyServiceLoader|null
+	 */
+	private $lazy_loader;
+
+	/**
+	 * Validator instance.
+	 *
+	 * @var \FP\SEO\Editor\Services\MetaboxValidator|null
+	 */
+	private $validator;
+
+	/**
+	 * State manager instance.
+	 *
+	 * @var \FP\SEO\Editor\Services\MetaboxStateManager|null
+	 */
+	private $state_manager;
+
+	/**
+	 * Costruttore - registra gli hook immediatamente e inizializza il renderer
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 * @param LoggerInterface      $logger       Logger instance.
+	 * @param OptionsInterface     $options      Options instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager, LoggerInterface $logger, OptionsInterface $options ) {
+		// CRITICAL DEBUG: Log constructor call
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO DEBUG: Metabox::__construct() CALLED' );
+		}
+		
+		$this->hook_manager = $hook_manager;
+		$this->logger       = $logger;
+		$this->options      = $options;
 		// REGISTRA GLI HOOK IMMEDIATAMENTE nel costruttore per garantire che vengano sempre registrati
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::__construct() called' );
+			$this->logger->debug( 'Metabox::__construct() called' );
+			error_log( 'FP SEO DEBUG: Metabox::__construct() - logger and options set' );
 		}
 		
 		// INIZIALIZZA IL RENDERER NEL COSTRUTTORE per garantire che sia sempre disponibile
@@ -123,7 +174,7 @@ class Metabox {
 		} catch ( \Throwable $e ) {
 			// Log errore ma permette la creazione dell'oggetto
 			// Il renderer verrà reinizializzato quando necessario
-			Logger::error( 'FP SEO: Failed to initialize MetaboxRenderer in constructor', array(
+			$this->logger->error( 'FP SEO: Failed to initialize MetaboxRenderer in constructor', array(
 				'error' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
@@ -135,9 +186,9 @@ class Metabox {
 		// Initialize AJAX handler
 		if ( class_exists( 'FP\SEO\Editor\Handlers\AjaxHandler' ) ) {
 			try {
-				$this->ajax_handler = new \FP\SEO\Editor\Handlers\AjaxHandler( $this );
+				$this->ajax_handler = new \FP\SEO\Editor\Handlers\AjaxHandler( $this, $this->hook_manager );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize AjaxHandler', array(
+				$this->logger->error( 'FP SEO: Failed to initialize AjaxHandler', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -148,13 +199,38 @@ class Metabox {
 		// Initialize Assets Manager
 		if ( class_exists( 'FP\SEO\Editor\Managers\AssetsManager' ) ) {
 			try {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'FP SEO DEBUG: Metabox constructor - initializing AssetsManager' );
+				}
 				$this->assets_manager = new \FP\SEO\Editor\Managers\AssetsManager( $this );
+				// Register immediately in constructor to ensure hook is registered early
+				if ( $this->assets_manager ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						error_log( 'FP SEO DEBUG: Metabox constructor - calling AssetsManager->register()' );
+					}
+					$this->assets_manager->register();
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						error_log( 'FP SEO DEBUG: Metabox constructor - AssetsManager->register() called' );
+					}
+				}
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					$this->logger->debug( 'FP SEO: AssetsManager initialized and registered in constructor', array(
+						'class' => get_class( $this->assets_manager ),
+					) );
+				}
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize AssetsManager', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'FP SEO DEBUG: Metabox constructor - ERROR initializing AssetsManager: ' . $e->getMessage() );
+				}
+				$this->logger->error( 'FP SEO: Failed to initialize AssetsManager', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
 				$this->assets_manager = null;
+			}
+		} else {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO DEBUG: Metabox constructor - AssetsManager class not found' );
 			}
 		}
 
@@ -163,11 +239,24 @@ class Metabox {
 			try {
 				$this->analysis_runner = new \FP\SEO\Editor\Services\AnalysisRunner();
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize AnalysisRunner', array(
+				$this->logger->error( 'FP SEO: Failed to initialize AnalysisRunner', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
 				$this->analysis_runner = null;
+			}
+		}
+
+		// Initialize AnalysisDataService
+		if ( class_exists( 'FP\SEO\Editor\Services\AnalysisDataService' ) ) {
+			try {
+				$this->analysis_data_service = new AnalysisDataService();
+			} catch ( \Throwable $e ) {
+				$this->logger->error( 'FP SEO: Failed to initialize AnalysisDataService', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+				) );
+				$this->analysis_data_service = null;
 			}
 		}
 
@@ -179,7 +268,7 @@ class Metabox {
 			try {
 				$this->inline_scripts_manager = new \FP\SEO\Editor\Scripts\InlineScriptsManager( $this );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize InlineScriptsManager', array(
+				$this->logger->error( 'FP SEO: Failed to initialize InlineScriptsManager', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -191,8 +280,12 @@ class Metabox {
 		if ( class_exists( 'FP\SEO\Editor\Styles\MetaboxStylesManager' ) ) {
 			try {
 				$this->styles_manager = new \FP\SEO\Editor\Styles\MetaboxStylesManager( $this );
+				// Register hook to inject styles
+				if ( $this->hook_manager ) {
+					$this->hook_manager->add_action( 'admin_head', array( $this->styles_manager, 'inject' ) );
+				}
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize MetaboxStylesManager', array(
+				$this->logger->error( 'FP SEO: Failed to initialize MetaboxStylesManager', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -200,35 +293,11 @@ class Metabox {
 			}
 		}
 		
-		// Initialize modular components with error handling
-		if ( class_exists( 'FP\SEO\Editor\HomepageProtection' ) ) {
-			try {
-				$this->homepage_protection = new HomepageProtection();
-			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize HomepageProtection', array(
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-				) );
-				// Create a dummy object to prevent fatal errors
-				$this->homepage_protection = new class {
-					public function register_hooks(): void {}
-					public function correct_homepage_post( WP_Post $post ): WP_Post { return $post; }
-				};
-			}
-		} else {
-			Logger::error( 'FP SEO: HomepageProtection class not found' );
-			// Create a dummy object to prevent fatal errors
-			$this->homepage_protection = new class {
-				public function register_hooks(): void {}
-				public function correct_homepage_post( WP_Post $post ): WP_Post { return $post; }
-			};
-		}
-		
 		if ( class_exists( 'FP\SEO\Editor\MetaboxDiagnostics' ) ) {
 			try {
 				$this->diagnostics = new MetaboxDiagnostics();
 			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to initialize MetaboxDiagnostics', array(
+				$this->logger->error( 'FP SEO: Failed to initialize MetaboxDiagnostics', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -239,7 +308,7 @@ class Metabox {
 				};
 			}
 		} else {
-			Logger::error( 'FP SEO: MetaboxDiagnostics class not found' );
+			$this->logger->error( 'FP SEO: MetaboxDiagnostics class not found' );
 			// Create a dummy object to prevent fatal errors
 			$this->diagnostics = new class {
 				public function get_homepage_diagnostics( WP_Post $post ): array { return array(); }
@@ -250,19 +319,6 @@ class Metabox {
 		// Registra hook di salvataggio
 		$this->register_hooks();
 		
-		// Register homepage protection hooks if available
-		// RE-ENABLED with error handling to prevent conflicts with other plugins
-		if ( isset( $this->homepage_protection ) && method_exists( $this->homepage_protection, 'register_hooks' ) ) {
-			try {
-				$this->homepage_protection->register_hooks();
-			} catch ( \Throwable $e ) {
-				Logger::error( 'FP SEO: Failed to register homepage protection hooks', array(
-					'error' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-				) );
-			}
-		}
-		
 		// IMPORTANTE: Registra anche l'hook add_meta_boxes nel costruttore
 		// Questo garantisce che il metabox venga sempre registrato, anche se register() non viene chiamato
 		// Priorità 5 per essere registrato tra i primi metabox (prima di altri plugin)
@@ -272,15 +328,15 @@ class Metabox {
 			$is_admin_uri = strpos( $request_uri, '/wp-admin/' ) !== false;
 		}
 		if ( is_admin() || ( defined( 'WP_ADMIN' ) && WP_ADMIN ) || $is_admin_uri ) {
-			add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
+			$this->hook_manager->add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
 			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: add_meta_boxes hook registered in __construct()' );
+				$this->logger->debug( 'FP SEO: add_meta_boxes hook registered in __construct()' );
 			}
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::__construct() completed - hooks and renderer should be initialized', array(
+			$this->logger->debug( 'Metabox::__construct() completed - hooks and renderer should be initialized', array(
 				'renderer_initialized' => $this->renderer !== null,
 			) );
 		}
@@ -306,7 +362,7 @@ class Metabox {
 				'FP SEO: MetaboxRenderer file not found at %s',
 				$renderer_file
 			);
-			Logger::error( $error_msg );
+			$this->logger->error( $error_msg );
 			throw new \RuntimeException( $error_msg );
 		}
 
@@ -321,7 +377,7 @@ class Metabox {
 				'FP SEO: MetaboxRenderer class not found after loading file. Expected: %s',
 				MetaboxRenderer::class
 			);
-			Logger::error( $error_msg, array(
+			$this->logger->error( $error_msg, array(
 				'file' => $renderer_file,
 				'file_exists' => file_exists( $renderer_file ),
 				'is_readable' => is_readable( $renderer_file ),
@@ -336,7 +392,7 @@ class Metabox {
 				'FP SEO: CheckHelpText file not found at %s',
 				$check_help_text_file
 			);
-			Logger::error( $error_msg );
+			$this->logger->error( $error_msg );
 			throw new \RuntimeException( $error_msg );
 		}
 
@@ -363,7 +419,7 @@ class Metabox {
 						$class_file,
 						$class_name
 					);
-					Logger::error( $error_msg );
+					$this->logger->error( $error_msg );
 					throw new \RuntimeException( $error_msg );
 				}
 			}
@@ -375,20 +431,30 @@ class Metabox {
 					$class_name,
 					$class_file
 				);
-				Logger::error( $error_msg );
+				$this->logger->error( $error_msg );
 				throw new \RuntimeException( $error_msg );
 			}
 		}
 
-		// Istanzia il renderer - DEVE funzionare
+		// Istanzia il renderer usando il container DI per ottenere SectionRegistry
 		try {
-			$this->renderer = new MetaboxRenderer();
+			// Prova a ottenere il renderer dal container DI (che include SectionRegistry)
+			try {
+				$container = \FP\SEO\Infrastructure\Plugin::instance()->get_container();
+				$this->renderer = $container->get( MetaboxRenderer::class );
+			} catch ( \Throwable $container_error ) {
+				// Fallback: crea renderer senza SectionRegistry (per backward compatibility)
+				$this->logger->warning( 'FP SEO: Could not get MetaboxRenderer from container, using fallback', array(
+					'error' => $container_error->getMessage(),
+				) );
+				$this->renderer = new MetaboxRenderer( null );
+			}
 		} catch ( \Throwable $e ) {
 			$error_msg = sprintf(
 				'FP SEO: Failed to instantiate MetaboxRenderer: %s',
 				$e->getMessage()
 			);
-			Logger::error( $error_msg, array(
+			$this->logger->error( $error_msg, array(
 				'error' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
@@ -407,21 +473,21 @@ class Metabox {
 				MetaboxRenderer::class,
 				get_class( $this->renderer )
 			);
-			Logger::error( $error_msg );
+			$this->logger->error( $error_msg );
 			throw new \RuntimeException( $error_msg );
 		}
 
 		// Verifica che il renderer abbia il metodo render()
 		if ( ! method_exists( $this->renderer, 'render' ) ) {
 			$error_msg = 'FP SEO: MetaboxRenderer instance missing render() method';
-			Logger::error( $error_msg, array(
+			$this->logger->error( $error_msg, array(
 				'methods' => get_class_methods( $this->renderer ),
 			) );
 			throw new \RuntimeException( $error_msg );
 		}
 
 		// Log successo sempre (non solo in debug mode) per verificare che funzioni
-		Logger::info( 'FP SEO: MetaboxRenderer initialized successfully', array(
+		$this->logger->info( 'FP SEO: MetaboxRenderer initialized successfully', array(
 			'version' => defined( 'FP_SEO_PERFORMANCE_VERSION' ) ? FP_SEO_PERFORMANCE_VERSION : 'unknown',
 			'renderer_class' => get_class( $this->renderer ),
 			'has_render_method' => method_exists( $this->renderer, 'render' ),
@@ -442,9 +508,7 @@ class Metabox {
 			// Register post-type-specific hooks to avoid calling hooks for unsupported types
 			// Using only save_post hook to avoid interference with WordPress core saving
 			// Multiple hooks (edit_post, wp_insert_post) were being called even when just opening editor
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
-			}
+			$this->hook_manager->add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
 			// DISABLED: These hooks were causing auto-draft creation when opening editor
 			// if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
 			// 	add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
@@ -454,86 +518,13 @@ class Metabox {
 			// }
 		}
 		
-		// DISABLED: Generic hooks removed to prevent ANY interference with unsupported post types
-		// Only post-type-specific hooks are registered above, which ensures zero interference
-		// with custom post types like Nectar Sliders, attachments, etc.
-		//
-		// If you need to support a new post type, add it to PostTypes::analyzable() and
-		// the hooks will be automatically registered via the loop above.
-		
-		// DISABLED: Removed all homepage protection workarounds
-		// We need to find the root cause instead of patching symptoms
-		// The problem is that WordPress creates a new auto-draft when opening homepage editor
-		// This might be caused by something in the rendering or by another plugin/template
-		// 
-		// if ( ! has_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ) ) ) {
-		// 	add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
-		// }
-		
-		// DISABLED - This was also causing issues with homepage
-		// if ( ! has_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ) ) ) {
-		// 	add_action( 'shutdown', array( $this, 'fix_homepage_status_on_shutdown' ), 999 );
-		// }
-		
-		// DISABLED - Homepage status tracking was causing issues
-		// if ( ! has_action( 'init', array( $this, 'save_homepage_original_status' ) ) ) {
-		// 	add_action( 'init', array( $this, 'save_homepage_original_status' ), 1 );
-		// }
-		
-		// DISABLED - Was causing redirects when creating new sliders/CPTs
-		// See prevent_homepage_auto_draft_creation() for details
-		// if ( ! has_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ) ) ) {
-		// 	add_action( 'admin_init', array( $this, 'prevent_homepage_auto_draft_creation' ), 1 );
-		// }
-		
-		// DIAGNOSTIC: Hook to detect when auto-draft is created for homepage
-		// This helps identify what's creating the auto-draft
-		if ( ! has_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ) ) ) {
-			add_action( 'wp_insert_post', array( $this, 'diagnose_auto_draft_creation' ), 999, 3 );
-		}
-		
-		// DISABLED: These hooks might be causing the auto-draft issue
-		// Testing if removing them fixes the problem
-		// 
-		// CRITICAL FIX: Prevent auto-draft creation when editing homepage
-		// Intercept wp_insert_post_data to prevent auto-draft creation
-		// if ( ! has_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ) ) ) {
-		// 	add_filter( 'wp_insert_post_data', array( $this, 'prevent_homepage_auto_draft_on_edit' ), 10, 2 );
-		// }
-		
-		// DISABLED: wp_update_post hook might be causing issues
-		// CRITICAL FIX: Prevent homepage from becoming auto-draft when saving
-		// This hook runs when WordPress updates a post
-		// if ( ! has_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ) ) ) {
-		// 	add_action( 'wp_update_post', array( $this, 'prevent_homepage_auto_draft_on_update' ), 1, 2 );
-		// }
-		
-		// DISABLED: edit_post hook might be causing issues
-		// CRITICAL FIX: Also hook into edit_post to catch status changes
-		// if ( ! has_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ) ) ) {
-		// 	add_action( 'edit_post', array( $this, 'prevent_homepage_auto_draft_on_edit_post' ), 1, 2 );
-		// }
-		
-		// CRITICAL FIX: Force WordPress to load correct homepage when opening editor
-		// This intercepts the post loading before WordPress displays it in the editor
-		if ( ! has_action( 'admin_init', array( $this, 'force_correct_homepage_in_editor' ) ) ) {
-			add_action( 'admin_init', array( $this, 'force_correct_homepage_in_editor' ), 1 );
-		}
-		
-		// Also hook into current_screen to fix post after WordPress loads it
-		if ( ! has_action( 'current_screen', array( $this, 'force_correct_homepage_on_screen' ) ) ) {
-			add_action( 'current_screen', array( $this, 'force_correct_homepage_on_screen' ), 999 );
-		}
-		
-		// CRITICAL: Filter get_post to always return homepage when editing homepage
-		// This intercepts ALL calls to get_post() and ensures we get the correct post
-		if ( ! has_filter( 'get_post', array( $this, 'filter_get_post_for_homepage' ) ) ) {
-			add_filter( 'get_post', array( $this, 'filter_get_post_for_homepage' ), 10, 2 );
-		}
+		// NOTE: All homepage protection workarounds have been removed.
+		// The root cause was PerformanceOptimizer interfering with WordPress core post meta retrieval.
+		// The fix was to disable PerformanceOptimizer entirely.
 		
 		// Log registrazione solo in debug mode
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox hooks registered in register_hooks()', array(
+			$this->logger->debug( 'Metabox hooks registered in register_hooks()', array(
 				'hooks' => array(
 					'save_post' => array( 1, 5, 99 ),
 					'edit_post' => array( 1, 99 ),
@@ -548,9 +539,20 @@ class Metabox {
 	 * Hooks WordPress actions for registering and saving the metabox.
 	 */
 	public function register(): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$this->logger->debug( 'FP SEO: Metabox::register() called', array(
+				'assets_manager_available' => $this->assets_manager !== null,
+				'assets_manager_class' => $this->assets_manager ? get_class( $this->assets_manager ) : 'null',
+			) );
+		}
+	// CRITICAL DEBUG: Log to error log to verify method is called
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Metabox::register() CALLED' );
+	}
+		
 		// Log chiamata al metodo register
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'FP SEO: Metabox::register() called', array(
+			$this->logger->debug( 'FP SEO: Metabox::register() called', array(
 				'admin_context' => is_admin(),
 				'hook' => current_filter(),
 			) );
@@ -560,14 +562,14 @@ class Metabox {
 		// Qui verifichiamo solo che sia stato inizializzato correttamente e tentiamo di reinizializzarlo se necessario
 		if ( $this->renderer === null ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'FP SEO: Renderer is null in register(), attempting to reinitialize' );
+				$this->logger->warning( 'FP SEO: Renderer is null in register(), attempting to reinitialize' );
 			}
 			try {
 				$this->initialize_renderer();
 			} catch ( \Throwable $e ) {
 				// Se l'inizializzazione fallisce, logga l'errore ma non bloccare register()
 				// Il renderer verrà reinizializzato quando necessario in render()
-				Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in register()', array(
+				$this->logger->error( 'FP SEO: Failed to reinitialize MetaboxRenderer in register()', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -576,7 +578,7 @@ class Metabox {
 		
 		// Log stato finale del renderer
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'FP SEO: Metabox::register() completed', array(
+			$this->logger->debug( 'FP SEO: Metabox::register() completed', array(
 				'renderer_initialized' => $this->renderer !== null,
 				'renderer_class' => $this->renderer ? get_class( $this->renderer ) : 'null',
 			) );
@@ -602,61 +604,61 @@ class Metabox {
 				}
 			}
 			
-			if ( ! $already_registered ) {
-			// Se per qualche motivo non è registrato, registralo qui come fallback
-			if ( ! has_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) ) ) {
-				add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
+		if ( ! $already_registered ) {
+				// Se per qualche motivo non è registrato, registralo qui come fallback
+				$this->hook_manager->add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ), 5, 0 );
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'FP SEO: add_meta_boxes hook registered in register() (fallback)' );
+					$this->logger->debug( 'FP SEO: add_meta_boxes hook registered in register() (fallback)' );
 				}
 			}
 		}
-	}
-	
-	// Gli hook di salvataggio sono già registrati nel costruttore
-	// Verifica che non siano già stati registrati prima di registrarli di nuovo
-	if ( ! has_action( 'save_post', array( $this, 'save_meta' ) ) ) {
+		
+		// Gli hook di salvataggio sono già registrati nel costruttore
+		// Verifica che non siano già stati registrati prima di registrarli di nuovo
 		$this->register_hooks();
-	}
 		
 		// Questo permette al salvataggio di funzionare anche se il rendering fallisce
 		try {
-			
 			// Hook per REST API (Gutenberg) - registra per tutti i post types supportati
 			$post_types = PostTypes::analyzable();
 			foreach ( $post_types as $post_type ) {
-				add_action( 'rest_after_insert_' . $post_type, array( $this, 'save_meta_rest' ), 10, 3 );
+				$this->hook_manager->add_action( 'rest_after_insert_' . $post_type, array( $this, 'save_meta_rest' ), 10, 3 );
 			}
 			
-			// Registra meta fields per REST API (Gutenberg)
-			add_action( 'rest_api_init', array( $this, 'register_rest_meta_fields' ) );
+			// REST meta fields registration moved to REST/Controllers/MetaController
+			// This is now handled by RESTServiceProvider
 			
 			// Hook pre_post_update rimosso - usiamo solo save_post per evitare doppi salvataggi
-			// add_filter( 'pre_post_update', array( $this, 'save_meta_pre_update' ), 5, 2 );
+			// $this->hook_manager->add_filter( 'pre_post_update', array( $this, 'save_meta_pre_update' ), 5, 2 );
 			
-			// Use priority 5 to ensure wp.media is loaded early, before other plugins
-			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5, 0 );
+			// AssetsManager is now registered in constructor for early hook registration
+			// Only use fallback if AssetsManager was not available during initialization
+			if ( ! $this->assets_manager ) {
+				// Fallback to direct method if AssetsManager not available
+				// Use priority 999 to ensure it runs AFTER conditional_asset_loading (priority 15)
+				$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 999, 0 );
+			}
 			
 			// Register AJAX handlers via modular handler
 			if ( $this->ajax_handler ) {
 				$this->ajax_handler->register();
 			} else {
 				// Fallback to direct registration if handler not available
-				add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
-				add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
+				$this->hook_manager->add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
+				$this->hook_manager->add_action( 'wp_ajax_' . self::AJAX_SAVE_FIELDS, array( $this, 'handle_save_fields_ajax' ) );
 			}
 			
 			// Register inline scripts manager
 			if ( $this->inline_scripts_manager ) {
-				add_action( 'admin_head', array( $this->inline_scripts_manager, 'inject' ) );
+				$this->hook_manager->add_action( 'admin_head', array( $this->inline_scripts_manager, 'inject' ) );
 			} else {
 				// Fallback to original method
-				add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
+				$this->hook_manager->add_action( 'admin_head', array( $this, 'inject_modern_styles' ) );
 			}
 		} catch ( \Throwable $e ) {
 			// Se anche la registrazione degli hook fallisce, logga ma non bloccare
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Failed to register metabox hooks', array(
+				$this->logger->error( 'FP SEO: Failed to register metabox hooks', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -673,23 +675,63 @@ class Metabox {
 	 * 3. Metabox secondari (side, default) - se presenti
 	 */
 	public function add_meta_box(): void {
+		// FORCE: Enqueue assets directly when metabox is added
+		// This ensures scripts are loaded even if admin_enqueue_scripts has already fired
+		global $post;
+		if ( ! $post ) {
+			return;
+		}
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: add_meta_box() called for post_id=' . $post->ID );
+	}
+		
+		// DISABLED: wp_enqueue_media() was causing interference with featured image metabox
+		// WordPress already loads wp.media when needed for featured image functionality
+		// Calling it again here with priority 5 (add_meta_boxes) was resetting _thumbnail_id to -1
+		// The fix is to let WordPress handle wp.media loading natively
+		/*
+		$screen = get_current_screen();
+		if ( $screen && 'post' === $screen->base ) {
+			wp_enqueue_media();
+		}
+		*/
+		
+		// Always enqueue scripts
+		wp_enqueue_style( 'fp-seo-performance-admin' );
+		wp_enqueue_script( 'fp-seo-performance-editor' );
+		wp_enqueue_script( 'fp-seo-performance-serp-preview' );
+		wp_enqueue_script( 'fp-seo-performance-ai-generator' );
+		wp_enqueue_script( 'fp-seo-performance-metabox-ai-fields' );
+		
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Scripts enqueued in add_meta_box(), checking status...' );
+		error_log( 'FP SEO DEBUG: Script registered: ' . ( wp_script_is( 'fp-seo-performance-editor', 'registered' ) ? 'yes' : 'no' ) );
+		error_log( 'FP SEO DEBUG: Script enqueued: ' . ( wp_script_is( 'fp-seo-performance-editor', 'enqueued' ) ? 'yes' : 'no' ) );
+	}
+		
+		// Also call enqueue_assets to ensure localization happens
+		if ( $this->assets_manager ) {
+			$this->assets_manager->enqueue_assets();
+		}
+		
 		try {
 			$post_types = $this->get_supported_post_types();
 			if ( ! is_array( $post_types ) || empty( $post_types ) ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'FP SEO: No supported post types found', array( 'post_types' => $post_types ) );
+					$this->logger->warning( 'FP SEO: No supported post types found', array( 'post_types' => $post_types ) );
 				}
 				return;
 			}
 			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: Registering metabox for post types', array(
+				$this->logger->debug( 'FP SEO: Registering metabox for post types', array(
 					'post_types' => $post_types,
 				) );
 			}
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Error getting supported post types', array(
+				$this->logger->error( 'FP SEO: Error getting supported post types', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -717,7 +759,7 @@ class Metabox {
 			);
 			
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: Metabox registered for post type', array(
+				$this->logger->debug( 'FP SEO: Metabox registered for post type', array(
 					'post_type' => $post_type,
 				) );
 			}
@@ -728,49 +770,54 @@ class Metabox {
 	 * Enqueue scripts and styles when editing supported post types.
 	 */
 	public function enqueue_assets(): void {
-		// Only enqueue in admin context
-		if ( ! is_admin() ) {
-			return;
+		// Use static flag to prevent multiple calls
+		static $called = false;
+	if ( $called ) {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO DEBUG: Metabox::enqueue_assets() already called, skipping' );
 		}
+		return;
+	}
+	$called = true;
+
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Metabox::enqueue_assets() CALLED - FORCING ENQUEUE' );
+		error_log( 'FP SEO DEBUG: Current filter: ' . current_filter() );
+		error_log( 'FP SEO DEBUG: is_admin: ' . ( is_admin() ? 'yes' : 'no' ) );
+	}
+
+	// TEMPORARY: Force enqueue without conditions for testing
+	global $post;
+	$screen = get_current_screen();
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Screen: ' . ( $screen ? $screen->base : 'null' ) . ', Post: ' . ( $post ? $post->ID : 'null' ) );
+	}
 		
-		$screen = get_current_screen();
-
-		if ( ! $screen || 'post' !== $screen->base ) {
-			return;
+		// DISABLED: wp_enqueue_media() was causing interference with featured image metabox
+		// WordPress already loads wp.media when needed for featured image functionality
+		// Calling it here was resetting _thumbnail_id to -1
+		/*
+		if ( $screen && 'post' === $screen->base ) {
+			wp_enqueue_media();
 		}
-
-		if ( empty( $screen->post_type ) || ! in_array( $screen->post_type, $this->get_supported_post_types(), true ) ) {
-			return;
-		}
-
-		// CRITICAL: Never run on media library or upload pages to avoid interference
-		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
-		if ( $is_media_page ) {
-			return;
-		}
-
-		global $post;
-		if ( ! $post ) {
-			return;
-		}
-
-		// Ensure wp.media is available for image uploads (including featured image)
-		// This must be called early to support WordPress core featured image button
-		wp_enqueue_media();
+		*/
 		
-		// Also ensure set-post-thumbnail script is loaded (required for featured image button)
-		if ( function_exists( 'wp_enqueue_script' ) ) {
-			wp_enqueue_script( 'set-post-thumbnail' );
-		}
-		
-		wp_enqueue_style( 'fp-seo-performance-admin' );
-		wp_enqueue_script( 'fp-seo-performance-editor' );
-		wp_enqueue_script( 'fp-seo-performance-serp-preview' );
-		wp_enqueue_script( 'fp-seo-performance-ai-generator' );
-		wp_enqueue_script( 'fp-seo-performance-metabox-ai-fields' );
+	// Enqueue scripts
+	wp_enqueue_style( 'fp-seo-performance-admin' );
+	wp_enqueue_script( 'fp-seo-performance-editor' );
+	wp_enqueue_script( 'fp-seo-performance-serp-preview' );
+	wp_enqueue_script( 'fp-seo-performance-ai-generator' );
+	wp_enqueue_script( 'fp-seo-performance-metabox-ai-fields' );
+
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Scripts enqueued via wp_enqueue_script' );
+	}
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		error_log( 'FP SEO DEBUG: Metabox::enqueue_assets() - Scripts enqueued' );
+	}
 
 		// Prepara i dati per il JavaScript PRIMA che il module si carichi
-		$options  = Options::get();
+		$options  = $this->options->get();
 		$enabled  = ! empty( $options['general']['enable_analyzer'] );
 		$excluded = $this->is_post_excluded( (int) $post->ID );
 		$analysis = array();
@@ -780,7 +827,7 @@ class Metabox {
 			$analysis = $this->run_analysis_for_post( $post );
 			} catch ( \Exception $e ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Error running analysis in enqueue_assets', array(
+					$this->logger->error( 'FP SEO: Error running analysis in enqueue_assets', array(
 						'post_id' => $post->ID ?? 0,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
@@ -789,7 +836,7 @@ class Metabox {
 				$analysis = array();
 			} catch ( \Throwable $e ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Fatal error running analysis in enqueue_assets', array(
+					$this->logger->error( 'FP SEO: Fatal error running analysis in enqueue_assets', array(
 						'post_id' => $post->ID ?? 0,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
@@ -800,28 +847,28 @@ class Metabox {
 		}
 
 		// Get AI configuration
-		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
-		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
+		$ai_enabled = $this->options->get_option( 'ai.enable_auto_generation', true );
+		$api_key    = $this->options->get_option( 'ai.openai_api_key', '' );
 		
 		// Debug: Verify API key retrieval
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			$all_options = Options::get();
-			Logger::debug( 'FP SEO: AI configuration check in Metabox', array(
+			$this->logger->debug( 'FP SEO: AI configuration check in Metabox', array(
 				'ai_enabled' => $ai_enabled,
 				'api_key_length' => strlen( $api_key ),
 				'api_key_empty' => empty( $api_key ),
 				'ai_section_exists' => isset( $all_options['ai'] ),
 				'ai_openai_api_key_exists' => isset( $all_options['ai']['openai_api_key'] ),
 				'ai_openai_api_key_length' => isset( $all_options['ai']['openai_api_key'] ) ? strlen( $all_options['ai']['openai_api_key'] ) : 0,
-				'api_key_via_get_option' => strlen( Options::get_option( 'ai.openai_api_key', '' ) ),
+				'api_key_via_get_option' => strlen( $this->options->get_option( 'ai.openai_api_key', '' ) ),
 			) );
 		}
 		
-		// Also check via OpenAiClient to ensure consistency
-		$openai_client = new \FP\SEO\Integrations\OpenAiClient();
-		$is_configured = $openai_client->is_configured();
+		// Use lazy loader to check OpenAI configuration (without loading full client)
+		$lazy_loader = $this->get_lazy_loader();
+		$is_configured = $lazy_loader->is_openai_configured();
 		
-		// Use the more reliable check from OpenAiClient
+		// Use the more reliable check from lazy loader
 		$api_key_present = $is_configured || ! empty( $api_key );
 
 		// Localizza lo script per renderlo disponibile al module
@@ -1179,6 +1226,7 @@ class Metabox {
 		}
 		
 		/* Hide native WordPress slug UI to avoid duplication with FP SEO slug field */
+		/* IMPORTANT: Explicitly exclude #postimagediv to ensure featured image metabox is always visible */
 		#slugdiv,
 		#slugdiv .inside,
 		#edit-slug-box,
@@ -1925,6 +1973,9 @@ class Metabox {
 			box-shadow: 0 2px 6px 0 rgba(0,0,0,0.08) !important;
 		}
 		</style>
+		<?php
+		}
+		?>
 		<script>
 		(function() {
 			// CRITICAL: Fix homepage title if it shows "Bozza automatica"
@@ -2036,12 +2087,164 @@ class Metabox {
 	 * @param WP_Post $post Current post instance.
 	 */
 	public function render( WP_Post $post ): void {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO DEBUG: Metabox::render() CALLED for post_id=' . $post->ID );
+		}
+		
+		// FORCE: Print scripts and localization in admin_footer
+		// WordPress may strip script tags from metabox content, so we use admin_footer hook
+		// Use global flag to ensure it only runs once per page
+		global $fp_seo_scripts_printed;
+		if ( ! isset( $fp_seo_scripts_printed ) || ! $fp_seo_scripts_printed ) {
+			$fp_seo_scripts_printed = true;
+			$post_id = $post->ID;
+			$metabox_instance = $this;
+			
+			add_action( 'admin_footer', function() use ( $post_id, $metabox_instance ) {
+				// Always print on post editor pages
+				$screen = get_current_screen();
+				if ( ! $screen || 'post' !== $screen->base ) {
+					return;
+				}
+				
+				global $post;
+				if ( ! $post ) {
+					return;
+				}
+				
+				// Print localization data
+				if ( $metabox_instance->assets_manager && method_exists( $metabox_instance->assets_manager, 'print_localization_data' ) ) {
+					$metabox_instance->assets_manager->print_localization_data( $post );
+				}
+				
+				// Print script tag
+				if ( defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
+					$script_url = plugins_url( 'assets/admin/js/editor-metabox-legacy.js', FP_SEO_PERFORMANCE_FILE );
+				} else {
+					$script_url = plugins_url( 'FP-SEO-Manager/assets/admin/js/editor-metabox-legacy.js' );
+				}
+				$version = defined( 'FP_SEO_PERFORMANCE_VERSION' ) ? FP_SEO_PERFORMANCE_VERSION : '1.0.0';
+				echo '<script src="' . esc_url( $script_url ) . '?ver=' . esc_attr( $version ) . '"></script>' . "\n";
+			}, 1 );
+		}
+		
 		// CRITICAL: Wrap entire render method in try-catch to prevent fatal errors
 		try {
+			// Ensure styles manager is initialized and render styles inline FIRST
+			if ( ! $this->styles_manager && class_exists( 'FP\SEO\Editor\Styles\MetaboxStylesManager' ) ) {
+				try {
+					$this->styles_manager = new \FP\SEO\Editor\Styles\MetaboxStylesManager( $this );
+				} catch ( \Throwable $e ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+						$this->logger->error( 'FP SEO: Failed to initialize MetaboxStylesManager in render()', array(
+							'error' => $e->getMessage(),
+						) );
+					}
+				}
+			}
+			
+			// Inject styles inline - try styles manager first, then fallback
+			$styles_rendered = false;
+			if ( $this->styles_manager && method_exists( $this->styles_manager, 'render_inline' ) ) {
+				try {
+					$this->styles_manager->render_inline();
+					$styles_rendered = true;
+				} catch ( \Throwable $e ) {
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+						$this->logger->error( 'FP SEO: Error rendering styles inline', array(
+							'error' => $e->getMessage(),
+							'trace' => $e->getTraceAsString(),
+						) );
+					}
+				}
+			}
+			
+			// Fallback: render styles directly if styles manager failed
+			if ( ! $styles_rendered ) {
+				// Use the fallback CSS from inject_modern_styles
+				// This ensures styles are always loaded
+				?>
+				<style id="fp-seo-metabox-modern-ui">
+				<?php
+				// Include minimal critical styles for help banner and sections
+				?>
+				/* Help Banner */
+				.fp-seo-metabox-help-banner {
+					background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+					border-left: 4px solid #3b82f6;
+					padding: 16px 20px;
+					margin-bottom: 20px;
+					border-radius: 8px;
+					display: flex;
+					gap: 16px;
+					align-items: flex-start;
+					position: relative;
+				}
+				
+				.fp-seo-metabox-help-banner__icon {
+					font-size: 24px;
+					line-height: 1;
+					flex-shrink: 0;
+				}
+				
+				.fp-seo-metabox-help-banner__content {
+					flex: 1;
+				}
+				
+				.fp-seo-metabox-help-banner__title {
+					margin: 0 0 8px;
+					font-size: 14px;
+					font-weight: 600;
+					color: #1e40af;
+				}
+				
+				.fp-seo-metabox-help-banner__text {
+					margin: 0 0 12px;
+					font-size: 13px;
+					color: #1e3a8a;
+					line-height: 1.5;
+				}
+				
+				.fp-seo-metabox-help-banner__close {
+					position: absolute;
+					top: 8px;
+					right: 8px;
+					background: rgba(255, 255, 255, 0.7);
+					border: none;
+					border-radius: 4px;
+					width: 24px;
+					height: 24px;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					cursor: pointer;
+					font-size: 18px;
+					line-height: 1;
+					color: #1e40af;
+					transition: all 0.2s;
+				}
+				
+				.fp-seo-metabox-help-banner.hidden {
+					display: none;
+				}
+				
+				/* Section Styles */
+				.fp-seo-performance-metabox__section {
+					margin-bottom: 20px;
+					padding: 16px;
+					background: #fff;
+					border-radius: 8px;
+					border: 1px solid #e5e7eb;
+				}
+				<?php
+				?>
+				</style>
+				<?php
+			}
 			// Validazione input
 			if ( ! $post instanceof WP_Post ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Invalid post object in render', array(
+					$this->logger->error( 'FP SEO: Invalid post object in render', array(
 						'post' => gettype( $post ),
 						'post_id' => isset( $post->ID ) ? $post->ID : 'unknown',
 					) );
@@ -2055,56 +2258,6 @@ class Metabox {
 		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
 		$post_was_corrected = false;
 		
-		// CRITICAL: Clean up any auto-drafts when editing homepage
-		// DISABLED: wp_delete_post() triggers hooks that cause errors in FP-Multilanguage
-		// This cleanup is now handled by HomepageProtection class via wp_insert_post hook
-		/*
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id > 0 && $requested_post_id === $page_on_front_id ) {
-			// Delete any auto-draft pages that might have been created
-			global $wpdb;
-			$auto_drafts = $wpdb->get_col( $wpdb->prepare(
-				"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND post_status = 'auto-draft' AND post_author = %d ORDER BY ID DESC LIMIT 10",
-				get_current_user_id()
-			) );
-			
-			foreach ( $auto_drafts as $auto_draft_id ) {
-				if ( (int) $auto_draft_id !== $page_on_front_id ) {
-					try {
-						wp_delete_post( (int) $auto_draft_id, true ); // Force delete
-						Logger::debug( 'Metabox::render - Deleted auto-draft page', array(
-							'auto_draft_id' => $auto_draft_id,
-							'homepage_id' => $page_on_front_id,
-						) );
-					} catch ( \Throwable $e ) {
-						// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
-						Logger::warning( 'FP SEO: Failed to delete auto-draft during render', array(
-							'auto_draft_id' => $auto_draft_id,
-							'error' => $e->getMessage(),
-						) );
-					}
-				}
-			}
-		}
-		*/
-		
-		// Correct homepage post if WordPress passed wrong one (delegated to HomepageProtection)
-		// RE-ENABLED with error handling to prevent conflicts
-		if ( isset( $this->homepage_protection ) && method_exists( $this->homepage_protection, 'correct_homepage_post' ) ) {
-			try {
-				$post = $this->homepage_protection->correct_homepage_post( $post );
-			} catch ( \Throwable $e ) {
-				// Silently fail homepage correction to prevent breaking the metabox
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Error correcting homepage post', array(
-						'error' => $e->getMessage(),
-						'trace' => $e->getTraceAsString(),
-					) );
-				}
-				// Continue with original post if correction fails
-			}
-		}
-		
 		// Show diagnostics when editing homepage (delegated to MetaboxDiagnostics)
 		// TEMPORARILY DISABLED to test if metabox renders without diagnostics
 		// Diagnostics are disabled to prevent any potential errors from breaking the metabox
@@ -2117,7 +2270,7 @@ class Metabox {
 					if ( ! empty( $diagnostics_data ) && method_exists( $this->diagnostics, 'render_diagnostics' ) ) {
 						$diagnostics_html = $this->diagnostics->render_diagnostics( $diagnostics_data );
 						if ( ! empty( $diagnostics_html ) ) {
-							add_action( 'admin_notices', function() use ( $diagnostics_html ) {
+							$this->hook_manager->add_action( 'admin_notices', function() use ( $diagnostics_html ) {
 								echo $diagnostics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 							} );
 						}
@@ -2125,7 +2278,7 @@ class Metabox {
 				} catch ( \Throwable $e ) {
 					// Silently fail diagnostics to prevent breaking the metabox
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::error( 'FP SEO: Error rendering diagnostics', array(
+						$this->logger->error( 'FP SEO: Error rendering diagnostics', array(
 							'error' => $e->getMessage(),
 							'trace' => $e->getTraceAsString(),
 						) );
@@ -2148,7 +2301,7 @@ class Metabox {
 			echo '<input type="hidden" name="fp_seo_performance_metabox_present" value="1" />';
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::error( 'FP SEO: Error outputting nonce', array(
+				$this->logger->error( 'FP SEO: Error outputting nonce', array(
 					'error' => $e->getMessage(),
 				) );
 			}
@@ -2156,7 +2309,7 @@ class Metabox {
 
 		// Se il renderer non è disponibile, FORZA la reinizializzazione - nessun fallback
 		if ( ! $this->renderer ) {
-			Logger::error( 'FP SEO: MetaboxRenderer is null in render(), forcing reinitialization', array(
+			$this->logger->error( 'FP SEO: MetaboxRenderer is null in render(), forcing reinitialization', array(
 				'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
 				'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
 			) );
@@ -2166,7 +2319,7 @@ class Metabox {
 				$this->initialize_renderer();
 			} catch ( \Throwable $e ) {
 				// Se l'inizializzazione fallisce, logga e mostra errore
-				Logger::error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
+				$this->logger->error( 'FP SEO: Failed to reinitialize MetaboxRenderer in render()', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
@@ -2184,7 +2337,7 @@ class Metabox {
 			// Se ancora null dopo la reinizializzazione, è un errore critico
 			if ( ! $this->renderer ) {
 				$error_msg = 'FP SEO: MetaboxRenderer is still null after reinitialization in render()';
-				Logger::error( $error_msg );
+				$this->logger->error( $error_msg );
 				echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Errore critico: impossibile inizializzare il metabox SEO.', 'fp-seo-performance' ) . '</strong></p>';
 				echo '<p>' . esc_html__( 'Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p></div>';
 				return;
@@ -2192,17 +2345,64 @@ class Metabox {
 		}
 
 		// I dati per JS sono già stati preparati in enqueue_assets()
-		$options  = Options::get();
+		$options  = $this->options->get();
 		$enabled  = ! empty( $options['general']['enable_analyzer'] );
 		$excluded = $this->is_post_excluded( (int) $current_post->ID );
 		$analysis = array();
 
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO DEBUG: Analyzer status - enabled=' . ( $enabled ? 'yes' : 'no' ) . ', excluded=' . ( $excluded ? 'yes' : 'no' ) . ', post_id=' . $current_post->ID );
+		}
+
+		// Debug: log analyzer status
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$this->logger->debug( 'FP SEO: Analyzer status check', array(
+				'post_id' => $current_post->ID,
+				'analyzer_enabled' => $enabled,
+				'post_excluded' => $excluded,
+				'options_general' => $options['general'] ?? array(),
+			) );
+		}
+
 		if ( $enabled && ! $excluded ) {
 			try {
+				error_log( 'FP SEO DEBUG: Running analysis for post_id=' . $current_post->ID );
 				$analysis = $this->run_analysis_for_post( $current_post );
+				
+				// ALWAYS log analysis results
+				$checks_count = isset( $analysis['checks'] ) && is_array( $analysis['checks'] ) ? count( $analysis['checks'] ) : 0;
+				error_log( 'FP SEO DEBUG: Analysis completed - checks_count=' . $checks_count . ', analysis_keys=' . implode( ',', array_keys( $analysis ) ) );
+				if ( $checks_count > 0 ) {
+					$first_check = reset( $analysis['checks'] );
+					error_log( 'FP SEO DEBUG: First check keys=' . ( is_array( $first_check ) ? implode( ',', array_keys( $first_check ) ) : gettype( $first_check ) ) );
+				}
+				
+				// Debug: log analysis results
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					$this->logger->debug( 'FP SEO: Analysis completed', array(
+						'post_id' => $current_post->ID,
+						'analysis_keys' => array_keys( $analysis ),
+						'checks_count' => $checks_count,
+						'score' => $analysis['score'] ?? null,
+						'has_checks' => ! empty( $analysis['checks'] ),
+					) );
+				}
+				
+				// Ensure analysis has required structure even if checks are empty
+				if ( ! isset( $analysis['checks'] ) ) {
+					$analysis['checks'] = array();
+				}
+				if ( ! isset( $analysis['score'] ) ) {
+					$analysis['score'] = array(
+						'score' => 0,
+						'status' => 'pending',
+					);
+				}
 			} catch ( \Exception $e ) {
+				// ALWAYS log error
+				error_log( 'FP SEO DEBUG: Exception in analysis - error=' . $e->getMessage() . ', file=' . $e->getFile() . ', line=' . $e->getLine() );
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Error running analysis', array(
+					$this->logger->error( 'FP SEO: Error running analysis', array(
 						'post_id' => $current_post->ID,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
@@ -2210,10 +2410,18 @@ class Metabox {
 						'line' => $e->getLine(),
 					) );
 				}
-				$analysis = array();
+				$analysis = array(
+					'checks' => array(),
+					'score' => array(
+						'score' => 0,
+						'status' => 'error',
+					),
+				);
 			} catch ( \Throwable $e ) {
+				// ALWAYS log fatal error
+				error_log( 'FP SEO DEBUG: Throwable in analysis - error=' . $e->getMessage() . ', file=' . $e->getFile() . ', line=' . $e->getLine() );
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Fatal error running analysis', array(
+					$this->logger->error( 'FP SEO: Fatal error running analysis', array(
 						'post_id' => $current_post->ID,
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
@@ -2221,18 +2429,51 @@ class Metabox {
 						'line' => $e->getLine(),
 					) );
 				}
-				$analysis = array();
+				$analysis = array(
+					'checks' => array(),
+					'score' => array(
+						'score' => 0,
+						'status' => 'error',
+					),
+				);
+			}
+		} else {
+			// ALWAYS log why analysis was not run
+			$reason = ! $enabled ? 'analyzer_disabled' : ( $excluded ? 'post_excluded' : 'unknown' );
+			error_log( 'FP SEO DEBUG: Analysis NOT run - reason=' . $reason . ', enabled=' . ( $enabled ? 'yes' : 'no' ) . ', excluded=' . ( $excluded ? 'yes' : 'no' ) );
+			
+			// Debug: log why analysis was not run
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$this->logger->debug( 'FP SEO: Analysis not run', array(
+					'post_id' => $current_post->ID,
+					'reason' => $reason,
+					'analyzer_enabled' => $enabled,
+					'post_excluded' => $excluded,
+				) );
 			}
 		}
 
 		// Ensure $analysis is always an array before passing to renderer
 		if ( ! is_array( $analysis ) ) {
-			Logger::error( 'FP SEO: Invalid analysis result in Metabox::render()', array(
+			$this->logger->error( 'FP SEO: Invalid analysis result in Metabox::render()', array(
 				'analysis_type' => gettype( $analysis ),
 				'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
 			) );
 			$analysis = array(); // Force to empty array
 		}
+		
+		// ALWAYS ensure analysis has score and checks keys, even if empty
+		if ( ! isset( $analysis['score'] ) ) {
+			$analysis['score'] = array(
+				'score' => 0,
+				'status' => 'pending',
+			);
+		}
+		if ( ! isset( $analysis['checks'] ) ) {
+			$analysis['checks'] = array();
+		}
+		
+		error_log( 'FP SEO DEBUG: Metabox::render() - Passing analysis to renderer - checks_count=' . count( $analysis['checks'] ) );
 
 		// Use renderer to output HTML con gestione errori robusta
 		// Pass current_post instead of modifying the original $post parameter
@@ -2240,7 +2481,7 @@ class Metabox {
 			// Verifica che il renderer sia ancora disponibile prima di chiamarlo
 			if ( ! $this->renderer ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::error( 'FP SEO: Renderer is null before render() call', array(
+					$this->logger->error( 'FP SEO: Renderer is null before render() call', array(
 						'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
 						'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
 					) );
@@ -2250,7 +2491,7 @@ class Metabox {
 			
 			// Log inizio rendering in debug mode
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: Starting metabox rendering', array(
+				$this->logger->debug( 'FP SEO: Starting metabox rendering', array(
 					'post_id' => isset( $current_post->ID ) ? $current_post->ID : 0,
 					'post_type' => isset( $current_post->post_type ) ? $current_post->post_type : 'unknown',
 					'excluded' => $excluded,
@@ -2268,11 +2509,11 @@ class Metabox {
 			
 			// Log successo in debug mode
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'FP SEO: Metabox rendering completed successfully' );
+				$this->logger->debug( 'FP SEO: Metabox rendering completed successfully' );
 			}
 		} catch ( \Throwable $e ) {
 			// Errore critico - logga e mostra messaggio chiaro
-			Logger::error( 'FP SEO: Critical error rendering metabox', array(
+			$this->logger->error( 'FP SEO: Critical error rendering metabox', array(
 				'post_id' => isset( $current_post->ID ) ? $current_post->ID : ( isset( $post->ID ) ? $post->ID : 0 ),
 				'error' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
@@ -2304,15 +2545,19 @@ class Metabox {
 		}
 		} catch ( \Throwable $e ) {
 			// Catch any errors that weren't caught by inner try-catch blocks
-			Logger::error( 'FP SEO: Uncaught error in Metabox::render()', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'file' => $e->getFile(),
-				'line' => $e->getLine(),
-				'error_type' => get_class( $e ),
-			) );
-			echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Errore critico nel metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
-			echo '<p>' . esc_html__( 'Impossibile caricare il metabox. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
+			// Log error but don't break the page - show user-friendly message instead
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$this->logger->error( 'FP SEO: Uncaught error in Metabox::render()', array(
+					'error' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'error_type' => get_class( $e ),
+				) );
+			}
+			// Show user-friendly error message instead of breaking the page
+			echo '<div class="notice notice-error inline"><p><strong>' . esc_html__( 'Errore nel caricamento del metabox SEO', 'fp-seo-performance' ) . '</strong></p>';
+			echo '<p>' . esc_html__( 'Il metabox non può essere visualizzato. Controlla i log per dettagli.', 'fp-seo-performance' ) . '</p>';
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				echo '<p><small><strong>Errore:</strong> ' . esc_html( $e->getMessage() ) . '</small></p>';
 				echo '<p><small><strong>File:</strong> ' . esc_html( $e->getFile() ) . ':' . esc_html( $e->getLine() ) . '</small></p>';
@@ -2330,7 +2575,7 @@ class Metabox {
 	 */
 	private function render_fallback_fields( WP_Post $post ): void {
 		// NON RENDERE NULLA - se questo metodo viene chiamato, è un errore critico
-		Logger::error( 'FP SEO: render_fallback_fields() called - this should never happen!', array(
+		$this->logger->error( 'FP SEO: render_fallback_fields() called - this should never happen!', array(
 			'post_id' => $post->ID ?? 0,
 			'backtrace' => wp_debug_backtrace_summary(),
 		) );
@@ -2421,86 +2666,6 @@ class Metabox {
 	 * @param bool     $update  Whether this is an update (ignored).
 	 */
 	public function save_meta( int $post_id, $post = null, $update = null ): void {
-		// CRITICAL: If this is the homepage, ensure it never becomes auto-draft
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		$is_homepage = $page_on_front_id > 0 && $post_id === $page_on_front_id;
-		
-		if ( $is_homepage ) {
-			// Get current status from database (not cached)
-			global $wpdb;
-			$current_status_db = $wpdb->get_var( $wpdb->prepare(
-				"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-				$post_id
-			) );
-			
-			// If status is auto-draft, fix it immediately
-			if ( $current_status_db === 'auto-draft' ) {
-				$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
-				if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
-					$original_status = 'publish'; // Default to publish for homepage
-				}
-				
-				// Fix status immediately
-				$wpdb->update(
-					$wpdb->posts,
-					array( 'post_status' => $original_status ),
-					array( 'ID' => $post_id ),
-					array( '%s' ),
-					array( '%d' )
-				);
-				
-				// Clear cache
-				clean_post_cache( $post_id );
-				wp_cache_delete( $post_id, 'posts' );
-				
-				Logger::warning( 'Metabox::save_meta - Fixed homepage status to prevent auto-draft', array(
-					'post_id' => $post_id,
-					'fixed_status' => $original_status,
-				) );
-			} else {
-				// Save current status as original for future reference
-				update_post_meta( $post_id, '_fp_seo_original_status', $current_status_db );
-			}
-		}
-		
-		// DIAGNOSTIC: Check if save_meta is being called unexpectedly (e.g., when opening editor)
-		$current_status = get_post_status( $post_id );
-		$is_autosave = defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE;
-		$is_ajax = defined( 'DOING_AJAX' ) && DOING_AJAX;
-		$has_post_data = ! empty( $_POST );
-		$is_real_save_check = ( isset( $_POST['save'] ) && $_POST['save'] !== '' ) || 
-							  ( isset( $_POST['publish'] ) && $_POST['publish'] !== '' );
-		
-		// Show diagnostic notice if save_meta is called unexpectedly for homepage
-		if ( $is_homepage && ! $is_real_save_check && ! $is_autosave ) {
-			add_action( 'admin_notices', function() use ( $post_id, $current_status, $is_ajax, $has_post_data ) {
-				?>
-				<div class="notice notice-warning" style="border-left-color: #f59e0b; padding: 12px;">
-					<h3 style="margin: 0 0 8px 0; color: #f59e0b;">⚠️ FP SEO: save_meta chiamato inaspettatamente</h3>
-					<p style="margin: 0 0 8px 0;"><strong>Problema:</strong> Il metodo save_meta è stato chiamato quando hai aperto l'editor della homepage, non durante un salvataggio.</p>
-					<ul style="margin: 8px 0; padding-left: 20px;">
-						<li><strong>Post ID:</strong> <?php echo esc_html( $post_id ); ?></li>
-						<li><strong>Status:</strong> <code><?php echo esc_html( $current_status ); ?></code></li>
-						<li><strong>È AJAX:</strong> <?php echo $is_ajax ? 'Sì' : 'No'; ?></li>
-						<li><strong>Ha dati POST:</strong> <?php echo $has_post_data ? 'Sì (' . count( $_POST ) . ' campi)' : 'No'; ?></li>
-						<li><strong>URI richiesta:</strong> <code><?php echo esc_html( $_SERVER['REQUEST_URI'] ?? 'unknown' ); ?></code></li>
-					</ul>
-					<p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">
-						<strong>Causa possibile:</strong> Qualche hook sta triggerando save_post anche quando apri l'editor, causando la creazione di auto-draft.
-					</p>
-				</div>
-				<?php
-			} );
-			
-			Logger::warning( 'Metabox::save_meta called unexpectedly for homepage', array(
-				'post_id' => $post_id,
-				'post_status' => $current_status,
-				'is_ajax' => $is_ajax,
-				'has_post_data' => $has_post_data,
-				'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
-			) );
-		}
-		
 		// CRITICAL: Check post status FIRST - skip auto-draft immediately
 		// WordPress creates auto-draft when opening editor - we must NEVER process these
 		$current_post_status = get_post_status( $post_id );
@@ -2536,7 +2701,7 @@ class Metabox {
 		// DEBUG: Always log when save_meta is called (even for unsupported types)
 		// This helps diagnose why posts aren't saving
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta called', array(
+			$this->logger->debug( 'Metabox::save_meta called', array(
 				'post_id' => $post_id,
 				'post_type' => $post_type,
 				'supported' => in_array( $post_type, $supported_types, true ) ? 'yes' : 'no',
@@ -2555,7 +2720,7 @@ class Metabox {
 			static $logged_types = array();
 			if ( ! isset( $logged_types[ $post_type ] ) ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'Metabox::save_meta skipped - unsupported post type (exiting immediately)', array(
+					$this->logger->debug( 'Metabox::save_meta skipped - unsupported post type (exiting immediately)', array(
 						'post_id' => $post_id,
 						'post_type' => $post_type,
 						'supported_types' => $supported_types,
@@ -2575,7 +2740,7 @@ class Metabox {
 		
 		if ( isset( $saved[ $post_key ] ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta already processed for post_id', array(
+				$this->logger->debug( 'Metabox::save_meta already processed for post_id', array(
 					'hook' => current_filter(),
 					'post_id' => $post_id,
 					'post_type' => $post_type,
@@ -2614,7 +2779,7 @@ class Metabox {
 				}
 			}
 			
-			Logger::debug( 'Metabox::save_meta called', array(
+			$this->logger->debug( 'Metabox::save_meta called', array(
 				'post_id' => $post_id,
 				'update' => $update ? 'yes' : 'no',
 				'hook' => current_filter(),
@@ -2626,11 +2791,11 @@ class Metabox {
 		// DISABLED - All homepage status protection code has been removed
 		// The plugin should NOT touch post_status at all - this was causing the Auto Draft issue
 		
-		$saver = new \FP\SEO\Editor\MetaboxSaver();
-		$result = $saver->save_all_fields( $post_id );
+		// Use SeoFieldsSaver (delegates to MetaboxSaver internally)
+		$result = $this->fields_saver->save_all_fields( $post_id );
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta completed', array(
+			$this->logger->debug( 'Metabox::save_meta completed', array(
 				'post_id' => $post_id,
 				'result' => $result ? 'success' : 'failed',
 			) );
@@ -2658,7 +2823,7 @@ class Metabox {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				static $logged_types = array();
 				if ( ! isset( $logged_types[ $post_type ] ) ) {
-					Logger::debug( 'Metabox::save_meta_edit_post skipped - unsupported post type', array(
+					$this->logger->debug( 'Metabox::save_meta_edit_post skipped - unsupported post type', array(
 						'post_id' => $post_id,
 						'post_type' => $post_type,
 						'supported_types' => $supported_types,
@@ -2671,72 +2836,31 @@ class Metabox {
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta_edit_post called', array(
+			$this->logger->debug( 'Metabox::save_meta_edit_post called', array(
 				'post_id' => $post_id,
 				'post_type' => $post_type,
 				'hook' => 'edit_post',
 			) );
 		}
 		
-		// Use the same save_meta method but prevent double processing
-		$this->save_meta( $post_id, $post, true );
+		// Use SeoFieldsSaver for edit_post saves
+		$this->fields_saver->save_from_edit( $post_id, $post );
 	}
 	
 	/**
 	 * Register SEO meta fields for REST API (Gutenberg support).
 	 */
+	/**
+	 * Register REST meta fields for Gutenberg support.
+	 *
+	 * @deprecated This method has been moved to REST/Controllers/MetaController.
+	 *             REST meta fields are now registered via RESTServiceProvider.
+	 *             This method is kept for backward compatibility but does nothing.
+	 * @return void
+	 */
 	public function register_rest_meta_fields(): void {
-		$post_types = $this->get_supported_post_types();
-		
-		foreach ( $post_types as $post_type ) {
-			// Registra _fp_seo_title
-			register_rest_field(
-				$post_type,
-				'fp_seo_title',
-				array(
-					'get_callback' => function( $post ) {
-						return get_post_meta( $post['id'], '_fp_seo_title', true );
-					},
-					'update_callback' => function( $value, $post ) {
-						if ( $value !== null ) {
-							update_post_meta( $post->ID, '_fp_seo_title', sanitize_text_field( $value ) );
-						} else {
-							delete_post_meta( $post->ID, '_fp_seo_title' );
-						}
-						return true;
-					},
-					'schema' => array(
-						'description' => __( 'SEO Title', 'fp-seo-performance' ),
-						'type' => 'string',
-						'context' => array( 'edit' ),
-					),
-				)
-			);
-			
-			// Registra _fp_seo_meta_description
-			register_rest_field(
-				$post_type,
-				'fp_seo_meta_description',
-				array(
-					'get_callback' => function( $post ) {
-						return get_post_meta( $post['id'], '_fp_seo_meta_description', true );
-					},
-					'update_callback' => function( $value, $post ) {
-						if ( $value !== null ) {
-							update_post_meta( $post->ID, '_fp_seo_meta_description', sanitize_textarea_field( $value ) );
-						} else {
-							delete_post_meta( $post->ID, '_fp_seo_meta_description' );
-						}
-						return true;
-					},
-					'schema' => array(
-						'description' => __( 'SEO Meta Description', 'fp-seo-performance' ),
-						'type' => 'string',
-						'context' => array( 'edit' ),
-					),
-				)
-			);
-		}
+		// REST meta fields registration is now handled by REST/Controllers/MetaController
+		// via RESTServiceProvider. This method is kept for backward compatibility.
 	}
 	
 	/**
@@ -2749,7 +2873,7 @@ class Metabox {
 	 */
 	public function save_meta_rest( WP_Post $post, $request, bool $creating ): void {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta_rest called', array(
+			$this->logger->debug( 'Metabox::save_meta_rest called', array(
 				'post_id' => $post->ID,
 				'creating' => $creating ? 'yes' : 'no',
 				'hook' => 'REST API',
@@ -2772,50 +2896,21 @@ class Metabox {
 		// Se trovati, salva direttamente
 		if ( $seo_title !== null || $meta_desc !== null || $excerpt !== null ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'REST API - Found SEO fields in request', array(
+				$this->logger->debug( 'REST API - Found SEO fields in request', array(
 					'post_id' => $post->ID,
 					'has_title' => $seo_title !== null,
 					'has_description' => $meta_desc !== null,
 				) );
 			}
 			
-			$saver = new \FP\SEO\Editor\MetaboxSaver();
-			
-			// Simula $_POST per il salvataggio
-			if ( $seo_title !== null ) {
-				$_POST['fp_seo_title'] = $seo_title;
-				$_POST['fp_seo_title_sent'] = '1';
-			}
-			if ( $meta_desc !== null ) {
-				$_POST['fp_seo_meta_description'] = $meta_desc;
-				$_POST['fp_seo_meta_description_sent'] = '1';
-			}
-			if ( $excerpt !== null ) {
-				$_POST['fp_seo_excerpt'] = $excerpt;
-				$_POST['fp_seo_excerpt_sent'] = '1';
-			}
-			$_POST['fp_seo_performance_metabox_present'] = '1';
-			
-			$result = $saver->save_all_fields( $post->ID );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'REST API save completed', array(
-					'post_id' => $post->ID,
-					'result' => $result ? 'success' : 'failed',
-				) );
-			}
-			
-			// Pulisci $_POST per evitare effetti collaterali
-			unset( $_POST['fp_seo_title'], $_POST['fp_seo_title_sent'] );
-			unset( $_POST['fp_seo_meta_description'], $_POST['fp_seo_meta_description_sent'] );
-			unset( $_POST['fp_seo_excerpt'], $_POST['fp_seo_excerpt_sent'] );
-			unset( $_POST['fp_seo_performance_metabox_present'] );
+			// Use SeoFieldsSaver for REST API saves
+			$this->fields_saver->save_from_rest( $post, $request, $creating );
 			
 			// DISABLED - Homepage protection was causing the Auto Draft issue
 			// The plugin should not touch post status at all
 		} else {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'REST API - No SEO fields found in request params', array(
+				$this->logger->debug( 'REST API - No SEO fields found in request params', array(
 					'post_id' => $post->ID,
 				) );
 			}
@@ -2851,7 +2946,7 @@ class Metabox {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				static $logged_types = array();
 				if ( ! isset( $logged_types[ $post_type ] ) ) {
-					Logger::debug( 'Metabox::save_meta_insert_post skipped - unsupported post type', array(
+					$this->logger->debug( 'Metabox::save_meta_insert_post skipped - unsupported post type', array(
 						'post_id' => $post_id,
 						'post_type' => $post_type,
 						'supported_types' => $supported_types,
@@ -2865,7 +2960,7 @@ class Metabox {
 		}
 		
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta_insert_post called', array(
+			$this->logger->debug( 'Metabox::save_meta_insert_post called', array(
 				'post_id' => $post_id,
 				'post_type' => $post_type,
 				'update' => $update ? 'yes' : 'no',
@@ -2878,16 +2973,8 @@ class Metabox {
 			return;
 		}
 		
-		// Chiama save_meta ma senza il controllo di duplicati (usa hook diverso)
-		$saver = new \FP\SEO\Editor\MetaboxSaver();
-		$result = $saver->save_all_fields( $post_id );
-		
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta_insert_post completed', array(
-				'post_id' => $post_id,
-				'result' => $result ? 'success' : 'failed',
-			) );
-		}
+		// Use SeoFieldsSaver for insert_post saves
+		$this->fields_saver->save_from_insert( $post_id, $post, $update );
 	}
 
 	/**
@@ -2920,791 +3007,28 @@ class Metabox {
 		// CRITICAL: DO NOT modify post_status - this was causing auto-draft issues
 		// WordPress handles post_status correctly on its own - we should not interfere
 		
-		// Salva excerpt se presente (sia per nuovi post che per update)
-		if ( isset( $_POST['fp_seo_excerpt'] ) || isset( $postarr['fp_seo_excerpt'] ) ) {
-			$excerpt = isset( $_POST['fp_seo_excerpt'] ) 
-				? sanitize_textarea_field( wp_unslash( (string) $_POST['fp_seo_excerpt'] ) )
-				: sanitize_textarea_field( (string) ( $postarr['fp_seo_excerpt'] ?? '' ) );
-			
-			$excerpt = trim( $excerpt );
-			
-			// Aggiorna direttamente nel data array per assicurarsi che venga salvato
-			$data['post_excerpt'] = $excerpt;
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta_pre_insert - Excerpt saved', array(
-					'post_id' => $post_id,
-					'excerpt_length' => strlen( $excerpt ),
-					'hook' => 'wp_insert_post_data',
-				) );
-			}
-		}
-		
-		// Gestisci slug direttamente nell'array $data (evita wp_update_post durante wp_insert_post_data)
-		if ( isset( $_POST['fp_seo_slug'] ) ) {
-			$slug = trim( sanitize_title( wp_unslash( (string) $_POST['fp_seo_slug'] ) ) );
-			if ( '' !== $slug ) {
-				$data['post_name'] = $slug;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::debug( 'Metabox::save_meta_pre_insert - Slug updated in data array', array(
-						'post_id' => $post_id,
-						'slug' => $slug,
-					) );
-				}
-			}
-		}
-		
-		if ( $post_id > 0 && $update ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_meta_pre_insert called', array(
-					'post_id' => $post_id,
-					'update' => $update,
-					'post_status' => $data['post_status'] ?? 'not set',
-					'hook' => 'wp_insert_post_data',
-				) );
-			}
-			
-			// IMPORTANTE: NON chiamare save_all_fields qui perché potrebbe chiamare wp_update_post
-			// (tramite save_slug e save_excerpt) che può causare problemi durante wp_insert_post_data,
-			// specialmente per la homepage. I meta fields verranno salvati tramite save_post hook invece.
-			// Slug ed excerpt sono già gestiti direttamente nell'array $data sopra.
-		}
-		return $data;
+		// Use SeoFieldsSaver for pre_insert saves (handles excerpt and slug)
+		return $this->fields_saver->save_from_pre_insert( $data, $postarr, $unsanitized_postarr, $update );
 	}
 	
-	/**
-	 * Prevents homepage from being set to auto-draft status.
-	 * Hook: transition_post_status
-	 *
-	 * @param string  $new_status New post status.
-	 * @param string  $old_status Old post status.
-	 * @param WP_Post $post       Post object.
-	 */
-	public function prevent_homepage_auto_draft( string $new_status, string $old_status, $post ): void {
-		// Verifica se è la homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 || ! $post instanceof WP_Post || $post->ID !== $page_on_front_id ) {
-			return;
-		}
-		
-		// Se lo status sta cambiando verso 'auto-draft' ma il post esiste già (non è nuovo)
-		if ( $new_status === 'auto-draft' && $old_status !== 'auto-draft' && $old_status !== '' ) {
-			// Usa un flag statico per evitare loop infiniti
-			static $correcting = array();
-			if ( isset( $correcting[ $post->ID ] ) ) {
-				return;
-			}
-			$correcting[ $post->ID ] = true;
-			
-			// Correggi immediatamente usando wpdb direttamente (evita wp_update_post che può causare loop)
-			// Rimuovi temporaneamente l'hook per evitare loop
-			remove_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1 );
-			
-			// Use direct DB update instead of wp_update_post to avoid triggering more hooks
-			global $wpdb;
-			$wpdb->update(
-				$wpdb->posts,
-				array( 'post_status' => $old_status ),
-				array( 'ID' => $post->ID ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			
-			// Clear cache
-			clean_post_cache( $post->ID );
-			wp_cache_delete( $post->ID, 'posts' );
-			
-			// Ripristina l'hook
-			add_action( 'transition_post_status', array( $this, 'prevent_homepage_auto_draft' ), 1, 3 );
-			
-			unset( $correcting[ $post->ID ] );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'Metabox::prevent_homepage_auto_draft - Prevented homepage status change to auto-draft', array(
-					'post_id' => $post->ID,
-					'old_status' => $old_status,
-					'attempted_status' => 'auto-draft',
-				) );
-			}
-		}
-	}
-	
-	/**
-	 * Prevents creation of new auto-draft pages when editing homepage.
-	 * Hook: admin_init (priority 1)
-	 * 
-	 * NOTE: This function is DISABLED to prevent interference with other post types.
-	 * The auto-draft detection was causing issues when creating new sliders and other CPTs.
-	 */
-	public function prevent_homepage_auto_draft_creation(): void {
-		// DISABLED - This was causing redirects when creating new sliders/CPTs
-		// The original code was too aggressive and redirected any auto-draft to homepage
-		return;
-	}
-	
-	/**
-	 * Save homepage original status at the beginning of the request.
-	 * Hook: init (priority 1)
-	 */
-	public function save_homepage_original_status(): void {
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		// Salva lo status originale in una variabile statica
-		global $wpdb;
-		$original_status = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-			$page_on_front_id
-		) );
-		
-		if ( ! empty( $original_status ) && $original_status !== 'auto-draft' ) {
-			// Salva in una transiente che dura solo per questa richiesta
-			set_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id, $original_status, 60 );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'Metabox::save_homepage_original_status - Saved original status', array(
-					'post_id' => $page_on_front_id,
-					'original_status' => $original_status,
-				) );
-			}
-		}
-	}
-	
-	/**
-	 * Prevent homepage from becoming auto-draft when opening editor.
-	 * Hook: wp_insert_post_data
-	 * 
-	 * @param array $data Post data.
-	 * @param array $postarr Original post array.
-	 * @return array Modified post data.
-	 */
-	public function prevent_homepage_auto_draft_data( array $data, array $postarr ): array {
-		// Only check if this is the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return $data; // Not using static homepage
-		}
-		
-		// Check if this post is the homepage
-		$post_id = isset( $postarr['ID'] ) ? (int) $postarr['ID'] : 0;
-		if ( $post_id === 0 ) {
-			// New post - check if it's being created as homepage
-			// This shouldn't happen, but just in case
-			return $data;
-		}
-		
-		if ( $post_id !== $page_on_front_id ) {
-			return $data; // Not the homepage
-		}
-		
-		// This is the homepage - prevent it from becoming auto-draft
-		if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' ) {
-			// Get current status from database to preserve it
-			$current_status = get_post_status( $post_id );
-			if ( $current_status && $current_status !== 'auto-draft' ) {
-				$data['post_status'] = $current_status;
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'Metabox::prevent_homepage_auto_draft_data - Prevented homepage from becoming auto-draft', array(
-						'post_id' => $post_id,
-						'original_status' => $current_status,
-						'attempted_status' => 'auto-draft',
-					) );
-				}
-			} else {
-				// Fallback to publish if current status is also auto-draft
-				$data['post_status'] = 'publish';
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'Metabox::prevent_homepage_auto_draft_data - Forced homepage to publish (was auto-draft)', array(
-						'post_id' => $post_id,
-					) );
-				}
-			}
-		}
-		
-		return $data;
-	}
-
-	/**
-	 * Prevent homepage from becoming auto-draft when updating post.
-	 * Hook: wp_update_post (priority 1)
-	 * 
-	 * This intercepts post updates and ensures homepage never becomes auto-draft.
-	 *
-	 * @param int      $post_id Post ID.
-	 * @param WP_Post  $post    Post object after update.
-	 */
-	public function prevent_homepage_auto_draft_on_update( int $post_id, WP_Post $post ): void {
-		// Only check if this is the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
-			return;
-		}
-		
-		// Get current status from database (not from post object which might be cached)
-		global $wpdb;
-		$current_status = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-			$post_id
-		) );
-		
-		// If status is auto-draft, fix it immediately
-		if ( $current_status === 'auto-draft' ) {
-			// Get original status before update
-			$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
-			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
-				$original_status = 'publish'; // Default to publish for homepage
-			}
-			
-			// Fix status immediately
-			$wpdb->update(
-				$wpdb->posts,
-				array( 'post_status' => $original_status ),
-				array( 'ID' => $post_id ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			
-			// Clear cache
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'posts' );
-			
-			Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_update - Fixed homepage status after update', array(
-				'post_id' => $post_id,
-				'fixed_status' => $original_status,
-			) );
-		}
-	}
-
-	/**
-	 * Prevent homepage from becoming auto-draft when editing post.
-	 * Hook: edit_post (priority 1)
-	 * 
-	 * This intercepts post edits and ensures homepage never becomes auto-draft.
-	 *
-	 * @param int      $post_id Post ID.
-	 * @param WP_Post  $post    Post object.
-	 */
-	public function prevent_homepage_auto_draft_on_edit_post( int $post_id, $post ): void {
-		// Only check if this is the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 || $post_id !== $page_on_front_id ) {
-			return;
-		}
-		
-		// Save original status before any modifications
-		$current_status = get_post_status( $post_id );
-		if ( $current_status && $current_status !== 'auto-draft' ) {
-			update_post_meta( $post_id, '_fp_seo_original_status', $current_status );
-		}
-		
-		// Get current status from database
-		global $wpdb;
-		$db_status = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-			$post_id
-		) );
-		
-		// If status is auto-draft, fix it immediately
-		if ( $db_status === 'auto-draft' ) {
-			$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
-			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
-				$original_status = 'publish'; // Default to publish for homepage
-			}
-			
-			// Fix status immediately
-			$wpdb->update(
-				$wpdb->posts,
-				array( 'post_status' => $original_status ),
-				array( 'ID' => $post_id ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			
-			// Clear cache
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'posts' );
-			
-			Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit_post - Fixed homepage status during edit', array(
-				'post_id' => $post_id,
-				'fixed_status' => $original_status,
-			) );
-		}
-	}
-
-	/**
-	 * Prevent homepage from becoming auto-draft via transition_post_status hook.
-	 * Hook: transition_post_status
-	 * This is a backup protection in case wp_insert_post_data doesn't catch it.
-	 * 
-	 * @param string $new_status New post status.
-	 * @param string $old_status Old post status.
-	 * @param WP_Post $post Post object.
-	 */
-	public function prevent_homepage_auto_draft_transition( string $new_status, string $old_status, $post ): void {
-		// Only check if this is the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return; // Not using static homepage
-		}
-		
-		// Check if this post is the homepage
-		if ( ! $post instanceof WP_Post || $post->ID !== $page_on_front_id ) {
-			return; // Not the homepage
-		}
-		
-		// If status is changing to auto-draft and it was published before, prevent it
-		if ( $new_status === 'auto-draft' && $old_status !== 'auto-draft' && $old_status !== '' ) {
-			// Use static flag to prevent infinite loops
-			static $correcting = array();
-			if ( isset( $correcting[ $post->ID ] ) ) {
-				return;
-			}
-			$correcting[ $post->ID ] = true;
-			
-			// Immediately correct the status back to what it was
-			global $wpdb;
-			$wpdb->update(
-				$wpdb->posts,
-				array( 'post_status' => $old_status ),
-				array( 'ID' => $post->ID ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			
-			// Clear cache
-			clean_post_cache( $post->ID );
-			wp_cache_delete( $post->ID, 'posts' );
-			
-			unset( $correcting[ $post->ID ] );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'Metabox::prevent_homepage_auto_draft_transition - Prevented homepage from becoming auto-draft', array(
-					'post_id' => $post->ID,
-					'old_status' => $old_status,
-					'attempted_status' => $new_status,
-				) );
-			}
-		}
-	}
-
-	/**
-	 * Diagnose when auto-draft is created - helps identify what's creating it.
-	 * Hook: wp_insert_post (priority 999)
-	 *
-	 * @param int      $post_id Post ID.
-	 * @param WP_Post  $post    Post object.
-	 * @param bool     $update  Whether this is an update.
-	 */
-	public function diagnose_auto_draft_creation( int $post_id, $post, bool $update ): void {
-		// Only check if this is related to homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		// Get post status
-		$post_status = get_post_status( $post_id );
-		if ( $post_status !== 'auto-draft' ) {
-			return;
-		}
-		
-		// Check if we're trying to edit the homepage
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		$is_editing_homepage = $requested_post_id === $page_on_front_id;
-		
-		// Check if this auto-draft is a page (not a post or other type)
-		$post_type = get_post_type( $post_id );
-		if ( $post_type !== 'page' ) {
-			return;
-		}
-		
-		// If we're editing homepage and an auto-draft page is created, delete it immediately
-		if ( $is_editing_homepage ) {
-			$backtrace = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 20 );
-			$caller_info = array();
-			foreach ( $backtrace as $index => $trace ) {
-				if ( $index > 5 ) { // Skip first few frames (this function, WordPress core)
-					break;
-				}
-				if ( isset( $trace['file'] ) && isset( $trace['line'] ) ) {
-					$file = str_replace( ABSPATH, '', $trace['file'] );
-					$caller_info[] = $file . ':' . $trace['line'] . ( isset( $trace['function'] ) ? ' -> ' . $trace['function'] : '' );
-				}
-			}
-			
-			Logger::warning( 'Metabox::diagnose_auto_draft_creation - Auto-draft created while editing homepage, deleting it', array(
-				'auto_draft_id' => $post_id,
-				'homepage_id' => $page_on_front_id,
-				'requested_post_id' => $requested_post_id,
-				'is_update' => $update,
-				'post_type' => $post_type,
-				'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
-				'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
-				'is_autosave' => defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE,
-				'has_post_data' => ! empty( $_POST ),
-				'caller_trace' => $caller_info,
-			) );
-			
-			// CRITICAL: Delete the auto-draft immediately if it's not the homepage
-			// This prevents WordPress from showing it in the editor
-			// Wrapped in try-catch to prevent errors from FP-Multilanguage or other plugins
-			if ( $post_id !== $page_on_front_id ) {
-				try {
-					wp_delete_post( $post_id, true ); // Force delete, bypass trash
-					Logger::info( 'Metabox::diagnose_auto_draft_creation - Auto-draft deleted', array(
-						'deleted_post_id' => $post_id,
-					) );
-				} catch ( \Throwable $e ) {
-					// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::warning( 'FP SEO: Failed to delete auto-draft in diagnose_auto_draft_creation', array(
-							'auto_draft_id' => $post_id,
-							'error' => $e->getMessage(),
-						) );
-					}
-				}
-			}
-			
-			// Store diagnostic info in transient so it can be displayed in metabox
-			set_transient( 'fp_seo_auto_draft_diagnosis_' . $page_on_front_id, array(
-				'auto_draft_id' => $post_id,
-				'timestamp' => time(),
-				'caller_trace' => $caller_info,
-				'is_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX,
-				'is_autosave' => defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE,
-				'deleted' => $post_id !== $page_on_front_id,
-			), 300 ); // 5 minutes
-		}
-	}
-
-	/**
-	 * Force correct homepage in editor - intercepts post loading before WordPress displays it.
-	 * Hook: admin_init (priority 1)
-	 * 
-	 * This ensures that when editing the homepage, WordPress always loads the correct post,
-	 * not an auto-draft or wrong post.
-	 */
-	public function force_correct_homepage_in_editor(): void {
-		// Only run on post editor pages
-		$screen = get_current_screen();
-		if ( ! $screen || $screen->base !== 'post' ) {
-			return;
-		}
-		
-		// Check if we're editing the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		if ( $requested_post_id !== $page_on_front_id ) {
-			return;
-		}
-		
-		// Force WordPress to load the correct homepage
-		global $post, $post_type, $post_type_object;
-		
-		// Get the correct homepage
-		$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
-		if ( ! $correct_post instanceof WP_Post ) {
-			return;
-		}
-		
-		// If the global post is wrong or is an auto-draft, fix it
-		if ( ! $post || $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
-			$post = $correct_post;
-			$post_type = $correct_post->post_type;
-			$post_type_object = get_post_type_object( $post_type );
-			
-			// Also fix GLOBALS
-			$GLOBALS['post'] = $correct_post;
-			$GLOBALS['post_type'] = $post_type;
-			$GLOBALS['post_type_object'] = $post_type_object;
-			
-			Logger::info( 'Metabox::force_correct_homepage_in_editor - Forced correct homepage in editor', array(
-				'requested_post_id' => $requested_post_id,
-				'homepage_id' => $page_on_front_id,
-				'corrected_post_id' => $correct_post->ID,
-				'corrected_post_status' => $correct_post->post_status,
-			) );
-		}
-		
-		// Also delete any auto-drafts that might have been created
-		global $wpdb;
-		$auto_drafts = $wpdb->get_col( $wpdb->prepare(
-			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND post_status = 'auto-draft' AND post_author = %d AND ID != %d ORDER BY ID DESC LIMIT 10",
-			get_current_user_id(),
-			$page_on_front_id
-		) );
-		
-		foreach ( $auto_drafts as $auto_draft_id ) {
-			try {
-				wp_delete_post( (int) $auto_draft_id, true );
-				Logger::debug( 'Metabox::force_correct_homepage_in_editor - Deleted auto-draft', array(
-					'auto_draft_id' => $auto_draft_id,
-				) );
-			} catch ( \Throwable $e ) {
-				// Silently fail if deletion causes errors (e.g., FP-Multilanguage conflicts)
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					Logger::warning( 'FP SEO: Failed to delete auto-draft in force_correct_homepage_in_editor', array(
-						'auto_draft_id' => $auto_draft_id,
-						'error' => $e->getMessage(),
-					) );
-				}
-			}
-		}
-	}
-
-	/**
-	 * Force correct homepage on screen load - runs after WordPress loads the post.
-	 * Hook: current_screen (priority 999)
-	 * 
-	 * This ensures the post is correct even after WordPress has loaded it.
-	 *
-	 * @param WP_Screen $screen Current screen object.
-	 */
-	public function force_correct_homepage_on_screen( $screen ): void {
-		// Only run on post editor pages
-		if ( ! $screen || $screen->base !== 'post' ) {
-			return;
-		}
-		
-		// Check if we're editing the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		if ( $requested_post_id !== $page_on_front_id ) {
-			return;
-		}
-		
-		// Force WordPress to load the correct homepage
-		global $post, $post_type, $post_type_object;
-		
-		// Get the correct homepage
-		$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
-		if ( ! $correct_post instanceof WP_Post ) {
-			return;
-		}
-		
-		// If the global post is wrong or is an auto-draft, fix it
-		if ( ! $post || $post->ID !== $page_on_front_id || $post->post_status === 'auto-draft' ) {
-			$post = $correct_post;
-			$post_type = $correct_post->post_type;
-			$post_type_object = get_post_type_object( $post_type );
-			
-			// Also fix GLOBALS
-			$GLOBALS['post'] = $correct_post;
-			$GLOBALS['post_type'] = $post_type;
-			$GLOBALS['post_type_object'] = $post_type_object;
-			
-			Logger::info( 'Metabox::force_correct_homepage_on_screen - Forced correct homepage on screen load', array(
-				'requested_post_id' => $requested_post_id,
-				'homepage_id' => $page_on_front_id,
-				'corrected_post_id' => $correct_post->ID,
-				'corrected_post_status' => $correct_post->post_status,
-			) );
-		}
-	}
-
-	/**
-	 * Filter get_post to always return homepage when editing homepage.
-	 * Hook: get_post (priority 10)
-	 * 
-	 * This intercepts ALL calls to get_post() and ensures we get the correct homepage,
-	 * not an auto-draft or wrong post.
-	 *
-	 * @param WP_Post|null $post    The post object or null if not found.
-	 * @param int|WP_Post   $post_id Post ID or post object.
-	 * @return WP_Post|null Modified post object.
-	 */
-	public function filter_get_post_for_homepage( $post, $post_id ): ?WP_Post {
-		// Only run in admin when editing
-		if ( ! is_admin() || ! isset( $_GET['post'] ) || ! isset( $_GET['action'] ) || $_GET['action'] !== 'edit' ) {
-			return $post;
-		}
-		
-		// Check if we're editing the homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return $post;
-		}
-		
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		if ( $requested_post_id !== $page_on_front_id ) {
-			return $post;
-		}
-		
-		// Get the post ID from the parameter
-		$check_post_id = $post_id instanceof WP_Post ? $post_id->ID : (int) $post_id;
-		
-		// If WordPress is trying to load an auto-draft or wrong post, return homepage instead
-		if ( $post instanceof WP_Post ) {
-			// If the loaded post is an auto-draft page, return homepage instead
-			if ( $post->post_status === 'auto-draft' && $post->post_type === 'page' && $check_post_id !== $page_on_front_id ) {
-				$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
-				if ( $correct_post instanceof WP_Post ) {
-					Logger::info( 'Metabox::filter_get_post_for_homepage - Replaced auto-draft with homepage', array(
-						'auto_draft_id' => $post->ID,
-						'homepage_id' => $page_on_front_id,
-					) );
-					return $correct_post;
-				}
-			}
-			
-			// If WordPress is trying to load a different post when we requested homepage, return homepage
-			if ( $check_post_id === $page_on_front_id && $post->ID !== $page_on_front_id ) {
-				$correct_post = get_post( $page_on_front_id, OBJECT, 'edit' );
-				if ( $correct_post instanceof WP_Post ) {
-					Logger::info( 'Metabox::filter_get_post_for_homepage - Replaced wrong post with homepage', array(
-						'wrong_post_id' => $post->ID,
-						'homepage_id' => $page_on_front_id,
-					) );
-					return $correct_post;
-				}
-			}
-		}
-		
-		return $post;
-	}
-
-	/**
-	 * Prevent auto-draft creation when editing homepage.
-	 * Hook: wp_insert_post_data (priority 10)
-	 * 
-	 * This intercepts the data before WordPress creates an auto-draft
-	 * and prevents it if we're editing the homepage.
-	 *
-	 * @param array $data    An array of slashed post data.
-	 * @param array $postarr An array of sanitized, but otherwise unmodified post data.
-	 * @return array Modified post data.
-	 */
-	public function prevent_homepage_auto_draft_on_edit( array $data, array $postarr ): array {
-		// Only check if we're in admin and editing a page
-		if ( ! is_admin() || ! isset( $postarr['post_type'] ) || $postarr['post_type'] !== 'page' ) {
-			return $data;
-		}
-		
-		// Check if this is related to homepage
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return $data;
-		}
-		
-		// Check if we're trying to edit the homepage
-		$requested_post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0;
-		if ( $requested_post_id !== $page_on_front_id ) {
-			return $data;
-		}
-		
-		// If this is an auto-draft being created while editing homepage, prevent it
-		if ( isset( $data['post_status'] ) && $data['post_status'] === 'auto-draft' ) {
-			// Check if this is a new post (no ID) or if it's the homepage being modified
-			$post_id = isset( $postarr['ID'] ) ? (int) $postarr['ID'] : 0;
-			
-			// If it's a new auto-draft (no ID) and we're editing homepage, prevent it
-			if ( $post_id === 0 ) {
-				Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit - Preventing new auto-draft creation while editing homepage', array(
-					'requested_post_id' => $requested_post_id,
-					'homepage_id' => $page_on_front_id,
-					'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? '',
-				) );
-				// Return false to prevent insertion, or modify status
-				// Actually, we can't return false, but we can change the status
-				// However, if we change status, WordPress might still create it
-				// Better approach: delete it immediately after creation via wp_insert_post hook
-				return $data; // Let it be created, we'll delete it immediately
-			}
-			
-			// If it's the homepage being changed to auto-draft, prevent it
-			if ( $post_id === $page_on_front_id ) {
-				$current_status = get_post_status( $page_on_front_id );
-				if ( $current_status && $current_status !== 'auto-draft' ) {
-					Logger::warning( 'Metabox::prevent_homepage_auto_draft_on_edit - Preventing homepage status change to auto-draft', array(
-						'post_id' => $post_id,
-						'current_status' => $current_status,
-						'attempted_status' => 'auto-draft',
-					) );
-					$data['post_status'] = $current_status; // Keep original status
-				}
-			}
-		}
-		
-		return $data;
-	}
-
-	/**
-	 * Fix homepage status on shutdown (ultima risorsa).
-	 * Hook: shutdown
-	 */
-	public function fix_homepage_status_on_shutdown(): void {
-		$page_on_front_id = (int) get_option( 'page_on_front' );
-		if ( $page_on_front_id === 0 ) {
-			return;
-		}
-		
-		global $wpdb;
-		$current_status = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_status FROM {$wpdb->posts} WHERE ID = %d",
-			$page_on_front_id
-		) );
-		
-		// Se lo status è 'auto-draft', prova a ripristinare lo status originale salvato all'inizio
-		if ( $current_status === 'auto-draft' ) {
-			$original_status = get_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id );
-			
-			// Se abbiamo lo status originale salvato, usalo. Altrimenti forza 'publish'
-			$new_status = ! empty( $original_status ) && $original_status !== 'auto-draft' ? $original_status : 'publish';
-			
-			$wpdb->update(
-				$wpdb->posts,
-				array( 'post_status' => $new_status ),
-				array( 'ID' => $page_on_front_id ),
-				array( '%s' ),
-				array( '%d' )
-			);
-			clean_post_cache( $page_on_front_id );
-			wp_cache_delete( $page_on_front_id, 'posts' );
-			
-			// Elimina la transiente
-			delete_transient( 'fp_seo_homepage_original_status_' . $page_on_front_id );
-			
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::warning( 'Metabox::fix_homepage_status_on_shutdown - Corrected homepage status on shutdown', array(
-					'post_id' => $page_on_front_id,
-					'old_status' => $current_status,
-					'new_status' => $new_status,
-					'restored_from_original' => ! empty( $original_status ),
-				) );
-			}
-		}
-	}
-
 	public function save_meta_pre_update( int $post_id, array $data ): array {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Metabox::save_meta_pre_update called', array(
+			$this->logger->debug( 'Metabox::save_meta_pre_update called', array(
 				'post_id' => $post_id,
 				'hook' => 'pre_post_update',
 			) );
 		}
 		
-		// Salva i campi SEO se presenti
-		// Questo hook viene chiamato prima di save_post, quindi possiamo salvare qui
-		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) || 
-			 isset( $_POST['fp_seo_title_sent'] ) || 
+		// Use SeoFieldsSaver for pre_update saves
+		if ( isset( $_POST['fp_seo_performance_metabox_present'] ) ||
+			 isset( $_POST['fp_seo_title_sent'] ) ||
 			 isset( $_POST['fp_seo_meta_description_sent'] ) ||
 			 isset( $_POST['fp_seo_excerpt'] ) ||
 			 isset( $_POST['fp_seo_excerpt_sent'] ) ) {
-			$saver = new \FP\SEO\Editor\MetaboxSaver();
-			$saver->save_all_fields( $post_id );
+			$this->fields_saver->save_from_post( $post_id );
 		}
-		
-		// Ritorna i dati invariati
+
+		// Return data unchanged
 		return $data;
 	}
 
@@ -3780,105 +3104,33 @@ class Metabox {
 	 * @param WP_Post $post Post object.
 	 * @return array
 	 */
+	/**
+	 * Run SEO analysis for a post.
+	 *
+	 * Uses AnalysisRunner (always available via DI container).
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return array Analysis payload.
+	 * @throws \RuntimeException If AnalysisRunner is not available.
+	 */
 	public function run_analysis_for_post( WP_Post $post ): array {
-		// Use AnalysisRunner if available
-		if ( $this->analysis_runner ) {
-			return $this->analysis_runner->run( $post );
-		}
-
-		// Fallback to original implementation
-		// Check if required classes exist
-		if ( ! class_exists( '\FP\SEO\Analysis\Context' ) ) {
-			throw new \RuntimeException( 'Context class not found' );
-		}
-		if ( ! class_exists( '\FP\SEO\Analysis\Analyzer' ) ) {
-			throw new \RuntimeException( 'Analyzer class not found' );
-		}
-		if ( ! class_exists( '\FP\SEO\Scoring\ScoreEngine' ) ) {
-			throw new \RuntimeException( 'ScoreEngine class not found' );
-		}
-		
-		// DISABLED: Cache clearing interferes with WordPress's post object during page load
-		// Get SEO metadata using MetadataResolver (same pattern as BulkAuditPage)
-		$meta_description = MetadataResolver::resolve_meta_description( $post );
-		$canonical = MetadataResolver::resolve_canonical_url( $post );
-		$robots = MetadataResolver::resolve_robots( $post );
-		$focus_keyword = get_post_meta( $post->ID, self::META_FOCUS_KEYWORD, true );
-		$secondary_keywords = get_post_meta( $post->ID, self::META_SECONDARY_KEYWORDS, true );
-		
-		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $focus_keyword ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_FOCUS_KEYWORD ) );
-			if ( $db_value !== null ) {
-				$focus_keyword = $db_value;
-			}
-		}
-		
-		if ( empty( $secondary_keywords ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, self::META_SECONDARY_KEYWORDS ) );
-			if ( $db_value !== null ) {
-				$unserialized = maybe_unserialize( $db_value );
-				$secondary_keywords = is_array( $unserialized ) ? $unserialized : array();
-			}
-		}
-		
-		if ( ! is_array( $secondary_keywords ) ) {
-			$secondary_keywords = array();
-		}
-		
-		// Get SEO title, fallback to post title
-		$seo_title = MetadataResolver::resolve_seo_title( $post->ID );
-		if ( ! $seo_title ) {
-			$seo_title = $post->post_title;
-		}
-		
-		// Build context with proper parameters (same pattern as BulkAuditPage)
-		$context = new Context(
-			(int) $post->ID,
-			(string) $post->post_content,
-			(string) $seo_title,
-			(string) $meta_description,
-			$canonical,
-			$robots,
-			is_string( $focus_keyword ) ? $focus_keyword : '',
-			$secondary_keywords
-		);
-
-		$analyzer = new Analyzer();
-		$analysis = $analyzer->analyze( $context );
-		$score_engine = new ScoreEngine();
-		
-		// Analyzer::analyze() returns an array with 'checks' and 'summary' keys
-		// ScoreEngine::calculate() expects an array of checks indexed by check ID
-		$checks_array = $analysis['checks'] ?? array();
-		
-		// Debug: log checks structure
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'run_analysis_for_post - checks processed', array(
-				'post_id' => $post->ID,
-				'checks_count' => count( $checks_array ),
-				'first_check_keys' => ! empty( $checks_array ) ? array_keys( reset( $checks_array ) ) : array(),
-			) );
+			error_log( 'FP SEO DEBUG: run_analysis_for_post() called for post_id=' . $post->ID );
 		}
 		
-		$score = $score_engine->calculate( $checks_array );
+		// Use AnalysisRunner (always available via DI container)
+		if ( ! $this->analysis_runner ) {
+			throw new \RuntimeException( 'AnalysisRunner is not available. Ensure it is registered in the DI container.' );
+		}
 		
-		$formatted_checks = $this->format_checks_for_frontend( $checks_array );
-		
-		// Debug: log formatted checks
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'run_analysis_for_post - formatted checks', array(
-				'post_id' => $post->ID,
-				'formatted_checks_count' => count( $formatted_checks ),
-			) );
+			error_log( 'FP SEO DEBUG: Using AnalysisRunner' );
 		}
-		
-		return array(
-			'score' => $score,
-			'checks' => $formatted_checks,
-		);
+		$result = $this->analysis_runner->run( $post );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO DEBUG: AnalysisRunner returned - checks_count=' . ( isset( $result['checks'] ) && is_array( $result['checks'] ) ? count( $result['checks'] ) : 0 ) );
+		}
+		return $result;
 	}
 
 	/**
@@ -3897,164 +3149,31 @@ class Metabox {
 		$checks_array = $analysis['checks'] ?? array();
 		$score = $score_engine->calculate( $checks_array );
 
-		return array(
-			'score' => $score,
-			'checks' => $this->format_checks_for_frontend( $checks_array ),
-		);
+		// Use AnalysisDataService (always available via DI container)
+		$formatted_checks = $this->analysis_data_service->format_checks_for_frontend( $checks_array );
+		return $this->analysis_data_service->compile_payload( $score, $formatted_checks );
 	}
 
-	/**
-	 * Format checks for frontend display.
-	 *
-	 * @param array $checks Raw checks from analyzer.
-	 * @return array
-	 */
-	private function format_checks_for_frontend( array $checks ): array {
-		$formatted = array();
-		foreach ( $checks as $check_id => $check ) {
-			// Check can be an array (from Analyzer) or an object (from Result)
-			if ( is_array( $check ) ) {
-				// Analyzer returns: id, label, description, status, details, fix_hint, weight
-				$formatted[] = array(
-					'id' => $check['id'] ?? $check_id,
-					'label' => $check['label'] ?? '',
-					'status' => $check['status'] ?? 'pending',
-					'hint' => $check['fix_hint'] ?? $check['description'] ?? '',
-				);
-			} else {
-				// Handle object with methods
-				$formatted[] = array(
-					'id' => method_exists( $check, 'get_id' ) ? $check->get_id() : (string) $check_id,
-					'label' => method_exists( $check, 'get_label' ) ? $check->get_label() : '',
-					'status' => method_exists( $check, 'get_status' ) ? $check->get_status() : 'pending',
-					'hint' => method_exists( $check, 'get_hint' ) ? $check->get_hint() : '',
-				);
-			}
-		}
-		return $formatted;
-	}
-
-	/**
-	 * Render GSC metrics section.
-	 *
-	 * @param \WP_Post $post Post object.
-	 */
-	private function render_gsc_metrics( \WP_Post $post ): void {
-		$options = Options::get();
-		$gsc     = $options['gsc'] ?? array();
-
-		if ( empty( $gsc['enabled'] ) ) {
-			return;
-		}
-
-		$gsc_data = new GscData();
-		$metrics  = $gsc_data->get_post_metrics( $post->ID, 28 );
-
-		if ( ! $metrics ) {
-			return;
-		}
-
-		?>
-		<div class="fp-seo-gsc-post-metrics" style="margin-top: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
-			<h4 style="margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #111827;">
-				📊 <?php esc_html_e( 'Google Search Console (Last 28 Days)', 'fp-seo-performance' ); ?>
-			</h4>
-			
-			<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-				<div style="text-align: center;">
-					<div style="font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">
-						<?php esc_html_e( 'Clicks', 'fp-seo-performance' ); ?>
-					</div>
-					<div style="font-size: 20px; font-weight: 700; color: #059669;">
-						<?php echo esc_html( number_format_i18n( $metrics['clicks'] ) ); ?>
-					</div>
-				</div>
-				
-				<div style="text-align: center;">
-					<div style="font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">
-						<?php esc_html_e( 'Impressions', 'fp-seo-performance' ); ?>
-					</div>
-					<div style="font-size: 20px; font-weight: 700; color: #2563eb;">
-						<?php echo esc_html( number_format_i18n( $metrics['impressions'] ) ); ?>
-					</div>
-				</div>
-				
-				<div style="text-align: center;">
-					<div style="font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">
-						<?php esc_html_e( 'CTR', 'fp-seo-performance' ); ?>
-					</div>
-					<div style="font-size: 20px; font-weight: 700; color: #111827;">
-						<?php echo esc_html( $metrics['ctr'] ); ?>%
-					</div>
-				</div>
-				
-				<div style="text-align: center;">
-					<div style="font-size: 11px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">
-						<?php esc_html_e( 'Position', 'fp-seo-performance' ); ?>
-					</div>
-					<div style="font-size: 20px; font-weight: 700; color: #111827;">
-						<?php echo esc_html( $metrics['position'] ); ?>
-					</div>
-				</div>
-			</div>
-
-			<?php if ( ! empty( $metrics['queries'] ) ) : ?>
-				<details style="margin-top: 12px;">
-					<summary style="cursor: pointer; font-weight: 600; color: #374151;">
-						🔍 <?php esc_html_e( 'Top Queries', 'fp-seo-performance' ); ?> (<?php echo count( $metrics['queries'] ); ?>)
-					</summary>
-					<ul style="margin: 8px 0 0; padding: 0; list-style: none;">
-						<?php foreach ( array_slice( $metrics['queries'], 0, 5 ) as $query_data ) : ?>
-							<li style="padding: 6px 8px; background: #fff; border-radius: 4px; margin-bottom: 4px; font-size: 12px;">
-								<strong><?php echo esc_html( $query_data['query'] ); ?></strong>
-								<span style="color: #6b7280; margin-left: 10px;">
-									<?php echo esc_html( $query_data['clicks'] ); ?> clicks, 
-									pos <?php echo esc_html( $query_data['position'] ); ?>
-								</span>
-							</li>
-						<?php endforeach; ?>
-					</ul>
-				</details>
-			<?php endif; ?>
-		</div>
-		<?php
-	}
 
 	/**
 	 * Handle AJAX request to save SEO Title and Meta Description fields.
 	 * This is a separate endpoint to ensure fields are saved reliably.
 	 */
 	public function handle_save_fields_ajax(): void {
-		// Verify nonce
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), self::AJAX_SAVE_FIELDS ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
-		}
-
+		$nonce = isset( $_POST['nonce'] ) ? sanitize_text_field( wp_unslash( $_POST['nonce'] ) ) : '';
 		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : ( isset( $_POST['postId'] ) ? absint( $_POST['postId'] ) : 0 );
 
-		if ( $post_id <= 0 ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
-		}
-
-		// CRITICAL: Check post type FIRST, before any processing
-		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
-		$post_type = get_post_type( $post_id );
-		$supported_types = $this->get_supported_post_types();
+		// Use validator for all validation
+		$validator = $this->get_validator();
+		$validation = $validator->validate_ajax_request( $post_id, $nonce, self::AJAX_SAVE_FIELDS );
 		
-		// If not a supported post type, return error immediately
-		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			wp_send_json_error( array( 
-				'message' => __( 'This post type is not supported for SEO optimization.', 'fp-seo-performance' ),
-				'post_type' => $post_type,
-			), 400 );
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
+		if ( ! $validation['valid'] ) {
+			$status_code = isset( $validation['post_type'] ) ? 400 : 403;
+			wp_send_json_error( array( 'message' => $validation['error'] ?? __( 'Validation failed.', 'fp-seo-performance' ) ), $status_code );
 		}
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'handle_save_fields_ajax called', array(
+			$this->logger->debug( 'handle_save_fields_ajax called', array(
 				'post_id' => $post_id,
 				'ajax_post_keys' => array_keys( $_POST ),
 			) );
@@ -4066,16 +3185,16 @@ class Metabox {
 			$result = ! empty( $saved );
 
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				Logger::debug( 'AJAX save successful', array( 'post_id' => $post_id, 'saved_fields' => array_keys( $saved ) ) );
+				$this->logger->debug( 'AJAX save successful', array( 'post_id' => $post_id, 'saved_fields' => array_keys( $saved ) ) );
 			}
 		} catch ( \Exception $e ) {
-			Logger::error( 'AJAX save error', array(
+			$this->logger->error( 'AJAX save error', array(
 				'post_id' => $post_id,
 				'error' => $e->getMessage(),
 			) );
 			$result = false;
 		} catch ( \Error $e ) {
-			Logger::error( 'AJAX save fatal error', array(
+			$this->logger->error( 'AJAX save fatal error', array(
 				'post_id' => $post_id,
 				'error' => $e->getMessage(),
 			) );
@@ -4083,7 +3202,7 @@ class Metabox {
 		}
 
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::info( 'FP SEO: Fields saved via AJAX', array(
+			$this->logger->info( 'FP SEO: Fields saved via AJAX', array(
 				'post_id' => $post_id,
 				'result' => $result,
 			) );
@@ -4095,195 +3214,12 @@ class Metabox {
 		) );
 	}
 
-	/**
-	 * Get check importance explanation
-	 *
-	 * @param string $check_id Check identifier.
-	 * @return string
-	 */
-	private function get_check_importance( string $check_id ): string {
-		$importance_map = array(
-			'title_length'       => __( 'Il titolo è la prima cosa che gli utenti vedono nelle SERP di Google. Un titolo ben ottimizzato (50-60 caratteri) viene mostrato completamente nei risultati e attira più clic.', 'fp-seo-performance' ),
-			'meta_description'   => __( 'La meta description appare sotto il titolo nelle ricerche Google. Una buona description (150-160 caratteri) aumenta il CTR (tasso di clic) del 30-50%.', 'fp-seo-performance' ),
-			'focus_keyword'      => __( 'La focus keyword nel titolo aiuta Google a capire l\'argomento principale. I titoli con keyword target rankano in media 15 posizioni più in alto.', 'fp-seo-performance' ),
-			'keyword_density'    => __( 'Una densità keyword ottimale (1-2%) aiuta il posizionamento senza penalizzazioni per keyword stuffing. Troppo poche keyword = difficile rankare; troppe = penalizzazione Google.', 'fp-seo-performance' ),
-			'content_length'     => __( 'Contenuti più lunghi (>1000 parole) tendono a rankare meglio perché forniscono informazioni più complete. Articoli lunghi ottengono il 77% dei backlink.', 'fp-seo-performance' ),
-			'headings_structure' => __( 'Una struttura H1-H6 corretta aiuta Google a capire la gerarchia del contenuto. Migliora anche l\'accessibilità per screen reader.', 'fp-seo-performance' ),
-			'images_alt'         => __( 'Gli attributi ALT sulle immagini migliorano l\'accessibilità e aiutano il ranking in Google Immagini. Il 27% del traffico organico viene da immagini.', 'fp-seo-performance' ),
-			'internal_links'     => __( 'I link interni distribuiscono autorità SEO tra le pagine e aiutano Google a scoprire nuovi contenuti. Siti con buona link structure rankano il 40% meglio.', 'fp-seo-performance' ),
-			'external_links'     => __( 'Link a fonti autorevoli aumentano la credibilità del contenuto. Google considera i link esterni un segnale di qualità e profondità dell\'articolo.', 'fp-seo-performance' ),
-			'readability'        => __( 'Un contenuto leggibile (punteggio Flesch >60) mantiene gli utenti più tempo sulla pagina, riducendo il bounce rate. Google favorisce contenuti comprensibili.', 'fp-seo-performance' ),
-		);
-
-		return $importance_map[ $check_id ] ?? __( 'Questo check SEO è importante per il posizionamento organico del tuo contenuto.', 'fp-seo-performance' );
-	}
-
-	/**
-	 * Get check how-to-fix explanation
-	 *
-	 * @param string $check_id Check identifier.
-	 * @return string
-	 */
-	private function get_check_howto( string $check_id ): string {
-		$howto_map = array(
-			'title_length'       => __( 'Modifica il titolo per mantenerlo tra 50-60 caratteri. Includi la keyword principale all\'inizio. Se troppo lungo, Google lo tronca con "..." perdendo impatto.', 'fp-seo-performance' ),
-			'meta_description'   => __( 'Scrivi una description di 150-160 caratteri che riassume il contenuto e include la focus keyword. Usa un tono coinvolgente e aggiungi una call-to-action (CTA).', 'fp-seo-performance' ),
-			'focus_keyword'      => __( 'Inserisci la focus keyword nel campo apposito sopra, poi assicurati che appaia nel titolo (preferibilmente all\'inizio), nei primi 100 caratteri del contenuto e in almeno un H2.', 'fp-seo-performance' ),
-			'keyword_density'    => __( 'Aggiungi o rimuovi keyword per raggiungere 1-2% di densità. Usa sinonimi e keyword correlate (LSI keywords) invece di ripetere sempre la stessa keyword.', 'fp-seo-performance' ),
-			'content_length'     => __( 'Espandi il contenuto aggiungendo sezioni utili: esempi pratici, FAQ, statistiche, case study. Punta a minimo 1000 parole per argomenti informativi, 500+ per pagine commerciali.', 'fp-seo-performance' ),
-			'headings_structure' => __( 'Usa un solo H1 (titolo principale), poi H2 per sezioni principali, H3 per sottosezioni. Non saltare livelli (es: da H2 a H4). Includi keyword nei heading quando possibile.', 'fp-seo-performance' ),
-			'images_alt'         => __( 'Aggiungi un attributo ALT descrittivo a ogni immagine. Descrivi cosa mostra l\'immagine includendo keyword dove appropriato. Es: "screenshot plugin SEO WordPress" invece di "immagine1".', 'fp-seo-performance' ),
-			'internal_links'     => __( 'Aggiungi 2-5 link interni a pagine/post correlati. Usa anchor text descrittivo (no "clicca qui"). Link a contenuti pillar e articoli correlati per creare topic clusters.', 'fp-seo-performance' ),
-			'external_links'     => __( 'Aggiungi 1-3 link a fonti autorevoli (.gov, .edu, siti riconosciuti nel settore). Apri in nuova tab e usa rel="noopener noreferrer" per sicurezza.', 'fp-seo-performance' ),
-			'readability'        => __( 'Semplifica le frasi (max 20 parole). Usa paragrafi corti (3-4 righe). Aggiungi elenchi puntati. Evita gergo tecnico o spiegalo. Usa sottotitoli per spezzare il testo.', 'fp-seo-performance' ),
-		);
-
-		return $howto_map[ $check_id ] ?? __( 'Segui le best practices SEO per ottimizzare questo aspetto del tuo contenuto.', 'fp-seo-performance' );
-	}
-
-	/**
-	 * Get check example
-	 *
-	 * @param string $check_id Check identifier.
-	 * @return string|null
-	 */
-	private function get_check_example( string $check_id ): ?string {
-		$example_map = array(
-			'title_length'       => __( 'Guida SEO WordPress: 10 Trucchi per Rankare nel 2025', 'fp-seo-performance' ),
-			'meta_description'   => __( 'Scopri 10 tecniche SEO WordPress avanzate per migliorare il ranking nel 2025. Guida pratica con esempi reali e risultati garantiti. Leggi ora!', 'fp-seo-performance' ),
-			'focus_keyword'      => __( 'Se keyword = "wordpress seo", includi nel titolo: "WordPress SEO: Guida Completa 2025"', 'fp-seo-performance' ),
-			'headings_structure' => __( 'H1: Titolo principale | H2: Cos\'è la SEO | H3: Tecniche on-page | H3: Tecniche off-page', 'fp-seo-performance' ),
-			'images_alt'         => __( 'ALT="screenshot dashboard plugin SEO WordPress con analytics traffico organico"', 'fp-seo-performance' ),
-		);
-
-		return $example_map[ $check_id ] ?? null;
-	}
 
 	/**
 	 * Handle AJAX request to save images data - REMOVED
 	 */
 	public function handle_save_images_ajax(): void {
 		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
-		return;
-		// Verify nonce
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_images_nonce' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
-		}
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( $post_id <= 0 ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
-		}
-
-		// CRITICAL: Check post type FIRST, before any processing
-		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
-		$post_type = get_post_type( $post_id );
-		$supported_types = $this->get_supported_post_types();
-		
-		// If not a supported post type, return error immediately
-		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			wp_send_json_error( array( 
-				'message' => __( 'This post type is not supported for image optimization.', 'fp-seo-performance' ),
-				'post_type' => $post_type,
-			), 400 );
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
-		}
-
-		// Get images data
-		$images_data = isset( $_POST['images'] ) && is_array( $_POST['images'] ) ? $_POST['images'] : array();
-
-		if ( empty( $images_data ) ) {
-			wp_send_json_error( array( 'message' => __( 'No images data provided.', 'fp-seo-performance' ) ), 400 );
-		}
-
-		// Sanitize images data
-		$sanitized_images = array();
-		foreach ( $images_data as $src => $data ) {
-			if ( ! is_array( $data ) ) {
-				continue;
-			}
-
-			$sanitized_images[ esc_url_raw( $src ) ] = array(
-				'alt'         => sanitize_text_field( $data['alt'] ?? '' ),
-				'title'       => sanitize_text_field( $data['title'] ?? '' ),
-				'description' => sanitize_textarea_field( $data['description'] ?? '' ),
-			);
-		}
-
-		// Save images data to post meta
-		update_post_meta( $post_id, '_fp_seo_images_data', $sanitized_images );
-
-		// Update post content with new alt and title attributes
-		// CRITICAL: Double-check post type before modifying post content
-		// This prevents interference with slider meta saving
-		$post = get_post( $post_id );
-		if ( $post ) {
-			// Double-check post type before any modification
-			$current_post_type = get_post_type( $post_id );
-			if ( ! in_array( $current_post_type, $supported_types, true ) ) {
-				wp_send_json_error( array( 
-					'message' => __( 'Post type changed during processing. Operation cancelled.', 'fp-seo-performance' ),
-					'post_type' => $current_post_type,
-				), 400 );
-			}
-			
-			$content = $post->post_content;
-			$updated_content = $this->update_images_in_content( $content, $sanitized_images );
-
-			if ( $updated_content !== $content ) {
-				// Update post content
-				// CRITICAL: Remove our save_post hooks temporarily to prevent recursion
-				// Use post-type-specific hooks only
-				$supported_types = $this->get_supported_post_types();
-				foreach ( $supported_types as $post_type ) {
-					remove_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10 );
-					remove_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10 );
-					remove_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10 );
-				}
-				
-				wp_update_post( array(
-					'ID'           => $post_id,
-					'post_content' => $updated_content,
-				) );
-				
-				// Re-add our hooks (post-type-specific only)
-				foreach ( $supported_types as $post_type ) {
-					if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
-						add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 3 );
-					}
-					if ( ! has_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ) ) ) {
-						add_action( 'edit_post_' . $post_type, array( $this, 'save_meta_edit_post' ), 10, 2 );
-					}
-					if ( ! has_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ) ) ) {
-						add_action( 'wp_insert_post_' . $post_type, array( $this, 'save_meta_insert_post' ), 10, 3 );
-					}
-				}
-			}
-
-			// Also update attachment alt text if image is a WordPress attachment
-			foreach ( $sanitized_images as $src => $data ) {
-				$attachment_id = $this->get_attachment_id_from_url( $src );
-				if ( $attachment_id && ! empty( $data['alt'] ) ) {
-					update_post_meta( $attachment_id, '_wp_attachment_image_alt', $data['alt'] );
-				}
-			}
-		}
-
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Images data saved', array(
-				'post_id'      => $post_id,
-				'images_count' => count( $sanitized_images ),
-			) );
-		}
-
-		wp_send_json_success( array(
-			'message' => __( 'Images data saved successfully.', 'fp-seo-performance' ),
-			'count'   => count( $sanitized_images ),
-		) );
 	}
 
 	/**
@@ -4291,78 +3227,6 @@ class Metabox {
 	 */
 	public function handle_reload_images_section_ajax(): void {
 		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
-		return;
-		// Verify nonce
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'fp_seo_reload_images_nonce' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'fp-seo-performance' ) ), 403 );
-		}
-
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-
-		if ( $post_id <= 0 ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid post ID.', 'fp-seo-performance' ) ), 400 );
-		}
-
-		// Check post type
-		$post_type = get_post_type( $post_id );
-		$supported_types = $this->get_supported_post_types();
-		
-		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			wp_send_json_error( array( 
-				'message' => __( 'This post type is not supported.', 'fp-seo-performance' ),
-				'post_type' => $post_type,
-			), 400 );
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this post.', 'fp-seo-performance' ) ), 403 );
-		}
-
-		// Get post object - CRITICAL: Always refresh from database to get latest content
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			wp_send_json_error( array( 'message' => __( 'Post not found.', 'fp-seo-performance' ) ), 404 );
-		}
-		
-		// CRITICAL: Clear post meta cache to ensure we get latest featured image
-		clean_post_cache( $post_id );
-		
-		// CRITICAL: Refresh post content from database to ensure we have the latest version
-		// WordPress's get_post() might return cached/stale content, especially after AJAX calls
-		global $wpdb;
-		$db_content = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_content FROM {$wpdb->posts} WHERE ID = %d AND post_status != 'inherit'",
-			$post_id
-		) );
-		if ( ! empty( $db_content ) ) {
-			$post->post_content = $db_content;
-		}
-		
-		// Featured image retrieval removed - no longer managing images
-			'has_img_tags' => strpos( $db_content, '<img' ) !== false,
-		) );
-
-		// Render only the images section content
-		if ( $this->renderer === null ) {
-			$this->initialize_renderer();
-		}
-
-		if ( $this->renderer === null ) {
-			wp_send_json_error( array( 'message' => __( 'Renderer not available.', 'fp-seo-performance' ) ), 500 );
-		}
-
-		// Image extraction removed - no longer managing images
-		$images = array(); // No longer extracting images
-
-		// Render images section content HTML
-		ob_start();
-		$this->renderer->render_images_section_content( $post, $images );
-		$html = ob_get_clean();
-
-		wp_send_json_success( array( 
-			'html' => $html,
-			'images_count' => count( $images ),
-		) );
 	}
 
 	/**
@@ -4373,73 +3237,8 @@ class Metabox {
 	 * @return string Updated content.
 	 */
 	private function update_images_in_content( string $content, array $images_data ): string {
-		// Image content updating removed
+		// Image content updating removed - method kept for backward compatibility
 		return $content;
-		if ( empty( $content ) || empty( $images_data ) ) {
-			return $content;
-		}
-
-		// Use DOMDocument to parse and update HTML
-		$dom = new \DOMDocument();
-		libxml_use_internal_errors( true );
-		$dom->loadHTML( '<?xml encoding="UTF-8">' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
-		libxml_clear_errors();
-
-		$img_tags = $dom->getElementsByTagName( 'img' );
-		$updated = false;
-
-		foreach ( $img_tags as $img ) {
-			$src = $img->getAttribute( 'src' );
-			
-			// Remove query strings for matching
-			$src_clean = strtok( $src, '?' );
-			
-			// Find matching image data
-			$image_data = null;
-			foreach ( $images_data as $data_src => $data ) {
-				$data_src_clean = strtok( $data_src, '?' );
-				if ( $src_clean === $data_src_clean || $src === $data_src ) {
-					$image_data = $data;
-					break;
-				}
-			}
-
-			if ( $image_data ) {
-				// Update alt attribute
-				if ( ! empty( $image_data['alt'] ) ) {
-					$img->setAttribute( 'alt', $image_data['alt'] );
-					$updated = true;
-				} elseif ( $img->hasAttribute( 'alt' ) && empty( $image_data['alt'] ) ) {
-					// Remove alt if it was cleared
-					$img->removeAttribute( 'alt' );
-					$updated = true;
-				}
-
-				// Update title attribute
-				if ( ! empty( $image_data['title'] ) ) {
-					$img->setAttribute( 'title', $image_data['title'] );
-					$updated = true;
-				} elseif ( $img->hasAttribute( 'title' ) && empty( $image_data['title'] ) ) {
-					// Remove title if it was cleared
-					$img->removeAttribute( 'title' );
-					$updated = true;
-				}
-			}
-		}
-
-		if ( ! $updated ) {
-			return $content;
-		}
-
-		// Get updated HTML
-		$updated_content = $dom->saveHTML();
-		
-		// Remove XML declaration and DOCTYPE if present
-		$updated_content = preg_replace( '/^<\?xml[^>]*\?>/i', '', $updated_content );
-		$updated_content = preg_replace( '/<!DOCTYPE[^>]*>/i', '', $updated_content );
-		$updated_content = trim( $updated_content );
-
-		return $updated_content;
 	}
 
 	/**
@@ -4449,48 +3248,7 @@ class Metabox {
 	 * @return int|null Attachment ID or null if not found.
 	 */
 	private function get_attachment_id_from_url( string $url ): ?int {
-		// Image attachment handling removed
-		return null;
-		// Remove query strings
-		$url = strtok( $url, '?' );
-		
-		// Try to get attachment ID from URL
-		global $wpdb;
-		
-		// Try full URL match
-		$attachment_id = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
-			basename( $url )
-		) );
-		
-		if ( $attachment_id ) {
-			return (int) $attachment_id;
-		}
-		
-		// Try GUID match
-		$attachment_id = $wpdb->get_var( $wpdb->prepare(
-			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND guid = %s LIMIT 1",
-			$url
-		) );
-		
-		if ( $attachment_id ) {
-			return (int) $attachment_id;
-		}
-		
-		// Try to extract from URL path
-		$upload_dir = wp_upload_dir();
-		if ( strpos( $url, $upload_dir['baseurl'] ) !== false ) {
-			$relative_path = str_replace( $upload_dir['baseurl'] . '/', '', $url );
-			$attachment_id = $wpdb->get_var( $wpdb->prepare(
-				"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s LIMIT 1",
-				$relative_path
-			) );
-			
-			if ( $attachment_id ) {
-				return (int) $attachment_id;
-			}
-		}
-		
+		// Image attachment handling removed - method kept for backward compatibility
 		return null;
 	}
 
@@ -4501,6 +3259,42 @@ class Metabox {
 	 */
 	public function handle_extract_images_ajax(): void {
 		wp_send_json_error( array( 'message' => __( 'Image optimization feature has been removed.', 'fp-seo-performance' ) ), 410 );
+	}
+
+	/**
+	 * Get lazy service loader instance.
+	 *
+	 * @return \FP\SEO\Editor\Services\LazyServiceLoader Lazy loader instance.
+	 */
+	private function get_lazy_loader(): \FP\SEO\Editor\Services\LazyServiceLoader {
+		if ( $this->lazy_loader === null ) {
+			$this->lazy_loader = new \FP\SEO\Editor\Services\LazyServiceLoader( $this->logger );
+		}
+		return $this->lazy_loader;
+	}
+
+	/**
+	 * Get validator instance.
+	 *
+	 * @return \FP\SEO\Editor\Services\MetaboxValidator Validator instance.
+	 */
+	private function get_validator(): \FP\SEO\Editor\Services\MetaboxValidator {
+		if ( $this->validator === null ) {
+			$this->validator = new \FP\SEO\Editor\Services\MetaboxValidator( $this->logger );
+		}
+		return $this->validator;
+	}
+
+	/**
+	 * Get state manager instance.
+	 *
+	 * @return \FP\SEO\Editor\Services\MetaboxStateManager State manager instance.
+	 */
+	private function get_state_manager(): \FP\SEO\Editor\Services\MetaboxStateManager {
+		if ( $this->state_manager === null ) {
+			$this->state_manager = new \FP\SEO\Editor\Services\MetaboxStateManager( $this->logger );
+		}
+		return $this->state_manager;
 	}
 
 }

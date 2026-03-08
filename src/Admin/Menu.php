@@ -11,12 +11,13 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Admin\BulkAuditPage;
 use FP\SEO\Admin\Renderers\MenuDashboardRenderer;
 use FP\SEO\Admin\Styles\MenuStylesManager;
 use FP\SEO\Editor\Metabox;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 use FP\SEO\Utils\PostTypes;
-use function add_action;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use function add_menu_page;
 use function array_filter;
 use function array_map;
@@ -64,10 +65,26 @@ class Menu {
 	private $renderer;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Hooks WordPress actions for the menu.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_menu' ) );
+		$this->hook_manager->add_action( 'admin_menu', array( $this, 'add_menu' ) );
 
 		// Initialize and register styles manager
 		$this->styles_manager = new MenuStylesManager();
@@ -81,7 +98,7 @@ class Menu {
 	 * Adds the top-level menu page.
 	 */
 	public function add_menu(): void {
-		$capability = Options::get_capability();
+		$capability = OptionsHelper::get_capability();
 
 		add_menu_page(
 			__( 'SEO Performance', 'fp-seo-performance' ),
@@ -98,48 +115,80 @@ class Menu {
 	 * Renders the dashboard page.
 	 */
 	public function render_dashboard(): void {
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
 		}
 
-		$options       = Options::get();
-		$general       = is_array( $options['general'] ?? null ) ? $options['general'] : array();
-		$analysis      = is_array( $options['analysis'] ?? null ) ? $options['analysis'] : array();
-		$performance   = is_array( $options['performance'] ?? null ) ? $options['performance'] : array();
-		$checks        = is_array( $analysis['checks'] ?? null ) ? $analysis['checks'] : array();
-		$checks_total  = count( $checks );
-		$checks_active = count( array_filter( array_map( 'boolval', $checks ) ) );
+		try {
+			$options       = OptionsHelper::get();
+			$general       = is_array( $options['general'] ?? null ) ? $options['general'] : array();
+			$analysis      = is_array( $options['analysis'] ?? null ) ? $options['analysis'] : array();
+			$performance   = is_array( $options['performance'] ?? null ) ? $options['performance'] : array();
+			$checks        = is_array( $analysis['checks'] ?? null ) ? $analysis['checks'] : array();
+			$checks_total  = count( $checks );
+			$checks_active = count( array_filter( array_map( 'boolval', $checks ) ) );
 
-		$analyzer_enabled = (bool) ( $general['enable_analyzer'] ?? false );
-		$badge_enabled    = (bool) ( $general['admin_bar_badge'] ?? false );
+			$analyzer_enabled = (bool) ( $general['enable_analyzer'] ?? false );
+			$badge_enabled    = (bool) ( $general['admin_bar_badge'] ?? false );
 
-		$content_overview = $this->collect_content_overview();
-		$bulk_stats       = $this->collect_bulk_audit_stats();
+			$content_overview = $this->collect_content_overview();
+			$bulk_stats       = $this->collect_bulk_audit_stats();
 
-		$psi_enabled      = (bool) ( $performance['enable_psi'] ?? false );
-		$psi_key          = trim( (string) ( $performance['psi_api_key'] ?? '' ) );
-		$heuristics       = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
-		$defaults         = Options::get_defaults();
-		$heuristic_map    = is_array( $defaults['performance']['heuristics'] ?? null ) ? $defaults['performance']['heuristics'] : array();
-		$heuristic_total  = count( $heuristic_map );
-		$heuristic_active = count( array_filter( array_map( 'boolval', $heuristics ) ) );
-		$signal_source    = ( $psi_enabled && '' !== $psi_key ) ? 'psi' : 'heuristics';
+			$psi_enabled      = (bool) ( $performance['enable_psi'] ?? false );
+			$psi_key          = trim( (string) ( $performance['psi_api_key'] ?? '' ) );
+			$heuristics       = is_array( $performance['heuristics'] ?? null ) ? $performance['heuristics'] : array();
+			$defaults         = OptionsHelper::get_defaults();
+			$heuristic_map    = is_array( $defaults['performance']['heuristics'] ?? null ) ? $defaults['performance']['heuristics'] : array();
+			$heuristic_total  = count( $heuristic_map );
+			$heuristic_active = count( array_filter( array_map( 'boolval', $heuristics ) ) );
+			$signal_source    = ( $psi_enabled && '' !== $psi_key ) ? 'psi' : 'heuristics';
 
-		if ( $this->renderer ) {
-			$this->renderer->render(
-				$options,
-				$content_overview,
-				$bulk_stats,
-				$checks_active,
-				$checks_total,
-				$analyzer_enabled,
-				$badge_enabled,
-				$signal_source,
-				$heuristic_active,
-				$heuristic_total,
-				array( $this, 'format_last_updated' ),
-				array( $this, 'status_label' )
-			);
+			if ( $this->renderer ) {
+				// Create callable closures using Closure::fromCallable to ensure type safety
+				$format_callback = \Closure::fromCallable( array( $this, 'format_last_updated' ) );
+				$status_callback = \Closure::fromCallable( array( $this, 'status_label' ) );
+				
+				$this->renderer->render(
+					$options,
+					$content_overview,
+					$bulk_stats,
+					$checks_active,
+					$checks_total,
+					$analyzer_enabled,
+					$badge_enabled,
+					$signal_source,
+					$heuristic_active,
+					$heuristic_total,
+					$format_callback,
+					$status_callback
+				);
+			} else {
+				// Fallback rendering if renderer is not initialized
+				?>
+				<div class="wrap">
+					<h1><?php esc_html_e( 'SEO Performance Dashboard', 'fp-seo-performance' ); ?></h1>
+					<div class="notice notice-error">
+						<p><?php esc_html_e( 'Error: Dashboard renderer not initialized. Please refresh the page or contact support.', 'fp-seo-performance' ); ?></p>
+					</div>
+				</div>
+				<?php
+			}
+		} catch ( \Throwable $e ) {
+			// Log error and show user-friendly message
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO Dashboard Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			?>
+			<div class="wrap">
+				<h1><?php esc_html_e( 'SEO Performance Dashboard', 'fp-seo-performance' ); ?></h1>
+				<div class="notice notice-error">
+					<p><?php esc_html_e( 'An error occurred while loading the dashboard. Please try refreshing the page.', 'fp-seo-performance' ); ?></p>
+					<?php if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) : ?>
+						<p><strong><?php esc_html_e( 'Debug Info:', 'fp-seo-performance' ); ?></strong> <?php echo esc_html( $e->getMessage() ); ?></p>
+					<?php endif; ?>
+				</div>
+			</div>
+			<?php
 		}
 	}
 
@@ -149,6 +198,7 @@ class Menu {
 		 * @return array{eligible:int,excluded:int}
 		 */
 	private function collect_content_overview(): array {
+		try {
 			$types = PostTypes::analyzable();
 
 			$published_total = 0;
@@ -187,6 +237,16 @@ class Menu {
 			'eligible' => $eligible,
 			'excluded' => $excluded,
 		);
+		} catch ( \Throwable $e ) {
+			// Return safe defaults on error
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO collect_content_overview Error: ' . $e->getMessage() );
+			}
+			return array(
+				'eligible' => 0,
+				'excluded' => 0,
+			);
+		}
 	}
 
 		/**
@@ -202,7 +262,8 @@ class Menu {
 		 * }
 		 */
 	private function collect_bulk_audit_stats(): array {
-		$cached  = get_transient( BulkAuditPage::CACHE_KEY );
+		try {
+			$cached  = get_transient( BulkAuditPage::CACHE_KEY );
 		$entries = array();
 
 		if ( is_array( $cached ) ) {
@@ -291,6 +352,25 @@ class Menu {
 			'status_totals' => $status_totals,
 			'entries'       => $entries,
 		);
+		} catch ( \Throwable $e ) {
+			// Return safe defaults on error
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO collect_bulk_audit_stats Error: ' . $e->getMessage() );
+			}
+			return array(
+				'total'         => 0,
+				'average'       => null,
+				'flagged'       => 0,
+				'latest'        => null,
+				'status_totals' => array(
+					'green'  => 0,
+					'yellow' => 0,
+					'red'    => 0,
+					'other'  => 0,
+				),
+				'entries'       => array(),
+			);
+		}
 	}
 
 		/**

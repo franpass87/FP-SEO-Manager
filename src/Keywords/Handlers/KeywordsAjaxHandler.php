@@ -12,8 +12,10 @@ declare(strict_types=1);
 namespace FP\SEO\Keywords\Handlers;
 
 use FP\SEO\Keywords\MultipleKeywordsManager;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use function check_ajax_referer;
 use function current_time;
+use function current_user_can;
 use function get_post;
 use function sanitize_text_field;
 use function update_post_meta;
@@ -30,12 +32,21 @@ class KeywordsAjaxHandler {
 	private $manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param MultipleKeywordsManager $manager Keywords manager instance.
+	 * @param HookManagerInterface    $hook_manager Hook manager instance.
 	 */
-	public function __construct( MultipleKeywordsManager $manager ) {
+	public function __construct( MultipleKeywordsManager $manager, HookManagerInterface $hook_manager ) {
 		$this->manager = $manager;
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
@@ -44,9 +55,9 @@ class KeywordsAjaxHandler {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_analyze_keywords', array( $this, 'handle_analyze' ) );
-		add_action( 'wp_ajax_fp_seo_suggest_keywords', array( $this, 'handle_suggest' ) );
-		add_action( 'wp_ajax_fp_seo_optimize_keywords', array( $this, 'handle_optimize' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_analyze_keywords', array( $this, 'handle_analyze' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_suggest_keywords', array( $this, 'handle_suggest' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_optimize_keywords', array( $this, 'handle_optimize' ) );
 	}
 
 	/**
@@ -60,28 +71,36 @@ class KeywordsAjaxHandler {
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
 
 		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID', 'fp-seo-performance' ) ), 400 );
+			return;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$keywords_data = $this->manager->get_post_keywords( $post_id );
 		if ( empty( $keywords_data ) ) {
-			wp_send_json_error( 'No keywords found for this post' );
+			wp_send_json_error( array( 'message' => __( 'No keywords found for this post', 'fp-seo-performance' ) ), 404 );
+			return;
 		}
 
 		$analysis = $this->manager->analyze_keywords_in_content( $post_id, $keywords_data );
-		
+
 		// Update keywords data with analysis
-		$keywords_data['keyword_density'] = $analysis['density'];
+		$keywords_data['keyword_density']   = $analysis['density'];
 		$keywords_data['keyword_positions'] = $analysis['positions'];
-		$keywords_data['last_analyzed'] = current_time( 'mysql' );
-		
+		$keywords_data['last_analyzed']     = current_time( 'mysql' );
+
 		update_post_meta( $post_id, '_fp_seo_multiple_keywords', $keywords_data );
-		\FP\SEO\Utils\Cache::delete( 'fp_seo_keywords_' . $post_id );
+		\FP\SEO\Utils\CacheHelper::delete( 'fp_seo_keywords_' . $post_id );
 
 		wp_send_json_success( array(
-			'message' => __( 'Keywords analyzed successfully', 'fp-seo-performance' ),
-			'analysis' => $analysis
+			'message'  => __( 'Keywords analyzed successfully', 'fp-seo-performance' ),
+			'analysis' => $analysis,
 		) );
+		return;
 	}
 
 	/**
@@ -93,15 +112,21 @@ class KeywordsAjaxHandler {
 		check_ajax_referer( 'fp_seo_keywords_nonce', 'nonce' );
 
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-		$type = sanitize_text_field( $_POST['type'] ?? 'all' );
+		$type    = sanitize_text_field( $_POST['type'] ?? 'all' );
 
 		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID', 'fp-seo-performance' ) ), 400 );
+			return;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$suggestions = $this->manager->get_keyword_suggestions( $post_id );
-		
-		if ( $type !== 'all' && isset( $suggestions[ $type ] ) ) {
+
+		if ( 'all' !== $type && isset( $suggestions[ $type ] ) ) {
 			$suggestions = array( $type => $suggestions[ $type ] );
 		}
 
@@ -119,16 +144,23 @@ class KeywordsAjaxHandler {
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
 
 		if ( ! $post_id ) {
-			wp_send_json_error( 'Invalid post ID' );
+			wp_send_json_error( array( 'message' => __( 'Invalid post ID', 'fp-seo-performance' ) ), 400 );
+			return;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$post = get_post( $post_id );
 		if ( ! $post ) {
-			wp_send_json_error( 'Post not found' );
+			wp_send_json_error( array( 'message' => __( 'Post not found', 'fp-seo-performance' ) ), 404 );
+			return;
 		}
 
 		$optimized = $this->manager->optimize_keywords_with_ai( $post );
 		wp_send_json_success( $optimized );
+		return;
 	}
 }
-

@@ -11,8 +11,9 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
+use FP\SEO\AI\Services\AIResponseParser;
 use FP\SEO\Integrations\OpenAiClient;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Utils\CacheHelper;
 use FP\SEO\Utils\PerformanceConfig;
 
 /**
@@ -28,10 +29,20 @@ class AdvancedContentOptimizer {
 	private OpenAiClient $openai_client;
 
 	/**
-	 * Constructor.
+	 * Response parser instance.
+	 *
+	 * @var AIResponseParser
 	 */
-	public function __construct() {
-		$this->openai_client = new OpenAiClient();
+	private AIResponseParser $response_parser;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param OpenAiClient $openai_client OpenAI client instance.
+	 */
+	public function __construct( OpenAiClient $openai_client ) {
+		$this->openai_client = $openai_client;
+		$this->response_parser = new AIResponseParser();
 	}
 
 	/**
@@ -39,11 +50,7 @@ class AdvancedContentOptimizer {
 	 */
 	public function register(): void {
 		add_action( 'admin_menu', array( $this, 'add_optimizer_menu' ) );
-		add_action( 'wp_ajax_fp_seo_analyze_content_gaps', array( $this, 'ajax_analyze_content_gaps' ) );
-		add_action( 'wp_ajax_fp_seo_competitor_analysis', array( $this, 'ajax_competitor_analysis' ) );
-		add_action( 'wp_ajax_fp_seo_content_suggestions', array( $this, 'ajax_content_suggestions' ) );
-		add_action( 'wp_ajax_fp_seo_readability_optimization', array( $this, 'ajax_readability_optimization' ) );
-		add_action( 'wp_ajax_fp_seo_semantic_optimization', array( $this, 'ajax_semantic_optimization' ) );
+		// AJAX handlers are now registered via AdvancedContentOptimizerAjaxHandler
 	}
 
 	/**
@@ -71,15 +78,15 @@ class AdvancedContentOptimizer {
 	public function analyze_content_gaps( string $topic, string $target_keyword, array $competitor_urls = array() ): array {
 		$cache_key = 'fp_seo_content_gaps_' . md5( $topic . $target_keyword . implode( ',', $competitor_urls ) );
 		
-		return Cache::remember( $cache_key, function() use ( $topic, $target_keyword, $competitor_urls ) {
+		return CacheHelper::remember( $cache_key, function() use ( $topic, $target_keyword, $competitor_urls ) {
 			$prompt = $this->build_content_gap_prompt( $topic, $target_keyword, $competitor_urls );
 			
 			$response = $this->openai_client->generate_content( $prompt, array(
-				'max_completion_tokens' => 1000,
+				'max_tokens' => 1000, // Use standard max_tokens parameter
 				'temperature' => 0.7,
 			) );
 
-			return $this->parse_content_gap_response( $response );
+			return $this->response_parser->parse( $response );
 		}, HOUR_IN_SECONDS );
 	}
 
@@ -93,7 +100,7 @@ class AdvancedContentOptimizer {
 	public function analyze_competitor_content( string $target_url, string $target_keyword ): array {
 		$cache_key = 'fp_seo_competitor_' . md5( $target_url . $target_keyword );
 		
-		return Cache::remember( $cache_key, function() use ( $target_url, $target_keyword ) {
+		return CacheHelper::remember( $cache_key, function() use ( $target_url, $target_keyword ) {
 			// Get content from URL
 			$content = $this->fetch_url_content( $target_url );
 			if ( empty( $content ) ) {
@@ -103,11 +110,11 @@ class AdvancedContentOptimizer {
 			$prompt = $this->build_competitor_analysis_prompt( $content, $target_keyword );
 			
 		$response = $this->openai_client->generate_content( $prompt, array(
-			'max_completion_tokens' => 800,
+			'max_tokens' => 800, // Use standard max_tokens parameter
 			'temperature' => 0.5,
 		) );
 
-			return $this->parse_competitor_response( $response );
+			return $this->response_parser->parse( $response );
 		}, HOUR_IN_SECONDS );
 	}
 
@@ -122,16 +129,16 @@ class AdvancedContentOptimizer {
 	public function generate_content_suggestions( int $post_id, string $content, string $target_keyword ): array {
 		$cache_key = 'fp_seo_content_suggestions_' . $post_id . '_' . md5( $content . $target_keyword );
 		
-		return Cache::remember( $cache_key, function() use ( $post_id, $content, $target_keyword ) {
+		return CacheHelper::remember( $cache_key, function() use ( $post_id, $content, $target_keyword ) {
 			$context = $this->gather_content_context( $post_id );
 			$prompt = $this->build_content_suggestions_prompt( $content, $target_keyword, $context );
 			
 		$response = $this->openai_client->generate_content( $prompt, array(
-			'max_completion_tokens' => 1200,
+			'max_tokens' => 1200, // Use standard max_tokens parameter
 			'temperature' => 0.8,
 		) );
 
-			return $this->parse_content_suggestions_response( $response );
+			return $this->response_parser->parse( $response );
 		}, HOUR_IN_SECONDS );
 	}
 
@@ -145,15 +152,15 @@ class AdvancedContentOptimizer {
 	public function optimize_readability( string $content, string $target_audience = 'general' ): array {
 		$cache_key = 'fp_seo_readability_' . md5( $content . $target_audience );
 		
-		return Cache::remember( $cache_key, function() use ( $content, $target_audience ) {
+		return CacheHelper::remember( $cache_key, function() use ( $content, $target_audience ) {
 			$prompt = $this->build_readability_prompt( $content, $target_audience );
 			
 		$response = $this->openai_client->generate_content( $prompt, array(
-			'max_completion_tokens' => 1000,
+			'max_tokens' => 1000, // Use standard max_tokens parameter
 			'temperature' => 0.6,
 		) );
 
-			return $this->parse_readability_response( $response );
+			return $this->response_parser->parse( $response );
 		}, HOUR_IN_SECONDS );
 	}
 
@@ -168,15 +175,15 @@ class AdvancedContentOptimizer {
 	public function optimize_semantic_seo( string $content, string $target_keyword, array $semantic_keywords = array() ): array {
 		$cache_key = 'fp_seo_semantic_' . md5( $content . $target_keyword . implode( ',', $semantic_keywords ) );
 		
-		return Cache::remember( $cache_key, function() use ( $content, $target_keyword, $semantic_keywords ) {
+		return CacheHelper::remember( $cache_key, function() use ( $content, $target_keyword, $semantic_keywords ) {
 			$prompt = $this->build_semantic_prompt( $content, $target_keyword, $semantic_keywords );
 			
 			$response = $this->openai_client->generate_content( $prompt, array(
-				'max_completion_tokens' => 1000,
+				'max_tokens' => 1000, // Use standard max_tokens parameter
 				'temperature' => 0.7,
 			) );
 
-			return $this->parse_semantic_response( $response );
+			return $this->response_parser->parse( $response );
 		}, HOUR_IN_SECONDS );
 	}
 
@@ -393,85 +400,6 @@ Rispondi in formato JSON con questa struttura:
 		);
 	}
 
-	/**
-	 * Parse content gap analysis response.
-	 *
-	 * @param string $response AI response.
-	 * @return array<string, mixed>
-	 */
-	private function parse_content_gap_response( string $response ): array {
-		$data = json_decode( $response, true );
-		
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			return array( 'error' => 'Invalid JSON response from AI' );
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Parse competitor analysis response.
-	 *
-	 * @param string $response AI response.
-	 * @return array<string, mixed>
-	 */
-	private function parse_competitor_response( string $response ): array {
-		$data = json_decode( $response, true );
-		
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			return array( 'error' => 'Invalid JSON response from AI' );
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Parse content suggestions response.
-	 *
-	 * @param string $response AI response.
-	 * @return array<string, mixed>
-	 */
-	private function parse_content_suggestions_response( string $response ): array {
-		$data = json_decode( $response, true );
-		
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			return array( 'error' => 'Invalid JSON response from AI' );
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Parse readability optimization response.
-	 *
-	 * @param string $response AI response.
-	 * @return array<string, mixed>
-	 */
-	private function parse_readability_response( string $response ): array {
-		$data = json_decode( $response, true );
-		
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			return array( 'error' => 'Invalid JSON response from AI' );
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Parse semantic SEO response.
-	 *
-	 * @param string $response AI response.
-	 * @return array<string, mixed>
-	 */
-	private function parse_semantic_response( string $response ): array {
-		$data = json_decode( $response, true );
-		
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
-			return array( 'error' => 'Invalid JSON response from AI' );
-		}
-
-		return $data;
-	}
 
 	/**
 	 * Fetch content from URL.
@@ -501,13 +429,17 @@ Rispondi in formato JSON con questa struttura:
 		
 		// Remove script and style elements
 		$scripts = $xpath->query( '//script | //style' );
-		foreach ( $scripts as $script ) {
-			$script->parentNode->removeChild( $script );
+		if ( false !== $scripts ) {
+			foreach ( $scripts as $script ) {
+				if ( $script->parentNode !== null ) {
+					$script->parentNode->removeChild( $script );
+				}
+			}
 		}
 
 		// Get text content
 		$text = $dom->textContent;
-		$text = preg_replace( '/\s+/', ' ', $text );
+		$text = preg_replace( '/\s+/', ' ', $text ) ?? '';
 		$text = trim( $text );
 
 		return $text;
@@ -730,11 +662,11 @@ Rispondi in formato JSON con questa struttura:
 							<select id="suggestions-post" name="post_id" required>
 								<option value=""><?php esc_html_e( '-- Seleziona un articolo --', 'fp-seo-performance' ); ?></option>
 								<?php
-								$posts = get_posts( array( 'numberposts' => 50, 'orderby' => 'date', 'order' => 'DESC' ) );
-								foreach ( $posts as $post ) {
-									$word_count = str_word_count( strip_tags( $post->post_content ) );
-									echo '<option value="' . esc_attr( $post->ID ) . '">' . esc_html( $post->post_title ) . ' (' . $word_count . ' parole)</option>';
-								}
+							$posts = get_posts( array( 'numberposts' => 50, 'orderby' => 'date', 'order' => 'DESC' ) );
+							foreach ( $posts as $loop_post ) {
+								$word_count = str_word_count( strip_tags( $loop_post->post_content ) );
+								echo '<option value="' . esc_attr( $loop_post->ID ) . '">' . esc_html( $loop_post->post_title ) . ' (' . $word_count . ' parole)</option>';
+							}
 								?>
 							</select>
 							<p class="fp-seo-field-help"><?php esc_html_e( 'Seleziona uno dei tuoi ultimi 50 articoli pubblicati', 'fp-seo-performance' ); ?></p>
@@ -1844,190 +1776,4 @@ Rispondi in formato JSON con questa struttura:
 		<?php
 	}
 
-	/**
-	 * AJAX handler for content gap analysis.
-	 */
-	public function ajax_analyze_content_gaps(): void {
-		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		$topic = sanitize_text_field( $_POST['topic'] ?? '' );
-		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
-		$competitors = array_filter(
-			array_map(
-				static function( $url ) {
-					$url = esc_url_raw( trim( (string) $url ) );
-					return ( $url && wp_http_validate_url( $url ) ) ? $url : '';
-				},
-				explode( "\n", $_POST['competitors'] ?? '' )
-			)
-		);
-
-		if ( empty( $topic ) || empty( $keyword ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Argomento e keyword sono obbligatori.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		try {
-			$results = $this->analyze_content_gaps( $topic, $keyword, $competitors );
-			wp_send_json_success( $results );
-		} catch ( \Exception $e ) {
-			wp_send_json_error( $e->getMessage() );
-		}
-	}
-
-	/**
-	 * AJAX handler for competitor analysis.
-	 */
-	public function ajax_competitor_analysis(): void {
-		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		$url     = esc_url_raw( $_POST['url'] ?? '' );
-		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
-
-		if ( ! $url || ! wp_http_validate_url( $url ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'URL non valido. Inserisci un indirizzo completo con http o https.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		if ( empty( $keyword ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'La keyword per l\'analisi del competitor è obbligatoria.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		try {
-			$results = $this->analyze_competitor_content( $url, $keyword );
-			wp_send_json_success( $results );
-		} catch ( \Exception $e ) {
-			wp_send_json_error( $e->getMessage() );
-		}
-	}
-
-	/**
-	 * AJAX handler for content suggestions.
-	 */
-	public function ajax_content_suggestions(): void {
-		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		$post_id = (int) ( $_POST['post_id'] ?? 0 );
-		$keyword = sanitize_text_field( $_POST['keyword'] ?? ( $_POST['focus_keyword'] ?? '' ) );
-
-		if ( ! $post_id || empty( $keyword ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Seleziona un contenuto e indica la keyword da analizzare.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Contenuto non trovato.', 'fp-seo-performance' ) ),
-				404
-			);
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per analizzare questo contenuto.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		try {
-			$results = $this->generate_content_suggestions( $post_id, $post->post_content, $keyword );
-			wp_send_json_success( $results );
-		} catch ( \Exception $e ) {
-			wp_send_json_error( $e->getMessage() );
-		}
-	}
-
-	/**
-	 * AJAX handler for readability optimization.
-	 */
-	public function ajax_readability_optimization(): void {
-		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		$content = wp_unslash( $_POST['content'] ?? '' );
-		$audience = sanitize_text_field( $_POST['audience'] ?? 'general' );
-
-		if ( empty( $content ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Il contenuto da analizzare è obbligatorio.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		try {
-			$results = $this->optimize_readability( $content, $audience );
-			wp_send_json_success( $results );
-		} catch ( \Exception $e ) {
-			wp_send_json_error( $e->getMessage() );
-		}
-	}
-
-	/**
-	 * AJAX handler for semantic SEO optimization.
-	 */
-	public function ajax_semantic_optimization(): void {
-		check_ajax_referer( 'fp_seo_optimizer_nonce', 'nonce' );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Permessi insufficienti per eseguire questa operazione.', 'fp-seo-performance' ) ),
-				403
-			);
-		}
-
-		$content = wp_unslash( $_POST['content'] ?? '' );
-		$keyword = sanitize_text_field( $_POST['keyword'] ?? '' );
-		$semantic_keywords = array_filter( array_map( 'trim', explode( ',', $_POST['semantic_keywords'] ?? '' ) ) );
-
-		if ( empty( $content ) || empty( $keyword ) ) {
-			wp_send_json_error(
-				array( 'message' => __( 'Contenuto e keyword sono obbligatori per l\'ottimizzazione semantica.', 'fp-seo-performance' ) ),
-				400
-			);
-		}
-
-		try {
-			$results = $this->optimize_semantic_seo( $content, $keyword, $semantic_keywords );
-			wp_send_json_success( $results );
-		} catch ( \Exception $e ) {
-			wp_send_json_error( $e->getMessage() );
-		}
-	}
 }

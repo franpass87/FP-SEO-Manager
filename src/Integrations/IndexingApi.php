@@ -55,7 +55,7 @@ class IndexingApi {
 			$this->client->setScopes( array( Indexing::INDEXING ) );
 
 			$credentials = json_decode( $gsc['service_account_json'], true );
-			if ( ! $credentials ) {
+			if ( null === $credentials || JSON_ERROR_NONE !== json_last_error() || ! is_array( $credentials ) ) {
 				return false;
 			}
 
@@ -63,7 +63,7 @@ class IndexingApi {
 			$this->service = new Indexing( $this->client );
 
 			return true;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'Indexing API Auth Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -92,7 +92,7 @@ class IndexingApi {
 			Logger::info( 'URL submitted to Google Indexing API', array( 'url' => $url, 'type' => $type ) );
 
 			return true;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'Indexing API Error', array( 'error' => $e->getMessage(), 'url' => $url ) );
 			return false;
 		}

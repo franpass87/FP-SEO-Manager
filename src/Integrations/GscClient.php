@@ -54,17 +54,17 @@ class GscClient {
 			$this->client->setApplicationName( 'FP SEO Performance' );
 			$this->client->setScopes( array( SearchConsole::WEBMASTERS_READONLY ) );
 
-			// Decode JSON key
-			$credentials = json_decode( $gsc['service_account_json'], true );
-			if ( ! $credentials ) {
-				return false;
-			}
+		// Decode JSON key
+		$credentials = json_decode( $gsc['service_account_json'], true );
+		if ( null === $credentials || JSON_ERROR_NONE !== json_last_error() || ! is_array( $credentials ) ) {
+			return false;
+		}
 
 			$this->client->setAuthConfig( $credentials );
 			$this->service = new SearchConsole( $this->client );
 
 			return true;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'GSC Auth Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -80,6 +80,10 @@ class GscClient {
 	 */
 	public function get_search_analytics( string $start_date, string $end_date, int $row_limit = 1000 ): ?array {
 		if ( ! $this->authenticate() ) {
+			return null;
+		}
+
+		if ( null === $this->service ) {
 			return null;
 		}
 
@@ -100,10 +104,10 @@ class GscClient {
 			$response = $this->service->searchanalytics->query( $site_url, $request );
 
 			return array(
-				'rows'          => $response->getRows(),
+				'rows'                    => $response->getRows(),
 				'responseAggregationType' => $response->getResponseAggregationType(),
 			);
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'GSC Query Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}
@@ -127,6 +131,10 @@ class GscClient {
 		}
 
 		if ( ! $this->authenticate() ) {
+			return null;
+		}
+
+		if ( null === $this->service ) {
 			return null;
 		}
 
@@ -189,7 +197,7 @@ class GscClient {
 			set_transient( $cache_key, $totals, DAY_IN_SECONDS );
 
 			return $totals;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'GSC URL Query Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}
@@ -205,6 +213,10 @@ class GscClient {
 			return false;
 		}
 
+		if ( null === $this->service ) {
+			return false;
+		}
+
 		$options  = get_option( 'fp_seo_performance', array() );
 		$site_url = $options['gsc']['site_url'] ?? '';
 
@@ -216,7 +228,7 @@ class GscClient {
 			// Try to list sites to verify access
 			$sites = $this->service->sites->listSites();
 			return true;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'GSC Connection Test Error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -244,8 +256,16 @@ class GscClient {
 			return null;
 		}
 
+		if ( null === $this->service ) {
+			return null;
+		}
+
 		$options  = get_option( 'fp_seo_performance', array() );
 		$site_url = $options['gsc']['site_url'] ?? '';
+
+		if ( empty( $site_url ) ) {
+			return null;
+		}
 
 		try {
 			$request = new SearchAnalyticsQueryRequest();
@@ -274,8 +294,8 @@ class GscClient {
 
 			$queries = array();
 			foreach ( $rows as $row ) {
-				$queries[] = array(
-					'query'       => $row->getKeys()[0],
+			$queries[] = array(
+				'query'       => $row->getKeys()[0] ?? '',
 					'clicks'      => $row->getClicks(),
 					'impressions' => $row->getImpressions(),
 					'ctr'         => round( $row->getCtr() * 100, 2 ),
@@ -287,7 +307,7 @@ class GscClient {
 			set_transient( $cache_key, $queries, DAY_IN_SECONDS );
 
 			return $queries;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::error( 'GSC Top Queries Error', array( 'error' => $e->getMessage() ) );
 			return null;
 		}

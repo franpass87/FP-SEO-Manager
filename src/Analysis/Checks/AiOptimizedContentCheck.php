@@ -188,9 +188,9 @@ class AiOptimizedContentCheck implements CheckInterface {
 	 */
 	private function analyze_paragraph_length( string $html ): int {
 		// Extract paragraphs
-		preg_match_all( '/<p[^>]*>(.*?)<\/p>/si', $html, $matches );
+		$preg_result = preg_match_all( '/<p[^>]*>(.*?)<\/p>/si', $html, $matches );
 
-		if ( empty( $matches[1] ) ) {
+		if ( false === $preg_result || empty( $matches[1] ) ) {
 			return 0;
 		}
 

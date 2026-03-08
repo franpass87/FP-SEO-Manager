@@ -43,7 +43,7 @@ class MetaboxDiagnosticsRenderer {
 		$this->render_auto_drafts( $diagnostics );
 		$this->render_active_hooks( $diagnostics );
 		$this->render_footer();
-		return ob_get_clean();
+		return ob_get_clean() ?: '';
 	}
 
 	/**
@@ -87,8 +87,8 @@ class MetaboxDiagnosticsRenderer {
 					<li><strong>Homepage (DB diretto):</strong> ID <?php echo esc_html( (string) ( $homepage_from_db['ID'] ?? 'N/A' ) ); ?> - Status: <code><?php echo esc_html( $homepage_from_db['post_status'] ?? 'N/A' ); ?></code></li>
 					<li><strong>get_post(ID):</strong> ID <?php echo esc_html( ( $post_from_get_post instanceof WP_Post ) ? (string) $post_from_get_post->ID : 'N/A' ); ?> - Status: <code><?php echo esc_html( ( $post_from_get_post instanceof WP_Post ) ? $post_from_get_post->post_status : 'N/A' ); ?></code></li>
 					<li><strong>get_post(ID, 'edit'):</strong> ID <?php echo esc_html( ( $post_from_get_post_edit instanceof WP_Post ) ? (string) $post_from_get_post_edit->ID : 'N/A' ); ?> - Status: <code><?php echo esc_html( ( $post_from_get_post_edit instanceof WP_Post ) ? $post_from_get_post_edit->post_status : 'N/A' ); ?></code></li>
-					<li><strong>Post Lock:</strong> <?php echo $post_lock ? 'Sì (User ID: ' . esc_html( (string) $post_lock ) . ' - ' . esc_html( $post_lock_user->user_login ?? 'unknown' ) . ')' : 'No'; ?></li>
-					<li><strong>Autosave:</strong> <?php echo $autosave ? 'Sì (ID: ' . esc_html( (string) $autosave->ID ) . ')' : 'No'; ?></li>
+					<li><strong>Post Lock:</strong> <?php echo $post_lock ? 'Sì (User ID: ' . esc_html( (string) $post_lock ) . ' - ' . esc_html( ( $post_lock_user instanceof \WP_User ) ? $post_lock_user->user_login : 'unknown' ) . ')' : 'No'; ?></li>
+					<li><strong>Autosave:</strong> <?php echo ( $autosave instanceof \WP_Post ) ? 'Sì (ID: ' . esc_html( (string) $autosave->ID ) . ')' : 'No'; ?></li>
 				</ul>
 			</div>
 		<?php
@@ -174,4 +174,18 @@ class MetaboxDiagnosticsRenderer {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

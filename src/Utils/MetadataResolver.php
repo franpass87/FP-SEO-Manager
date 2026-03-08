@@ -39,16 +39,9 @@ class MetadataResolver {
 		$post_id = $post instanceof WP_Post ? (int) $post->ID : (int) $post;
 		$content = $post instanceof WP_Post ? (string) $post->post_content : (string) get_post_field( 'post_content', $post_id );
 
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		$meta = get_post_meta( $post_id, '_fp_seo_title', true );
 		
@@ -73,7 +66,7 @@ class MetadataResolver {
 			$content_text = wp_strip_all_tags( $content_without_shortcodes );
 			
 			// Try to extract H1 first
-			if ( preg_match( '/<h1[^>]*>(.*?)<\/h1>/is', $content_without_shortcodes, $matches ) ) {
+			if ( 1 === preg_match( '/<h1[^>]*>(.*?)<\/h1>/is', $content_without_shortcodes, $matches ) ) {
 				$h1_text = wp_strip_all_tags( $matches[1] );
 				if ( '' !== trim( $h1_text ) ) {
 					return trim( $h1_text );
@@ -112,16 +105,9 @@ class MetadataResolver {
 		$excerpt = $post instanceof WP_Post ? (string) $post->post_excerpt : '';
 		$content = $post instanceof WP_Post ? (string) $post->post_content : (string) get_post_field( 'post_content', $post_id );
 
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		$meta = get_post_meta( $post_id, '_fp_seo_meta_description', true );
 		
@@ -170,9 +156,9 @@ class MetadataResolver {
 	public static function resolve_canonical_url( $post ): ?string {
 		$post_id = $post instanceof WP_Post ? (int) $post->ID : (int) $post;
 
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
+		// REMOVED: Cache clearing was causing interference with WordPress core operations
+		// clean_post_cache( $post_id );
+		// wp_cache_delete( $post_id, 'post_meta' );
 		
 		$canonical = get_post_meta( $post_id, '_fp_seo_meta_canonical', true );
 		
@@ -204,9 +190,9 @@ class MetadataResolver {
 	public static function resolve_robots( $post ): ?string {
 		$post_id = $post instanceof WP_Post ? (int) $post->ID : (int) $post;
 
-		// Clear cache before retrieving
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
+		// REMOVED: Cache clearing was causing interference with WordPress core operations
+		// clean_post_cache( $post_id );
+		// wp_cache_delete( $post_id, 'post_meta' );
 		
 		$robots = get_post_meta( $post_id, '_fp_seo_meta_robots', true );
 		

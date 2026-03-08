@@ -66,9 +66,15 @@ class PostTypes {
 				);
 
 		if ( empty( $post_types ) ) {
-				return array( 'post', 'page' );
+				$post_types = array( 'post', 'page' );
 		}
 
-			return $post_types;
+		/**
+		 * Filter supported post types for SEO metabox.
+		 *
+		 * @param string[] $post_types Array of post type names.
+		 * @return string[]
+		 */
+		return apply_filters( 'fp_seo_metabox_post_types', $post_types );
 	}
 }

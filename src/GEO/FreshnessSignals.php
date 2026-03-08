@@ -408,8 +408,9 @@ class FreshnessSignals {
 	 * @return float Freshness score.
 	 */
 	private function calculate_freshness_score( WP_Post $post ): float {
-		$age_days          = $this->get_age_in_days( $post );
-		$days_since_update = ( time() - strtotime( $post->post_modified_gmt ) ) / DAY_IN_SECONDS;
+		$age_days        = $this->get_age_in_days( $post );
+		$modified_ts       = strtotime( $post->post_modified_gmt );
+		$days_since_update = ( false !== $modified_ts ) ? ( time() - $modified_ts ) / DAY_IN_SECONDS : 0;
 
 		// Age penalty (decays over time)
 		$age_score = max( 0, 1 - ( $age_days / 365 ) ); // Decreases by 1.0 over 1 year

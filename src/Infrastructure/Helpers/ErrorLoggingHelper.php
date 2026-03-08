@@ -27,10 +27,6 @@ class ErrorLoggingHelper {
 	 * @return void
 	 */
 	public static function log_provider_error( $provider, string $action, \Throwable $exception ): void {
-		if ( ! class_exists( '\FP\SEO\Utils\Logger' ) ) {
-			return;
-		}
-
 		// Validate action is not empty
 		if ( empty( $action ) ) {
 			$action = 'process';
@@ -44,7 +40,7 @@ class ErrorLoggingHelper {
 			$error_message = 'Unknown error';
 		}
 		
-		\FP\SEO\Utils\Logger::error(
+		\FP\SEO\Utils\LoggerHelper::error(
 			sprintf( 'Failed to %s provider %s', $action, $provider_class ),
 			array( 'error' => $error_message )
 		);

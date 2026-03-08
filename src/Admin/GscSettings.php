@@ -13,7 +13,9 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Integrations\GscClient;
 use FP\SEO\Integrations\GscData;
+use FP\SEO\Utils\Options;
 use FP\SEO\Utils\SiteKitIntegration;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Renders GSC settings tab
@@ -21,13 +23,36 @@ use FP\SEO\Utils\SiteKitIntegration;
 class GscSettings {
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks
 	 */
 	public function register(): void {
-		add_filter( 'fpseo_settings_tabs', array( $this, 'add_gsc_tab' ) );
-		add_action( 'fpseo_settings_render_tab_gsc', array( $this, 'render' ) );
-		add_action( 'wp_ajax_fp_seo_gsc_test_connection', array( $this, 'ajax_test_connection' ) );
-		add_action( 'wp_ajax_fp_seo_gsc_flush_cache', array( $this, 'ajax_flush_cache' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_filter( 'fpseo_settings_tabs', array( $this, 'add_gsc_tab' ) );
+			$this->hook_manager->add_action( 'fpseo_settings_render_tab_gsc', array( $this, 'render' ) );
+			$this->hook_manager->add_action( 'wp_ajax_fp_seo_gsc_test_connection', array( $this, 'ajax_test_connection' ) );
+			$this->hook_manager->add_action( 'wp_ajax_fp_seo_gsc_flush_cache', array( $this, 'ajax_flush_cache' ) );
+		} else {
+			add_filter( 'fpseo_settings_tabs', array( $this, 'add_gsc_tab' ) );
+			add_action( 'fpseo_settings_render_tab_gsc', array( $this, 'render' ) );
+			add_action( 'wp_ajax_fp_seo_gsc_test_connection', array( $this, 'ajax_test_connection' ) );
+			add_action( 'wp_ajax_fp_seo_gsc_flush_cache', array( $this, 'ajax_flush_cache' ) );
+		}
 	}
 
 	/**
@@ -45,7 +70,7 @@ class GscSettings {
 	 * Render GSC settings tab
 	 */
 	public function render(): void {
-		$options = get_option( 'fp_seo_performance', array() );
+		$options = get_option( Options::OPTION_KEY, array() );
 		$gsc     = $options['gsc'] ?? array();
 
 		// Check if Site Kit is available and pre-fill if not already configured
@@ -323,6 +348,7 @@ class GscSettings {
 
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied', 'fp-seo-performance' ) ) );
+			return;
 		}
 
 		$client = new GscClient();
@@ -330,9 +356,10 @@ class GscSettings {
 
 		if ( $success ) {
 			wp_send_json_success( array( 'message' => __( 'Connection successful! GSC data is accessible.', 'fp-seo-performance' ) ) );
-		} else {
-			wp_send_json_error( array( 'message' => __( 'Connection failed. Check your Service Account JSON and Site URL.', 'fp-seo-performance' ) ) );
+			return;
 		}
+		wp_send_json_error( array( 'message' => __( 'Connection failed. Check your Service Account JSON and Site URL.', 'fp-seo-performance' ) ) );
+		return;
 	}
 
 	/**
@@ -343,11 +370,13 @@ class GscSettings {
 
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => 'Permission denied' ) );
+			return;
 		}
 
 		GscData::flush_cache();
 
 		wp_send_json_success( array( 'message' => 'Cache flushed' ) );
+		return;
 	}
 }
 

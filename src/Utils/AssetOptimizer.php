@@ -178,16 +178,16 @@ class AssetOptimizer {
 		$css_dir = $this->assets_dir . 'css/';
 		
 		if ( is_dir( $css_dir ) ) {
-			$files = glob( $css_dir . '*.css' );
+			$files = glob( $css_dir . '*.css' ) ?: array();
 			foreach ( $files as $file ) {
 				$css_files[] = $file;
 			}
 		}
 
 		// Also check subdirectories
-		$subdirs = glob( $css_dir . '*/', GLOB_ONLYDIR );
+		$subdirs = glob( $css_dir . '*/', GLOB_ONLYDIR ) ?: array();
 		foreach ( $subdirs as $subdir ) {
-			$files = glob( $subdir . '*.css' );
+			$files = glob( $subdir . '*.css' ) ?: array();
 			foreach ( $files as $file ) {
 				$css_files[] = $file;
 			}
@@ -206,16 +206,16 @@ class AssetOptimizer {
 		$js_dir = $this->assets_dir . 'js/';
 		
 		if ( is_dir( $js_dir ) ) {
-			$files = glob( $js_dir . '*.js' );
+			$files = glob( $js_dir . '*.js' ) ?: array();
 			foreach ( $files as $file ) {
 				$js_files[] = $file;
 			}
 		}
 
 		// Also check subdirectories
-		$subdirs = glob( $js_dir . '*/', GLOB_ONLYDIR );
+		$subdirs = glob( $js_dir . '*/', GLOB_ONLYDIR ) ?: array();
 		foreach ( $subdirs as $subdir ) {
-			$files = glob( $subdir . '*.js' );
+			$files = glob( $subdir . '*.js' ) ?: array();
 			foreach ( $files as $file ) {
 				$js_files[] = $file;
 			}
@@ -236,7 +236,7 @@ class AssetOptimizer {
 		if ( is_dir( $image_dir ) ) {
 			$extensions = [ 'jpg', 'jpeg', 'png', 'gif', 'webp' ];
 			foreach ( $extensions as $ext ) {
-				$files = glob( $image_dir . '*.{' . $ext . ',' . strtoupper( $ext ) . '}', GLOB_BRACE );
+				$files = glob( $image_dir . '*.{' . $ext . ',' . strtoupper( $ext ) . '}', GLOB_BRACE ) ?: array();
 				foreach ( $files as $file ) {
 					$image_files[] = $file;
 				}
@@ -412,24 +412,21 @@ class AssetOptimizer {
 	 * @return string
 	 */
 	private function minify_css_content( string $css ): string {
-		// Remove comments
-		$css = preg_replace( '!/\*[^*]*\*+([^/][^*]*\*+)*/!', '', $css );
-		
-		// Remove unnecessary whitespace
-		$css = preg_replace( '/\s+/', ' ', $css );
-		$css = preg_replace( '/\s*{\s*/', '{', $css );
-		$css = preg_replace( '/;\s*/', ';', $css );
-		$css = preg_replace( '/\s*}\s*/', '}', $css );
-		$css = preg_replace( '/\s*,\s*/', ',', $css );
-		$css = preg_replace( '/\s*:\s*/', ':', $css );
-		
-		// Remove trailing semicolons
-		$css = preg_replace( '/;}/', '}', $css );
-		
-		// Remove leading/trailing whitespace
-		$css = trim( $css );
+		$patterns = array(
+			'!/\*[^*]*\*+([^/][^*]*\*+)*/!',
+			'/\s+/',
+			'/\s*{\s*/',
+			'/;\s*/',
+			'/\s*}\s*/',
+			'/\s*,\s*/',
+			'/\s*:\s*/',
+			'/;}/',
+		);
+		$replacements = array( '', ' ', '{', ';', '}', ',', ':', '}' );
+		$result = preg_replace( $patterns, $replacements, $css );
+		$css    = is_string( $result ) ? $result : $css;
 
-		return $css;
+		return trim( $css );
 	}
 
 	/**
@@ -439,26 +436,23 @@ class AssetOptimizer {
 	 * @return string
 	 */
 	private function minify_js_content( string $js ): string {
-		// Remove single-line comments (but preserve URLs)
-		$js = preg_replace( '/(?<!:)\/\/.*$/', '', $js );
-		
-		// Remove multi-line comments
-		$js = preg_replace( '/\/\*.*?\*\//s', '', $js );
-		
-		// Remove unnecessary whitespace
-		$js = preg_replace( '/\s+/', ' ', $js );
-		$js = preg_replace( '/\s*{\s*/', '{', $js );
-		$js = preg_replace( '/\s*}\s*/', '}', $js );
-		$js = preg_replace( '/\s*;\s*/', ';', $js );
-		$js = preg_replace( '/\s*,\s*/', ',', $js );
-		$js = preg_replace( '/\s*:\s*/', ':', $js );
-		$js = preg_replace( '/\s*\(\s*/', '(', $js );
-		$js = preg_replace( '/\s*\)\s*/', ')', $js );
-		
-		// Remove leading/trailing whitespace
-		$js = trim( $js );
+		$patterns = array(
+			'/(?<!:)\/\/.*$/m',
+			'/\/\*.*?\*\//s',
+			'/\s+/',
+			'/\s*{\s*/',
+			'/\s*}\s*/',
+			'/\s*;\s*/',
+			'/\s*,\s*/',
+			'/\s*:\s*/',
+			'/\s*\(\s*/',
+			'/\s*\)\s*/',
+		);
+		$replacements = array( '', '', ' ', '{', '}', ';', ',', ':', '(', ')' );
+		$result = preg_replace( $patterns, $replacements, $js );
+		$js     = is_string( $result ) ? $result : $js;
 
-		return $js;
+		return trim( $js );
 	}
 
 	/**

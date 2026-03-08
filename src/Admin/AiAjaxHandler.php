@@ -12,8 +12,10 @@ declare(strict_types=1);
 namespace FP\SEO\Admin;
 
 use FP\SEO\Integrations\OpenAiClient;
+use FP\SEO\Utils\LoggerHelper;
+use FP\SEO\Utils\OptionsHelper;
 use FP\SEO\Utils\Options;
-use FP\SEO\Utils\Logger;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Handles AJAX requests for AI-powered SEO generation.
@@ -28,22 +30,29 @@ class AiAjaxHandler {
 	private OpenAiClient $client;
 
 	/**
-	 * Constructor.
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
 	 */
-	public function __construct() {
-		$this->client = new OpenAiClient();
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 * @param OpenAiClient         $client       OpenAI client instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager, OpenAiClient $client ) {
+		$this->hook_manager = $hook_manager;
+		$this->client       = $client;
 	}
 
 	/**
 	 * Register AJAX hooks.
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_generate_ai_content', array( $this, 'handle_generate_request' ) );
-		
-		// Register error handler to catch fatal errors
-		if ( ! has_action( 'shutdown', array( $this, 'handle_fatal_error' ) ) ) {
-			add_action( 'shutdown', array( $this, 'handle_fatal_error' ) );
-		}
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_generate_ai_content', array( $this, 'handle_generate_request' ) );
+		$this->hook_manager->add_action( 'shutdown', array( $this, 'handle_fatal_error' ) );
 	}
 	
 	/**
@@ -58,21 +67,22 @@ class AiAjaxHandler {
 		if ( null !== $error && in_array( $error['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
 			// Only handle if it's our AJAX action
 			if ( isset( $_POST['action'] ) && 'fp_seo_generate_ai_content' === $_POST['action'] ) {
-				Logger::error( 'Fatal error in AJAX request', array(
+				LoggerHelper::error( 'Fatal error in AJAX request', array(
 					'message' => $error['message'],
 					'file' => $error['file'],
 					'line' => $error['line'],
 				) );
 				
 				// Try to send error response if headers not sent
-				if ( ! headers_sent() ) {
-					wp_send_json_error(
-						array(
-							'message' => __( 'Errore fatale: ', 'fp-seo-performance' ) . $error['message'],
-						),
-						500
-					);
-				}
+			if ( ! headers_sent() ) {
+				wp_send_json_error(
+					array(
+						'message' => __( 'Errore fatale: ', 'fp-seo-performance' ) . $error['message'],
+					),
+					500
+				);
+				return;
+			}
 			}
 		}
 	}
@@ -81,15 +91,13 @@ class AiAjaxHandler {
 	 * Handle AI content generation request.
 	 */
 	public function handle_generate_request(): void {
-		// Ensure no output before JSON response
-		if ( ob_get_level() > 0 ) {
-			ob_clean();
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'FP SEO: AI AJAX handler called - START' );
 		}
-		
-		// Set proper headers
-		if ( ! headers_sent() ) {
-			header( 'Content-Type: application/json; charset=utf-8' );
-		}
+		LoggerHelper::debug( 'AI AJAX handler called', array(
+			'client_exists' => isset( $this->client ),
+			'client_type' => isset( $this->client ) ? get_class( $this->client ) : 'not set',
+		) );
 		
 		try {
 			// Verify nonce.
@@ -115,12 +123,12 @@ class AiAjaxHandler {
 			}
 
 			// Check if OpenAI API key is configured.
-			$api_key = Options::get_option( 'ai.openai_api_key', '' );
+			$api_key = OptionsHelper::get_option( 'ai.openai_api_key', '' );
 			
 			// Debug logging to help diagnose API key issues
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				$all_options = Options::get();
-				Logger::debug( 'AI AJAX Handler - API key check', array(
+				$all_options = OptionsHelper::get();
+				LoggerHelper::debug( 'AI AJAX Handler - API key check', array(
 					'api_key_length' => strlen( $api_key ),
 					'api_key_empty' => empty( $api_key ),
 					'ai_section_exists' => isset( $all_options['ai'] ),
@@ -137,15 +145,15 @@ class AiAjaxHandler {
 				
 				if ( ! empty( $direct_api_key ) ) {
 					// API key exists in DB but not being read correctly - clear cache
-					\FP\SEO\Utils\Cache::delete( 'options_data' );
+					\FP\SEO\Utils\CacheHelper::delete( 'options_data' );
 					wp_cache_delete( Options::OPTION_KEY, 'options' );
 					wp_cache_delete( 'alloptions', 'options' );
 					
 					// Retry after cache clear
-					$api_key = Options::get_option( 'ai.openai_api_key', '' );
+					$api_key = OptionsHelper::get_option( 'ai.openai_api_key', '' );
 					
 					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						Logger::debug( 'API key found in direct check, cleared cache and retried', array(
+						LoggerHelper::debug( 'API key found in direct check, cleared cache and retried', array(
 							'retry_api_key_length' => strlen( $api_key ),
 						) );
 					}
@@ -163,7 +171,7 @@ class AiAjaxHandler {
 			}
 
 			// Check if AI is enabled.
-			if ( ! Options::get_option( 'ai.enable_auto_generation', true ) ) {
+			if ( ! OptionsHelper::get_option( 'ai.enable_auto_generation', true ) ) {
 				wp_send_json_error(
 					array(
 						'message' => __( 'La generazione AI è disabilitata nelle impostazioni.', 'fp-seo-performance' ),
@@ -172,8 +180,8 @@ class AiAjaxHandler {
 				);
 				return;
 			}
-		} catch ( \Exception $e ) {
-			Logger::error( 'AI handler validation error', array(
+		} catch ( \Throwable $e ) {
+			LoggerHelper::error( 'AI handler validation error', array(
 				'message' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
 			) );
@@ -199,6 +207,7 @@ class AiAjaxHandler {
 				),
 				400
 			);
+			return;
 		}
 
 		if ( empty( $content ) && empty( $title ) ) {
@@ -208,6 +217,7 @@ class AiAjaxHandler {
 				),
 				400
 			);
+			return;
 		}
 
 		// Check if user can edit this post.
@@ -218,22 +228,38 @@ class AiAjaxHandler {
 				),
 				403
 			);
+			return;
 		}
 
 		// Generate AI content.
 		try {
-			Logger::debug( 'Starting AI SEO generation', array(
+			LoggerHelper::debug( 'Starting AI SEO generation', array(
 				'post_id' => $post_id,
 				'content_length' => strlen( $content ),
 				'title' => $title,
 				'focus_keyword' => $focus_keyword,
 			) );
 			
-			// Verify client is initialized
+			// Verify client exists and is initialized
+			if ( ! isset( $this->client ) || ! $this->client instanceof OpenAiClient ) {
+				LoggerHelper::error( 'OpenAI client not available', array(
+					'client_exists' => isset( $this->client ),
+					'client_type' => isset( $this->client ) ? get_class( $this->client ) : 'null',
+				) );
+				wp_send_json_error(
+					array(
+						'message' => __( 'Client OpenAI non disponibile.', 'fp-seo-performance' ),
+					),
+					500
+				);
+				return;
+			}
+			
+			// Verify client is configured
 			if ( ! $this->client->is_configured() ) {
 				// Re-check API key for logging
-				$api_key_check = Options::get_option( 'ai.openai_api_key', '' );
-				Logger::error( 'OpenAI client not configured', array(
+				$api_key_check = OptionsHelper::get_option( 'ai.openai_api_key', '' );
+				LoggerHelper::error( 'OpenAI client not configured', array(
 					'api_key_present' => ! empty( $api_key_check ),
 					'api_key_length' => strlen( $api_key_check ),
 				) );
@@ -246,41 +272,11 @@ class AiAjaxHandler {
 				return;
 			}
 			
-			// Verify client instance is valid
-			if ( ! $this->client instanceof OpenAiClient ) {
-				Logger::error( 'Invalid OpenAI client instance', array(
-					'client_type' => get_class( $this->client ),
-				) );
-				wp_send_json_error(
-					array(
-						'message' => __( 'Errore di inizializzazione del client OpenAI.', 'fp-seo-performance' ),
-					),
-					500
-				);
-				return;
-			}
-			
 			// Call generate_seo_suggestions with error handling
 			try {
 				$result = $this->client->generate_seo_suggestions( $post_id, $content, $title, $focus_keyword );
-			} catch ( \Error $e ) {
-				// Catch fatal errors (PHP 7+)
-				Logger::error( 'Fatal error in generate_seo_suggestions', array(
-					'message' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'file' => $e->getFile(),
-					'line' => $e->getLine(),
-				) );
-				wp_send_json_error(
-					array(
-						'message' => __( 'Errore fatale durante la generazione: ', 'fp-seo-performance' ) . $e->getMessage(),
-					),
-					500
-				);
-				return;
-			} catch ( \Exception $e ) {
-				// Catch regular exceptions
-				Logger::error( 'Exception in generate_seo_suggestions', array(
+			} catch ( \Throwable $e ) {
+				LoggerHelper::error( 'Error in generate_seo_suggestions', array(
 					'message' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
@@ -297,7 +293,7 @@ class AiAjaxHandler {
 			
 			// Verify result structure
 			if ( ! is_array( $result ) ) {
-				Logger::error( 'Invalid result structure from generate_seo_suggestions', array(
+				LoggerHelper::error( 'Invalid result structure from generate_seo_suggestions', array(
 					'result_type' => gettype( $result ),
 					'result' => $result,
 				) );
@@ -310,7 +306,7 @@ class AiAjaxHandler {
 				return;
 			}
 			
-			Logger::debug( 'AI generation result received', array( 
+			LoggerHelper::debug( 'AI generation result received', array( 
 				'success' => $result['success'] ?? false,
 				'has_error' => isset( $result['error'] ),
 				'has_data' => isset( $result['data'] ),
@@ -318,7 +314,7 @@ class AiAjaxHandler {
 
 			if ( ! isset( $result['success'] ) || ! $result['success'] ) {
 				$error_msg = $result['error'] ?? __( 'Errore sconosciuto durante la generazione AI.', 'fp-seo-performance' );
-				Logger::error( 'AI generation failed', array(
+				LoggerHelper::error( 'AI generation failed', array(
 					'error' => $error_msg,
 					'debug' => $result['debug'] ?? array(),
 					'result' => $result,
@@ -334,7 +330,7 @@ class AiAjaxHandler {
 				return;
 			}
 
-			Logger::debug( 'AI generation successful' );
+			LoggerHelper::debug( 'AI generation successful' );
 			
 			// Return generated data.
 			wp_send_json_success(
@@ -346,8 +342,9 @@ class AiAjaxHandler {
 					'message'          => __( 'Contenuto SEO generato con successo!', 'fp-seo-performance' ),
 				)
 			);
+			return;
 		} catch ( \Throwable $e ) {
-			Logger::error( 'AI generation exception', array(
+			LoggerHelper::error( 'AI generation exception', array(
 				'message' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
@@ -359,6 +356,7 @@ class AiAjaxHandler {
 				),
 				500
 			);
+			return;
 		}
 	}
 }

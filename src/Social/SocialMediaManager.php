@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Social;
 
-use FP\SEO\Utils\Cache;
+use FP\SEO\Utils\CacheHelper;
 use FP\SEO\Utils\PerformanceConfig;
 
 /**
@@ -41,10 +41,13 @@ class SocialMediaManager {
 		add_action( 'add_meta_boxes', array( $this, 'add_social_metabox' ) );
 		
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		// CRITICAL: Use priority 20 instead of 10 to ensure we run AFTER WordPress core saves _thumbnail_id
+		// WordPress core saves featured image (_thumbnail_id) during save_post with priority 10
+		// By using priority 20, we ensure our hook runs after WordPress has finished saving the featured image
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
 			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 10, 1 );
+				add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 20, 1 );
 			}
 		}
 	}
@@ -146,13 +149,15 @@ class SocialMediaManager {
 				}
 			}
 
-			// Add tags
-			$tags = get_the_tags();
-			if ( ! empty( $tags ) ) {
-				foreach ( $tags as $tag ) {
-					$og_tags['article:tag'] = $tag->name;
+		// Add tags — article:tag deve essere emesso come meta separati, non come chiave array unica
+		$tags = get_the_tags();
+		if ( ! empty( $tags ) && is_array( $tags ) ) {
+			foreach ( $tags as $tag ) {
+				if ( $tag instanceof \WP_Term ) {
+					echo '<meta property="article:tag" content="' . esc_attr( $tag->name ) . '" />' . "\n";
 				}
 			}
+		}
 		}
 
 		foreach ( $og_tags as $property => $content ) {
@@ -289,7 +294,7 @@ class SocialMediaManager {
 	private function get_social_meta( int $post_id ): array {
 		$cache_key = 'fp_seo_social_meta_' . $post_id;
 		
-		return Cache::remember( $cache_key, function() use ( $post_id ) {
+		return CacheHelper::remember( $cache_key, function() use ( $post_id ) {
 			$meta = get_post_meta( $post_id, '_fp_seo_social_meta', true );
 			return is_array( $meta ) ? $meta : array();
 		}, HOUR_IN_SECONDS );
@@ -301,6 +306,9 @@ class SocialMediaManager {
 	 * @param WP_Post $post Current post.
 	 */
 	public function render_social_metabox( $post ): void {
+		if ( ! $post instanceof \WP_Post ) {
+			return;
+		}
 		$social_meta = $this->get_social_meta( $post->ID );
 		$preview_data = $this->get_preview_data( $post );
 		
@@ -347,7 +355,7 @@ class SocialMediaManager {
 					<div class="fp-seo-form-group">
 						<label for="fp-seo-og-image"><?php esc_html_e( 'Facebook Image', 'fp-seo-performance' ); ?></label>
 						<input type="url" id="fp-seo-og-image" name="fp_seo_og_image" value="<?php echo esc_attr( $social_meta['og_image'] ?? '' ); ?>" placeholder="https://example.com/image.jpg">
-						<button type="button" class="button" id="fp-seo-og-image-select"><?php esc_html_e( 'Select Image', 'fp-seo-performance' ); ?></button>
+						<button type="button" class="button fp-seo-image-select fp-seo-media-button" id="fp-seo-og-image-select"><?php esc_html_e( 'Select Image', 'fp-seo-performance' ); ?></button>
 					</div>
 				</div>
 			</div>
@@ -634,7 +642,7 @@ class SocialMediaManager {
 
 			// AI Optimization
 			$('#fp-seo-optimize-social').on('click', function() {
-				var postId = <?php echo get_the_ID(); ?>;
+				var postId = <?php echo (int) get_the_ID(); ?>;
 				var currentTab = $('.fp-seo-social-tab.active').data('tab');
 				
 				$.ajax({
@@ -689,7 +697,7 @@ class SocialMediaManager {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_social_meta( int $post_id ): void {
-		if ( ! isset( $_POST['fp_seo_social_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_social_nonce'] ) ), 'fp_seo_social_meta' ) ) {
+if ( ! isset( $_POST['fp_seo_social_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_social_nonce'] ) ), 'fp_seo_social_meta' ) ) {
 			return;
 		}
 
@@ -715,7 +723,7 @@ class SocialMediaManager {
 		update_post_meta( $post_id, '_fp_seo_social_meta', $social_meta );
 
 		// Clear cache
-		Cache::delete( 'fp_seo_social_meta_' . $post_id );
+		CacheHelper::delete( 'fp_seo_social_meta_' . $post_id );
 	}
 
 	/**
@@ -993,7 +1001,10 @@ class SocialMediaManager {
 		global $wpdb;
 		
 		$count = $wpdb->get_var(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_fp_seo_social_meta' AND meta_value != ''"
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''",
+				'_fp_seo_social_meta'
+			)
 		);
 		
 		return (int) $count;
@@ -1010,16 +1021,24 @@ class SocialMediaManager {
 
 		if ( ! $post_id ) {
 			wp_send_json_error( 'Invalid post ID' );
+			return;
 		}
 
-		$social_meta = $this->get_social_meta( $post_id );
-		$preview_data = $this->get_preview_data( get_post( $post_id ) );
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			wp_send_json_error( 'Post not found' );
+			return;
+		}
+
+		$social_meta  = $this->get_social_meta( $post_id );
+		$preview_data = $this->get_preview_data( $post );
 
 		wp_send_json_success( array(
 			'platform' => $platform,
-			'preview' => $preview_data,
-			'meta' => $social_meta,
+			'preview'  => $preview_data,
+			'meta'     => $social_meta,
 		) );
+		return;
 	}
 
 	/**
@@ -1033,17 +1052,18 @@ class SocialMediaManager {
 
 		if ( ! $post_id ) {
 			wp_send_json_error( 'Invalid post ID' );
+			return;
 		}
 
 		$post = get_post( $post_id );
-		if ( ! $post ) {
+		if ( ! $post instanceof \WP_Post ) {
 			wp_send_json_error( 'Post not found' );
+			return;
 		}
 
-		// Use AI to optimize social media content
 		$optimized = $this->optimize_social_with_ai( $post, $platform );
-
 		wp_send_json_success( $optimized );
+		return;
 	}
 
 	/**

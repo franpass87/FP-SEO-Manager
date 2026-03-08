@@ -157,7 +157,8 @@ class SearchIntentDetector {
 		}
 
 		// Additional signals from content structure.
-		if ( preg_match_all( '/\?/u', $text ) > 3 ) {
+		$q_count = preg_match_all( '/\?/u', $text, $q_dummy );
+		if ( false !== $q_count && $q_count > 3 ) {
 			$scores[ self::INTENT_INFORMATIONAL ] += 2;
 			$signals[] = 'Multiple question marks indicate informational intent';
 		}

@@ -17,6 +17,7 @@ use FP\SEO\Admin\Scripts\BulkAiActionsScriptsManager;
 use FP\SEO\AI\QAPairExtractor;
 use FP\SEO\AI\ConversationalVariants;
 use FP\SEO\GEO\MultiModalOptimizer;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Manages bulk AI actions
@@ -29,11 +30,32 @@ class BulkAiActions {
 	private $scripts_manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks
 	 */
 	public function register(): void {
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_filter( 'fpseo_bulk_audit_actions', array( $this, 'add_bulk_actions' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+			$this->hook_manager->add_filter( 'fpseo_bulk_audit_actions', array( $this, 'add_bulk_actions' ) );
+		} else {
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+			add_filter( 'fpseo_bulk_audit_actions', array( $this, 'add_bulk_actions' ) );
+		}
 
 		// Initialize scripts manager
 		$this->scripts_manager = new BulkAiActionsScriptsManager();

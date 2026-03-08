@@ -14,7 +14,7 @@ declare(strict_types=1);
 namespace FP\SEO\Infrastructure\Traits;
 
 use FP\SEO\Infrastructure\Container;
-use FP\SEO\Utils\Logger;
+use FP\SEO\Utils\LoggerHelper;
 
 /**
  * Trait for service providers to create services with dependencies easily.
@@ -40,7 +40,7 @@ trait FactoryHelperTrait {
 			return $container->get( $service_class );
 		} catch ( \Throwable $e ) {
 			if ( ! empty( $log_message ) ) {
-				Logger::debug( $log_message, array( 'error' => $e->getMessage() ) );
+				LoggerHelper::debug( $log_message, array( 'error' => $e->getMessage() ) );
 			}
 			return null;
 		}

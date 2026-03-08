@@ -333,7 +333,8 @@ class SchemaPageRenderer {
 		<script>
 		jQuery(document).ready(function($) {
 			const schemaNonce = '<?php echo esc_js( wp_create_nonce( 'fp_seo_schema_nonce' ) ); ?>';
-			const messages = <?php echo wp_json_encode(
+		const messages = <?php
+			$messages_json = wp_json_encode(
 				array(
 					'schemaGenerated'     => __( 'Schema generato correttamente. Consulta l\'anteprima qui sotto.', 'fp-seo-performance' ),
 					'schemaDataRequired'  => __( 'Inserisci i dati dello schema in formato JSON.', 'fp-seo-performance' ),
@@ -344,7 +345,9 @@ class SchemaPageRenderer {
 					'previewHidden'       => __( 'Anteprima nascosta.', 'fp-seo-performance' ),
 					'permissionError'     => __( 'Permessi insufficienti per generare lo schema.', 'fp-seo-performance' ),
 				)
-			); ?>;
+			);
+			echo false !== $messages_json ? $messages_json : '{}'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		?>;
 
 			const $form = $('#fp-seo-schema-form');
 			const $notice = $form.find('[data-fp-seo-schema-notice]');

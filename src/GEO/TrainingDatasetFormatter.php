@@ -70,8 +70,8 @@ class TrainingDatasetFormatter {
 			'source'       => get_permalink( $post ),
 			'title'        => $post->post_title,
 			'author'       => get_the_author_meta( 'display_name', $post->post_author ),
-			'published'    => gmdate( 'c', strtotime( $post->post_date_gmt ) ),
-			'updated'      => gmdate( 'c', strtotime( $post->post_modified_gmt ) ),
+		'published'    => ( false !== ( $ts_pub = strtotime( $post->post_date_gmt ) ) ) ? gmdate( 'c', $ts_pub ) : gmdate( 'c' ),
+		'updated'      => ( false !== ( $ts_upd = strtotime( $post->post_modified_gmt ) ) ) ? gmdate( 'c', $ts_upd ) : gmdate( 'c' ),
 			'language'     => $this->detect_language( $post ),
 			'domain'       => $this->get_content_domain( $post ),
 			'license'      => $this->get_content_license(),
@@ -405,7 +405,8 @@ class TrainingDatasetFormatter {
 		}
 
 		// Recent content
-		$age_days = ( time() - strtotime( $post->post_modified_gmt ) ) / DAY_IN_SECONDS;
+		$modified_ts = strtotime( $post->post_modified_gmt );
+		$age_days    = $modified_ts ? ( time() - $modified_ts ) / DAY_IN_SECONDS : 0;
 		if ( $age_days < 180 ) {
 			$score += 0.1;
 		}
@@ -460,7 +461,10 @@ class TrainingDatasetFormatter {
 					),
 				);
 
-				$jsonl_lines[] = wp_json_encode( $jsonl_entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+				$encoded_jsonl = wp_json_encode( $jsonl_entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+				if ( false !== $encoded_jsonl ) {
+					$jsonl_lines[] = $encoded_jsonl;
+				}
 			}
 		}
 

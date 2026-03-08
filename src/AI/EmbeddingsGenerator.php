@@ -13,8 +13,6 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
-use FP\SEO\Utils\Logger;
-
 use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\GEO\SemanticChunker;
 use WP_Post;
@@ -55,9 +53,11 @@ class EmbeddingsGenerator {
 
 	/**
 	 * Constructor
+	 *
+	 * @param OpenAiClient $openai_client OpenAI client instance.
 	 */
-	public function __construct() {
-		$this->openai_client = new OpenAiClient();
+	public function __construct( OpenAiClient $openai_client ) {
+		$this->openai_client = $openai_client;
 		$this->chunker       = new SemanticChunker();
 	}
 
@@ -142,8 +142,9 @@ class EmbeddingsGenerator {
 				);
 			}
 
-			// Generate semantic fingerprint (hash of first embedding for quick comparison)
-			$fingerprint = ! empty( $embeddings[0] ) ? md5( json_encode( $embeddings[0] ) ) : '';
+		// Generate semantic fingerprint (hash of first embedding for quick comparison)
+		$encoded     = ! empty( $embeddings[0] ) ? json_encode( $embeddings[0] ) : false;
+		$fingerprint = ( false !== $encoded ) ? md5( $encoded ) : '';
 
 			return array(
 				'model'               => self::EMBEDDING_MODEL,
@@ -157,8 +158,8 @@ class EmbeddingsGenerator {
 				'post_url'            => get_permalink( $post ),
 			);
 
-		} catch ( \Exception $e ) {
-			Logger::error( 'Embeddings Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ?? 0 ) );
+	} catch ( \Throwable $e ) {
+		error_log( 'FP SEO EmbeddingsGenerator error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
 
 			return array(
 				'error'   => 'API Error',
@@ -175,13 +176,22 @@ class EmbeddingsGenerator {
 	 */
 	private function call_embeddings_api( array $texts ): array {
 		// Get API key from options
-		$api_key = \FP\SEO\Utils\Options::get_option( 'ai.openai_api_key', '' );
+		$api_key = \FP\SEO\Utils\OptionsHelper::get_option( 'ai.openai_api_key', '' );
 
 		if ( empty( $api_key ) ) {
 			throw new \Exception( 'OpenAI API key not configured' );
 		}
 
 		// Call OpenAI Embeddings API via REST
+		$request_body = wp_json_encode( array(
+			'model' => self::EMBEDDING_MODEL,
+			'input' => $texts,
+		) );
+
+		if ( false === $request_body ) {
+			throw new \Exception( 'Failed to JSON-encode embeddings request body' );
+		}
+
 		$response = wp_remote_post(
 			'https://api.openai.com/v1/embeddings',
 			array(
@@ -189,10 +199,7 @@ class EmbeddingsGenerator {
 					'Authorization' => 'Bearer ' . $api_key,
 					'Content-Type'  => 'application/json',
 				),
-				'body'    => wp_json_encode( array(
-					'model' => self::EMBEDDING_MODEL,
-					'input' => $texts,
-				) ),
+				'body'    => $request_body,
 				'timeout' => 30,
 			)
 		);
@@ -211,7 +218,7 @@ class EmbeddingsGenerator {
 		$body = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body, true );
 
-		if ( ! isset( $data['data'] ) ) {
+		if ( ! is_array( $data ) || ! isset( $data['data'] ) ) {
 			throw new \Exception( 'Invalid API response format' );
 		}
 
@@ -428,12 +435,12 @@ class EmbeddingsGenerator {
 						'error'   => $embeddings['message'] ?? 'Unknown error',
 					);
 				}
-			} catch ( \Exception $e ) {
-				$results['failed'][] = array(
-					'post_id' => $post_id,
-					'error'   => $e->getMessage(),
-				);
-			}
+		} catch ( \Throwable $e ) {
+			$results['failed'][] = array(
+				'post_id' => $post_id,
+				'error'   => $e->getMessage(),
+			);
+		}
 
 			// Rate limiting: sleep briefly between requests
 			usleep( 500000 ); // 0.5 seconds

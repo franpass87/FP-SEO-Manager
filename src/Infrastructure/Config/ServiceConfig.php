@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Infrastructure\Config;
 
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 
 /**
  * Service configuration helper.
@@ -26,7 +26,7 @@ class ServiceConfig {
 	 * @return bool
 	 */
 	public static function is_geo_enabled(): bool {
-		$options = Options::get();
+		$options = OptionsHelper::get();
 		return (bool) ( $options['geo']['enabled'] ?? false );
 	}
 
@@ -36,7 +36,7 @@ class ServiceConfig {
 	 * @return bool
 	 */
 	public static function is_gsc_configured(): bool {
-		$options         = Options::get();
+		$options         = OptionsHelper::get();
 		$gsc_credentials = $options['gsc']['service_account_json'] ?? '';
 		$gsc_site_url    = $options['gsc']['site_url'] ?? '';
 
@@ -49,7 +49,7 @@ class ServiceConfig {
 	 * @return array{service_account_json: string, site_url: string}
 	 */
 	public static function get_gsc_config(): array {
-		$options = Options::get();
+		$options = OptionsHelper::get();
 		return array(
 			'service_account_json' => (string) ( $options['gsc']['service_account_json'] ?? '' ),
 			'site_url'             => (string) ( $options['gsc']['site_url'] ?? '' ),

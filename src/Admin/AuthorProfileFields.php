@@ -15,6 +15,7 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Admin\Scripts\AuthorProfileFieldsScriptsManager;
 use FP\SEO\Admin\Styles\AuthorProfileFieldsStylesManager;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Manages author authority fields in user profiles
@@ -31,14 +32,40 @@ class AuthorProfileFields {
 	private $styles_manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks
 	 */
 	public function register(): void {
-		add_action( 'show_user_profile', array( $this, 'render_fields' ) );
-		add_action( 'edit_user_profile', array( $this, 'render_fields' ) );
-		add_action( 'personal_options_update', array( $this, 'save_fields' ) );
-		add_action( 'edit_user_profile_update', array( $this, 'save_fields' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		$hooks = array(
+			'show_user_profile'        => array( $this, 'render_fields' ),
+			'edit_user_profile'        => array( $this, 'render_fields' ),
+			'personal_options_update' => array( $this, 'save_fields' ),
+			'edit_user_profile_update' => array( $this, 'save_fields' ),
+			'admin_enqueue_scripts'    => array( $this, 'enqueue_assets' ),
+		);
+
+		foreach ( $hooks as $hook => $callback ) {
+			if ( $this->hook_manager ) {
+				$this->hook_manager->add_action( $hook, $callback );
+			} else {
+				add_action( $hook, $callback );
+			}
+		}
 
 		// Initialize and register scripts manager
 		$this->scripts_manager = new AuthorProfileFieldsScriptsManager();
@@ -186,7 +213,8 @@ class AuthorProfileFields {
 							<?php endforeach; ?>
 						</div>
 
-						<input type="hidden" name="fp_author_certifications" id="fp_author_certifications" value="<?php echo esc_attr( wp_json_encode( $certifications ) ); ?>">
+						<?php $certs_json = wp_json_encode( $certifications ); ?>
+					<input type="hidden" name="fp_author_certifications" id="fp_author_certifications" value="<?php echo esc_attr( false !== $certs_json ? $certs_json : '[]' ); ?>">
 
 						<p class="description">
 							<?php esc_html_e( 'Certificazioni professionali (Google Analytics, Yoast SEO, HubSpot, ecc.)', 'fp-seo-performance' ); ?>
@@ -216,7 +244,8 @@ class AuthorProfileFields {
 							<?php endforeach; ?>
 						</div>
 
-						<input type="hidden" name="fp_author_expertise" id="fp_author_expertise" value="<?php echo esc_attr( wp_json_encode( $expertise ) ); ?>">
+						<?php $expertise_json = wp_json_encode( $expertise ); ?>
+					<input type="hidden" name="fp_author_expertise" id="fp_author_expertise" value="<?php echo esc_attr( false !== $expertise_json ? $expertise_json : '[]' ); ?>">
 
 						<p class="description">
 							<?php esc_html_e( 'Aree di competenza (SEO, WordPress, Marketing, ecc.)', 'fp-seo-performance' ); ?>
@@ -438,7 +467,7 @@ class AuthorProfileFields {
 			$certifications_json = wp_unslash( $_POST['fp_author_certifications'] );
 			$certifications      = json_decode( $certifications_json, true );
 
-			if ( is_array( $certifications ) ) {
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $certifications ) ) {
 				$certifications = array_map( 'sanitize_text_field', $certifications );
 				update_user_meta( $user_id, 'fp_author_certifications', $certifications );
 			}
@@ -448,7 +477,7 @@ class AuthorProfileFields {
 			$expertise_json = wp_unslash( $_POST['fp_author_expertise'] );
 			$expertise      = json_decode( $expertise_json, true );
 
-			if ( is_array( $expertise ) ) {
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $expertise ) ) {
 				$expertise = array_map( 'sanitize_text_field', $expertise );
 				update_user_meta( $user_id, 'fp_author_expertise', $expertise );
 			}

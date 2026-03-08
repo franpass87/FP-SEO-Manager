@@ -83,7 +83,10 @@ class SocialPageRenderer {
 		global $wpdb;
 		
 		$count = $wpdb->get_var(
-			"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = '_fp_seo_social_meta' AND meta_value != ''"
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''",
+				'_fp_seo_social_meta'
+			)
 		);
 		
 		return (int) $count;
@@ -109,5 +112,19 @@ class SocialPageRenderer {
 		return (int) max( 0, min( 100, round( $score ) ) );
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

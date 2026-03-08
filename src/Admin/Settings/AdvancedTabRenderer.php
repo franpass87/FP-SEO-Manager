@@ -33,14 +33,14 @@ class AdvancedTabRenderer extends SettingsTabRenderer {
 	 * @param array<string, mixed> $options Current plugin options.
 	 */
 	public function render( array $options ): void {
-		$advanced = $options['advanced'];
+		$advanced = $options['advanced'] ?? array();
 		?>
 		<table class="form-table" role="presentation">
 			<tbody>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Required capability', 'fp-seo-performance' ); ?></th>
 				<td>
-					<input type="text" name="<?php echo esc_attr( $this->get_option_key() ); ?>[advanced][capability]" value="<?php echo esc_attr( $advanced['capability'] ); ?>" class="regular-text" />
+					<input type="text" name="<?php echo esc_attr( $this->get_option_key() ); ?>[advanced][capability]" value="<?php echo esc_attr( $advanced['capability'] ?? '' ); ?>" class="regular-text" />
 					<p class="description"><?php esc_html_e( 'Users must have this capability to manage plugin settings.', 'fp-seo-performance' ); ?></p>
 				</td>
 			</tr>
@@ -59,7 +59,10 @@ class AdvancedTabRenderer extends SettingsTabRenderer {
 
 		<h3><?php esc_html_e( 'Export settings', 'fp-seo-performance' ); ?></h3>
 		<p><?php esc_html_e( 'Copy the JSON below to back up your configuration.', 'fp-seo-performance' ); ?></p>
-		<textarea readonly rows="8" class="large-text code"><?php echo esc_textarea( wp_json_encode( $options, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) ); ?></textarea>
+		<?php
+		$options_json = wp_json_encode( $options, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		?>
+	<textarea readonly rows="8" class="large-text code"><?php echo esc_textarea( false !== $options_json ? $options_json : '{}' ); ?></textarea>
 
 		<h3><?php esc_html_e( 'Import settings', 'fp-seo-performance' ); ?></h3>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">

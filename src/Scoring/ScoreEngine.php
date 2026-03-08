@@ -84,7 +84,8 @@ class ScoreEngine {
 			}
 
 			// Check if this check is optional/not applicable
-			$details = is_array( $check['details'] ?? null ) ? $check['details'] : array();
+			$raw_details = $check['details'] ?? null;
+			$details     = is_array( $raw_details ) ? $raw_details : array();
 			$is_optional = $this->is_optional_check( $check_id, $details, $check );
 			$is_not_applicable = $this->is_not_applicable( $check_id, $details, $check );
 

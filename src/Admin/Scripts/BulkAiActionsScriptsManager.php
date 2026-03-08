@@ -232,3 +232,17 @@ class BulkAiActionsScriptsManager {
 	}
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

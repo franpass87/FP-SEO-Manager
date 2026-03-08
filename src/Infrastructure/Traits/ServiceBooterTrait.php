@@ -14,7 +14,7 @@ declare(strict_types=1);
 namespace FP\SEO\Infrastructure\Traits;
 
 use FP\SEO\Infrastructure\Container;
-use FP\SEO\Utils\Logger;
+use FP\SEO\Utils\LoggerHelper;
 
 /**
  * Trait for service providers to boot services safely.
@@ -53,11 +53,11 @@ trait ServiceBooterTrait {
 			$message = $error_message ?: sprintf( 'Failed to register %s', $service_class );
 			
 			if ( 'error' === $log_level ) {
-				Logger::error( $message, array( 'error' => $e->getMessage() ) );
+				LoggerHelper::error( $message, array( 'error' => $e->getMessage() ) );
 			} elseif ( 'debug' === $log_level ) {
-				Logger::debug( $message, array( 'error' => $e->getMessage() ) );
+				LoggerHelper::debug( $message, array( 'error' => $e->getMessage() ) );
 			} else {
-				Logger::warning( $message, array( 'error' => $e->getMessage() ) );
+				LoggerHelper::warning( $message, array( 'error' => $e->getMessage() ) );
 			}
 			
 			return false;

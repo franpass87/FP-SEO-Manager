@@ -89,6 +89,9 @@ class CitationFormatter {
 		}
 
 		$timestamp = strtotime( $date . ' UTC' );
+		if ( false === $timestamp ) {
+			return gmdate( 'c' );
+		}
 		return gmdate( 'c', $timestamp );
 	}
 
@@ -309,12 +312,12 @@ class CitationFormatter {
 		}
 
 		// Contains numbers/data = more credible
-		if ( preg_match( '/\d+/', $text ) ) {
+		if ( 1 === preg_match( '/\d+/', $text ) ) {
 			$score += 0.1;
 		}
 
 		// Contains specific terms = more authoritative
-		if ( preg_match( '/(secondo|studi|ricerca|dati|statistiche)/i', $text ) ) {
+		if ( 1 === preg_match( '/(secondo|studi|ricerca|dati|statistiche)/i', $text ) ) {
 			$score += 0.2;
 		}
 
@@ -346,7 +349,15 @@ class CitationFormatter {
 			return array();
 		}
 
-		return array_map( 'esc_url_raw', array_slice( $sources, 0, 3 ) );
+		return array_map(
+			static function ( $source ) {
+				if ( is_array( $source ) ) {
+					return esc_url_raw( $source['url'] ?? '' );
+				}
+				return is_string( $source ) ? esc_url_raw( $source ) : '';
+			},
+			array_slice( $sources, 0, 3 )
+		);
 	}
 
 	/**
@@ -453,7 +464,11 @@ class CitationFormatter {
 	 * @return float Freshness score (0-1).
 	 */
 	private function calculate_content_freshness( WP_Post $post ): float {
-		$days_since_update = ( time() - strtotime( $post->post_modified_gmt ) ) / DAY_IN_SECONDS;
+		$modified_ts = strtotime( $post->post_modified_gmt );
+		if ( false === $modified_ts ) {
+			return 0.5;
+		}
+		$days_since_update = ( time() - $modified_ts ) / DAY_IN_SECONDS;
 
 		if ( $days_since_update < 30 ) {
 			return 1.0;
@@ -484,13 +499,13 @@ class CitationFormatter {
 		$content    = wp_strip_all_tags( $post->post_content );
 		$word_count = str_word_count( $content );
 
-		if ( $word_count === 0 || $word_count < 1 ) {
+		if ( $word_count < 1 ) {
 			return 0.0;
 		}
 
 		// Count numbers (indicator of facts/data)
-		preg_match_all( '/\d+/', $content, $matches );
-		$number_count = count( $matches[0] ?? array() );
+		$preg_result  = preg_match_all( '/\d+/', $content, $matches );
+		$number_count = false !== $preg_result ? count( $matches[0] ) : 0;
 
 		$density = ( $number_count / max( 1, $word_count ) ) * 1000;
 

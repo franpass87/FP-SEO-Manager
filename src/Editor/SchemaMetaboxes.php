@@ -33,16 +33,20 @@ class SchemaMetaboxes {
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_action( 'add_meta_boxes', array( $this, 'add_metaboxes' ) );
+		// NOTE: Metaboxes are now integrated into the main SEO Performance metabox
+		// No need to register separate metaboxes via add_meta_boxes hook
 		
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		// CRITICAL: Use priority 20 instead of 10 to ensure we run AFTER WordPress core saves _thumbnail_id
+		// WordPress core saves featured image (_thumbnail_id) during save_post with priority 10
+		// By using priority 20, we ensure our hooks run after WordPress has finished saving the featured image
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
 			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ), 10, 2 );
+				add_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ), 20, 2 );
 			}
 			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ), 10, 2 );
+				add_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ), 20, 2 );
 			}
 		}
 		
@@ -57,39 +61,10 @@ class SchemaMetaboxes {
 	}
 
 	/**
-	 * Add metaboxes to the editor.
-	 */
-	public function add_metaboxes(): void {
-		$post_types = array( 'post', 'page' );
-
-		// NOTE: FAQ and HowTo Schema are now integrated into the main SEO Performance metabox
-		// for better UX and unified interface. The separate metaboxes are disabled.
-		
-		/*
-		// FAQ Schema Metabox - NOW INTEGRATED IN MAIN METABOX
-		add_meta_box(
-			'fp-seo-faq-schema',
-			'❓ ' . __( 'FAQ Schema - Pronto per AI Overview', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);">⚡ Impatto: +20%</span>',
-			array( $this, 'render_faq_metabox' ),
-			$post_types,
-			'normal',
-			'default'
-		);
-
-		// HowTo Schema Metabox - NOW INTEGRATED IN MAIN METABOX
-		add_meta_box(
-			'fp-seo-howto-schema',
-			'📖 ' . __( 'HowTo Schema - Guida Passo-Passo', 'fp-seo-performance' ) . ' <span style="display: inline-flex; padding: 2px 8px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; margin-left: 8px; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);">⚡ Impatto: +15%</span>',
-			array( $this, 'render_howto_metabox' ),
-			$post_types,
-			'normal',
-			'default'
-		);
-		*/
-	}
-
-	/**
 	 * Render FAQ Schema metabox.
+	 * 
+	 * NOTE: This method is called by the main SEO Performance metabox (SchemaRenderer)
+	 * to render the FAQ section. The separate metabox has been removed.
 	 *
 	 * @param \WP_Post $post Post object.
 	 */
@@ -99,31 +74,36 @@ class SchemaMetaboxes {
 		// Store post ID for JavaScript
 		$post_id = $post->ID;
 
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
-		$faq_questions = get_post_meta( $post->ID, '_fp_seo_faq_questions', true );
+		// Use Q&A pairs as single source of truth (unified system)
+		$qa_pairs = get_post_meta( $post->ID, '_fp_seo_qa_pairs', true );
 		
 		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $faq_questions ) ) {
+		if ( empty( $qa_pairs ) ) {
 			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_faq_questions' ) );
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_qa_pairs' ) );
 			if ( $db_value !== null ) {
 				$unserialized = maybe_unserialize( $db_value );
-				$faq_questions = is_array( $unserialized ) ? $unserialized : array();
+				$qa_pairs = is_array( $unserialized ) ? $unserialized : array();
 			}
 		}
 		
-		if ( ! is_array( $faq_questions ) ) {
-			$faq_questions = array();
+		if ( ! is_array( $qa_pairs ) ) {
+			$qa_pairs = array();
+		}
+		
+		// Convert Q&A pairs to FAQ format for display (extract only question and answer)
+		$faq_questions = array();
+		foreach ( $qa_pairs as $pair ) {
+			if ( ! empty( $pair['question'] ) && ! empty( $pair['answer'] ) ) {
+				$faq_questions[] = array(
+					'question' => $pair['question'],
+					'answer'   => $pair['answer'],
+				);
+			}
 		}
 
 	?>
@@ -151,16 +131,6 @@ class SchemaMetaboxes {
 				</button>
 			</div>
 
-			<div class="fp-seo-schema-tips">
-				<h4>💡 Best Practices per FAQ Schema:</h4>
-				<ul>
-					<li>✅ Aggiungi <strong>almeno 3-5 domande</strong> pertinenti</li>
-					<li>✅ Usa domande che gli utenti <strong>cercano davvero</strong> su Google</li>
-					<li>✅ Risposte chiare e complete (<strong>50-300 parole</strong> per risposta)</li>
-					<li>✅ Includi parole chiave naturalmente nelle domande</li>
-					<li>✅ Formatta domande come "Come...", "Cosa...", "Perché..."</li>
-				</ul>
-			</div>
 		</div>
 
 		<script type="text/html" id="fp-seo-faq-template">
@@ -168,7 +138,7 @@ class SchemaMetaboxes {
 		</script>
 		
 		<script type="text/javascript">
-		<?php echo $this->scripts_manager->get_inline_js( $post->ID ); ?>
+		<?php if ( null !== $this->scripts_manager ) { echo $this->scripts_manager->get_inline_js( $post->ID ); } ?>
 		</script>
 		<?php
 	}
@@ -239,16 +209,9 @@ class SchemaMetaboxes {
 	public function render_howto_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_howto_schema_nonce', 'fp_seo_howto_schema_nonce' );
 
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		$howto_data = get_post_meta( $post->ID, '_fp_seo_howto', true );
 		
@@ -342,16 +305,6 @@ class SchemaMetaboxes {
 				</button>
 			</div>
 
-			<div class="fp-seo-schema-tips">
-				<h4>💡 Best Practices per HowTo Schema:</h4>
-				<ul>
-					<li>✅ Aggiungi <strong>almeno 3 step</strong> ben definiti</li>
-					<li>✅ Ogni step deve avere <strong>nome e descrizione chiari</strong></li>
-					<li>✅ Ordina gli step in sequenza logica</li>
-					<li>✅ Usa verbi d'azione: "Apri...", "Clicca...", "Inserisci..."</li>
-					<li>✅ Mantieni gli step concisi ma completi</li>
-				</ul>
-			</div>
 		</div>
 
 		<script type="text/html" id="fp-seo-howto-step-template">
@@ -359,7 +312,7 @@ class SchemaMetaboxes {
 		</script>
 		
 		<script type="text/javascript">
-		<?php echo $this->scripts_manager->get_inline_js( $post->ID ); ?>
+		<?php if ( null !== $this->scripts_manager ) { echo $this->scripts_manager->get_inline_js( $post->ID ); } ?>
 		</script>
 		<?php
 	}
@@ -448,6 +401,14 @@ class SchemaMetaboxes {
 	 * @param \WP_Post $post    Post object.
 	 */
 	public function save_faq_schema( int $post_id, \WP_Post $post ): void {
+// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO: SchemaMetaboxes::save_faq_schema BLOCKED - WordPress native operation detected' );
+			}
+			return;
+		}
+		
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
@@ -473,40 +434,48 @@ class SchemaMetaboxes {
 
 		// Get and sanitize FAQ data
 		$faq_data = isset( $_POST['fp_seo_faq'] ) ? wp_unslash( $_POST['fp_seo_faq'] ) : array();
-		// Ensure $faq_data is always an array
 		if ( ! is_array( $faq_data ) ) {
 			$faq_data = array();
 		}
 		$sanitized_faqs = array();
 
-		if ( is_array( $faq_data ) ) {
-			foreach ( $faq_data as $faq ) {
-				if ( ! is_array( $faq ) ) {
-					continue;
-				}
+		foreach ( $faq_data as $faq ) {
+			if ( ! is_array( $faq ) ) {
+				continue;
+			}
 
-				$question = sanitize_text_field( $faq['question'] ?? '' );
-				$answer   = wp_kses_post( $faq['answer'] ?? '' );
+			$question = sanitize_text_field( $faq['question'] ?? '' );
+			$answer   = wp_kses_post( $faq['answer'] ?? '' );
 
-				// Only save if both question and answer are not empty
-				if ( ! empty( $question ) && ! empty( $answer ) ) {
-					$sanitized_faqs[] = array(
-						'question' => $question,
-						'answer'   => $answer,
-					);
-				}
+			if ( ! empty( $question ) && ! empty( $answer ) ) {
+				$sanitized_faqs[] = array(
+					'question' => $question,
+					'answer'   => $answer,
+				);
 			}
 		}
 
-		// Save or delete meta
-		if ( ! empty( $sanitized_faqs ) ) {
-			update_post_meta( $post_id, '_fp_seo_faq_questions', $sanitized_faqs );
+		// Convert to Q&A pairs format (unified system)
+		$qa_pairs = array();
+		foreach ( $sanitized_faqs as $faq ) {
+			$qa_pairs[] = array(
+				'question'       => $faq['question'],
+				'answer'         => $faq['answer'],
+				'confidence'     => 1.0, // Manual = high confidence
+				'question_type'  => 'manual',
+				'keywords'       => array(),
+			);
+		}
+		
+		// Save or delete meta (use _fp_seo_qa_pairs as single source of truth)
+		if ( ! empty( $qa_pairs ) ) {
+			update_post_meta( $post_id, '_fp_seo_qa_pairs', $qa_pairs );
 			
 			// Clear schema cache
 			$cache_key = 'fp_seo_schemas_' . $post_id . '_' . get_current_blog_id();
 			wp_cache_delete( $cache_key );
 		} else {
-			delete_post_meta( $post_id, '_fp_seo_faq_questions' );
+			delete_post_meta( $post_id, '_fp_seo_qa_pairs' );
 		}
 	}
 
@@ -517,6 +486,14 @@ class SchemaMetaboxes {
 	 * @param \WP_Post $post    Post object.
 	 */
 	public function save_howto_schema( int $post_id, \WP_Post $post ): void {
+// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO: SchemaMetaboxes::save_howto_schema BLOCKED - WordPress native operation detected' );
+			}
+			return;
+		}
+		
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
@@ -612,4 +589,5 @@ class SchemaMetaboxes {
 		// JavaScript is handled inline in render methods via SchemaMetaboxesScriptsManager
 	}
 }
+
 

@@ -16,8 +16,9 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\I18n;
 use FP\SEO\Utils\MetadataResolver;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 use WP_Admin_Bar;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use function add_action;
 use function add_query_arg;
 use function admin_url;
@@ -41,12 +42,33 @@ use function wp_strip_all_tags;
  * Renders a contextual analyzer score within the WordPress admin bar.
  */
 class AdminBarBadge {
-		/**
-		 * Hook registrations.
-		 */
+	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
+	 * Hook registrations.
+	 */
 	public function register(): void {
-		add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
+			$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+		} else {
+			add_action( 'admin_bar_menu', array( $this, 'add_badge' ), 120 );
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 10, 0 );
+		}
 	}
 
 		/**
@@ -84,16 +106,9 @@ class AdminBarBadge {
 			return;
 		}
 
-		// Clear cache before retrieving (same as Metabox)
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		// Get SEO metadata using MetadataResolver (same pattern as Metabox)
 		$meta_description = MetadataResolver::resolve_meta_description( $post );
@@ -186,13 +201,13 @@ class AdminBarBadge {
 			return false;
 		}
 
-		$options = Options::get();
+		$options = OptionsHelper::get();
 
 		if ( empty( $options['general']['admin_bar_badge'] ) || empty( $options['general']['enable_analyzer'] ) ) {
 			return false;
 		}
 
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			return false;
 		}
 

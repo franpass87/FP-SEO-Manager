@@ -17,6 +17,13 @@ use DOMXPath;
 use function function_exists;
 use function libxml_clear_errors;
 use function libxml_use_internal_errors;
+use function preg_match;
+use function get_template;
+use function get_stylesheet;
+use function get_post;
+use function get_post_meta;
+use function get_option;
+use function apply_filters;
 use const LIBXML_NOERROR;
 use const LIBXML_NOWARNING;
 
@@ -138,22 +145,114 @@ class Context {
 	}
 
 	/**
-	 * Process HTML content to include rendered WPBakery shortcodes.
+	 * Process HTML content to include rendered WPBakery shortcodes and Salient theme header.
 	 *
 	 * @param string $html Raw HTML content.
 	 * @return string Processed HTML content.
 	 */
 	private function process_html_content( string $html ): string {
+		$processed_html = $html;
+
 		// If content contains WPBakery shortcodes, render them to HTML
-		if ( strpos( $html, '[vc_' ) !== false || strpos( $html, '[vc_row' ) !== false ) {
+		if ( strpos( $processed_html, '[vc_' ) !== false || strpos( $processed_html, '[vc_row' ) !== false ) {
 			// Execute shortcodes to get rendered HTML
 			if ( function_exists( 'do_shortcode' ) ) {
-				$rendered = do_shortcode( $html );
+				$rendered = do_shortcode( $processed_html );
 				// Combine original HTML with rendered content for better analysis
 				// This ensures both shortcode attributes and rendered content are available
-				return $html . "\n" . $rendered;
+				$processed_html = $processed_html . "\n" . $rendered;
 			}
 		}
+
+		// Check if HTML already contains an H1 tag
+		$has_h1 = preg_match( '/<h1[^>]*>.*?<\/h1>/is', $processed_html );
+		if ( false === $has_h1 ) {
+			$has_h1 = 0; // PCRE error: assume no H1 found
+		}
+
+		// If no H1 found and Salient theme is active, try to include page header
+		if ( ! $has_h1 && null !== $this->post_id && $this->post_id > 0 ) {
+			$header_html = $this->get_salient_header_html();
+			if ( ! empty( $header_html ) ) {
+				// Prepend header HTML to content for analysis
+				$processed_html = $header_html . "\n" . $processed_html;
+			}
+		}
+
+		return $processed_html;
+	}
+
+	/**
+	 * Get Salient theme header HTML with H1.
+	 *
+	 * @return string HTML content of the page header, empty if not available.
+	 */
+	private function get_salient_header_html(): string {
+		// Check if Salient theme is active
+		$template = get_template();
+		$stylesheet = get_stylesheet();
+		if ( 'salient' !== $template && 'salient' !== $stylesheet ) {
+			return '';
+		}
+
+		if ( null === $this->post_id || $this->post_id <= 0 ) {
+			return '';
+		}
+
+		$post = get_post( $this->post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			return '';
+		}
+
+		// Check post type - Salient uses header for pages, posts, and portfolio
+		$post_types_with_header = array( 'page', 'post', 'portfolio' );
+		if ( ! in_array( $post->post_type, $post_types_with_header, true ) ) {
+			return '';
+		}
+
+		// Get page header settings from Salient
+		$page_header_title = get_post_meta( $post->ID, '_nectar_header_title', true );
+		
+		// Check Salient theme option for auto-title
+		$nectar_options    = get_option( 'salient' );
+		$nectar_options    = is_array( $nectar_options ) ? $nectar_options : array();
+		$header_auto_title = ! empty( $nectar_options['header-auto-title'] ) && '1' === $nectar_options['header-auto-title'];
+		
+		// For pages, check if page is in bypass list
+		if ( 'page' === $post->post_type ) {
+			$pages_to_skip = apply_filters( 'nectar_auto_page_header_bypass', array() );
+			if ( is_array( $pages_to_skip ) && in_array( $this->post_id, $pages_to_skip, true ) ) {
+				return '';
+			}
+		}
+		
+		// Determine title: custom title, or auto-title for pages, or post title
+		$title = '';
+		if ( ! empty( $page_header_title ) ) {
+			$title = $page_header_title;
+		} elseif ( $header_auto_title && 'page' === $post->post_type ) {
+			// Auto-title enabled for pages
+			$title = $post->post_title;
+		} elseif ( ! empty( $post->post_title ) ) {
+			// Fallback to post title
+			$title = $post->post_title;
+		}
+		
+		// If title is still empty, return empty
+		if ( empty( $title ) ) {
+			return '';
+		}
+
+		// Generate H1 HTML similar to Salient's structure
+		$html = '<div class="nectar-page-header-wrapper">';
+		$html .= '<div class="row">';
+		$html .= '<div class="col span_6 section-title">';
+		$html .= '<div class="inner-wrap">';
+		$html .= '<h1>' . esc_html( $title ) . '</h1>';
+		$html .= '</div>';
+		$html .= '</div>';
+		$html .= '</div>';
+		$html .= '</div>';
 
 		return $html;
 	}
@@ -519,6 +618,7 @@ class Context {
 			$stripped = strip_tags( $this->html ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags
 		}
 
-		return trim( (string) preg_replace( '/\s+/', ' ', $stripped ) );
+		$normalized = preg_replace( '/\s+/', ' ', $stripped );
+		return trim( is_string( $normalized ) ? $normalized : $stripped );
 	}
 }

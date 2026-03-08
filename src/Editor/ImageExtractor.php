@@ -36,16 +36,19 @@ class ImageExtractor {
 	 * Extract images from post content (ONLY when explicitly called).
 	 * 
 	 * This method is completely safe and never interferes with WordPress processes.
-	 * It should ONLY be called:
+	 * By default, it should ONLY be called:
 	 * - Via AJAX endpoint
 	 * - When rendering metabox (lazy-loaded)
-	 * - NEVER during save_post or other critical hooks
+	 * 
+	 * When $allow_non_ajax is true, it can also be called during save_post hooks
+	 * (e.g., for image SEO optimization), but only when explicitly needed.
 	 *
 	 * @param int|WP_Post $post Post ID or WP_Post object.
 	 * @param bool $force_refresh Skip cache and force fresh extraction.
+	 * @param bool $allow_non_ajax Allow extraction in non-AJAX context (e.g., during save_post).
 	 * @return array<int, array{src: string, alt: string, title: string, description: string, attachment_id: int|null}>
 	 */
-	public function extract( $post, bool $force_refresh = false ): array {
+	public function extract( $post, bool $force_refresh = false, bool $allow_non_ajax = false ): array {
 		$post_id = $post instanceof WP_Post ? $post->ID : (int) $post;
 		
 		if ( $post_id <= 0 ) {
@@ -54,7 +57,8 @@ class ImageExtractor {
 		
 		// CRITICAL: Only process in AJAX context to avoid interference with WordPress post loading
 		// During initial metabox rendering, WordPress might create auto-drafts, so we skip completely
-		if ( ! defined( 'DOING_AJAX' ) || ! DOING_AJAX ) {
+		// Exception: When $allow_non_ajax is true, allow extraction (e.g., during image SEO optimization)
+		if ( ! $allow_non_ajax && ( ! defined( 'DOING_AJAX' ) || ! DOING_AJAX ) ) {
 			Logger::debug( 'ImageExtractor::extract - Skipping extraction during non-AJAX context (editor load)', array(
 				'post_id' => $post_id,
 				'context' => 'non-ajax',
@@ -86,15 +90,14 @@ class ImageExtractor {
 		}
 		
 		// Get post object safely
-		// CRITICAL: If we already have a WP_Post object, use it directly to avoid triggering get_post filter
-		// This prevents interference with homepage protection hooks
+		// CRITICAL: If we already have a WP_Post object, use it directly
 		$post_obj = $post instanceof WP_Post ? $post : null;
 		
 		// Only call get_post if we don't have the object and we're sure it's safe (not during editor load)
 		if ( ! $post_obj instanceof WP_Post ) {
-			// CRITICAL: Only call get_post if we're in AJAX context or explicitly requested
-			// During metabox rendering, WordPress might pass wrong post, so we skip extraction
-			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			// CRITICAL: Only call get_post if we're in AJAX context or explicitly requested via $allow_non_ajax
+			// During metabox rendering, WordPress might pass wrong post, so we skip extraction by default
+			if ( $allow_non_ajax || ( defined( 'DOING_AJAX' ) && DOING_AJAX ) ) {
 				$post_obj = get_post( $post_id );
 			} else {
 				// During normal rendering, skip to avoid interference
@@ -273,12 +276,21 @@ class ImageExtractor {
 				$src = $this->normalize_url( $src );
 				$seen_srcs[ $src ] = true;
 				
+				// Try to get attachment ID from CSS class first (most reliable)
+				// WordPress adds wp-image-{ID} class to images inserted via media library
+				$attachment_id = $this->get_attachment_id_from_class( $img->getAttribute( 'class' ) );
+				
+				// Fallback to URL-based detection if class not found
+				if ( ! $attachment_id ) {
+					$attachment_id = $this->get_attachment_id_from_url( $src );
+				}
+				
 				$images[] = array(
 					'src' => $src,
 					'alt' => $img->getAttribute( 'alt' ) ?: '',
 					'title' => $img->getAttribute( 'title' ) ?: '',
 					'description' => '',
-					'attachment_id' => $this->get_attachment_id_from_url( $src ),
+					'attachment_id' => $attachment_id,
 				);
 			}
 		} catch ( \Throwable $e ) {
@@ -291,7 +303,47 @@ class ImageExtractor {
 	}
 	
 	/**
-	 * Extract images from shortcodes.
+	 * Get attachment ID from CSS class (wp-image-{ID}).
+	 *
+	 * @param string $class CSS class attribute.
+	 * @return int|null Attachment ID or null if not found.
+	 */
+	private function get_attachment_id_from_class( string $class ): ?int {
+		if ( empty( $class ) ) {
+			return null;
+		}
+		
+		// WordPress adds wp-image-{ID} class to images from media library
+		if ( preg_match( '/wp-image-(\d+)/', $class, $matches ) ) {
+			$attachment_id = (int) $matches[1];
+			
+			// Verify attachment exists
+			$attachment = get_post( $attachment_id );
+			if ( $attachment && 'attachment' === $attachment->post_type ) {
+				return $attachment_id;
+			}
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * Extract images from shortcodes (WPBakery/Salient).
+	 *
+	 * Supports all Salient elements that contain images:
+	 * - image_with_animation (image_url)
+	 * - team_member (image_url, bio_image_url, bio_alt_image_url)
+	 * - testimonial / nectar_single_testimonial (image)
+	 * - nectar_cascading_images (image_1_url, image_2_url, image_3_url, image_4_url)
+	 * - nectar_video_lightbox (image_url)
+	 * - nectar_video_player_self_hosted (video_image)
+	 * - nectar_scrolling_text (background_image_url)
+	 * - nectar_sticky_media_section (image)
+	 * - nectar_text_inline_images (images - comma separated)
+	 * - nectar_image_comparison (image_url, image_url_2)
+	 * - vc_column / vc_row (background_image)
+	 * - fancy_box (icon_image)
+	 * - text-with-icon (icon_image)
 	 *
 	 * @param string $content Post content.
 	 * @param array<string, bool> $seen_srcs Already seen URLs.
@@ -300,24 +352,119 @@ class ImageExtractor {
 	private function extract_from_shortcodes( string $content, array &$seen_srcs ): array {
 		$images = array();
 		
-		// Extract from WPBakery image attributes
-		if ( preg_match_all( '/image[_\d]*_url\s*=\s*["\']([^"\']+)["\']/', $content, $matches, PREG_SET_ORDER ) ) {
+		// Salient image attribute patterns (can be ID or URL)
+		// Pattern matches: attribute_name="value" where value can be ID or URL
+		$salient_image_attributes = array(
+			// Single image elements
+			'image_url',           // image_with_animation, team_member, nectar_video_lightbox
+			'image',               // testimonial, nectar_single_testimonial, nectar_sticky_media_section
+			'bio_image_url',       // team_member
+			'bio_alt_image_url',   // team_member
+			'video_image',         // nectar_video_player_self_hosted
+			'background_image_url', // nectar_scrolling_text
+			'background_image',    // vc_column, vc_row, full_width_section
+			'icon_image',          // text-with-icon, fancy_box
+			'image_url_2',         // nectar_image_comparison (second image)
+			// Cascading images (up to 4 images)
+			'image_1_url',
+			'image_2_url',
+			'image_3_url',
+			'image_4_url',
+		);
+		
+		// Build regex pattern for all attributes
+		$attr_pattern = implode( '|', array_map( 'preg_quote', $salient_image_attributes ) );
+		$regex = '/(' . $attr_pattern . ')\s*=\s*["\']([^"\']+)["\']/';
+		
+		if ( preg_match_all( $regex, $content, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $match ) {
-				$url = $this->normalize_url( $match[1] );
-				if ( ! empty( $url ) && ! isset( $seen_srcs[ $url ] ) ) {
-					$seen_srcs[ $url ] = true;
-					$images[] = array(
-						'src' => $url,
-						'alt' => '',
-						'title' => '',
-						'description' => '',
-						'attachment_id' => $this->get_attachment_id_from_url( $url ),
-					);
+				$attr_name = $match[1];
+				$value = trim( $match[2] );
+				
+				if ( empty( $value ) ) {
+					continue;
+				}
+				
+				// Check if value is numeric (attachment ID) or URL
+				if ( preg_match( '/^\d+$/', $value ) ) {
+					// It's an attachment ID
+					$attachment_id = (int) $value;
+					$image_data = $this->get_image_data_from_attachment_id( $attachment_id, $seen_srcs );
+					if ( $image_data ) {
+						$images[] = $image_data;
+					}
+				} else {
+					// It's a URL
+					$url = $this->normalize_url( $value );
+					if ( ! empty( $url ) && ! isset( $seen_srcs[ $url ] ) ) {
+						$seen_srcs[ $url ] = true;
+						$images[] = array(
+							'src' => $url,
+							'alt' => '',
+							'title' => '',
+							'description' => '',
+							'attachment_id' => $this->get_attachment_id_from_url( $url ),
+						);
+					}
+				}
+			}
+		}
+		
+		// Handle 'images' attribute (comma-separated IDs) - used by nectar_text_inline_images
+		if ( preg_match_all( '/images\s*=\s*["\']([^"\']+)["\']/', $content, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				$ids = explode( ',', $match[1] );
+				foreach ( $ids as $id ) {
+					$id = trim( $id );
+					if ( preg_match( '/^\d+$/', $id ) ) {
+						$attachment_id = (int) $id;
+						$image_data = $this->get_image_data_from_attachment_id( $attachment_id, $seen_srcs );
+						if ( $image_data ) {
+							$images[] = $image_data;
+						}
+					}
 				}
 			}
 		}
 		
 		return $images;
+	}
+	
+	/**
+	 * Get image data from attachment ID.
+	 *
+	 * @param int   $attachment_id Attachment ID.
+	 * @param array $seen_srcs     Already seen URLs (passed by reference).
+	 * @return array|null Image data array or null if not valid.
+	 */
+	private function get_image_data_from_attachment_id( int $attachment_id, array &$seen_srcs ): ?array {
+		// Verify attachment exists and is an image
+		$attachment = get_post( $attachment_id );
+		if ( ! $attachment || 'attachment' !== $attachment->post_type ) {
+			return null;
+		}
+		
+		// Check if it's an image mime type
+		$mime_type = get_post_mime_type( $attachment_id );
+		if ( strpos( $mime_type, 'image/' ) !== 0 ) {
+			return null;
+		}
+		
+		// Get image URL
+		$url = wp_get_attachment_url( $attachment_id );
+		if ( ! $url || isset( $seen_srcs[ $url ] ) ) {
+			return null;
+		}
+		
+		$seen_srcs[ $url ] = true;
+		
+		return array(
+			'src' => $url,
+			'alt' => get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ?: '',
+			'title' => get_the_title( $attachment_id ) ?: '',
+			'description' => wp_get_attachment_caption( $attachment_id ) ?: '',
+			'attachment_id' => $attachment_id,
+		);
 	}
 	
 	/**
@@ -428,16 +575,27 @@ class ImageExtractor {
 			return null;
 		}
 		
-		// Try to extract ID from URL
+		// Try to extract ID from URL parameter
 		if ( preg_match( '/attachment_id=(\d+)/', $url, $matches ) ) {
 			return (int) $matches[1];
 		}
 		
 		// Try attachment_url_to_postid (WordPress function)
 		if ( function_exists( 'attachment_url_to_postid' ) ) {
+			// First try with original URL
 			$id = attachment_url_to_postid( $url );
 			if ( $id > 0 ) {
 				return $id;
+			}
+			
+			// If not found, try removing size suffixes (e.g., -300x200, -242x300)
+			// WordPress generates these for intermediate image sizes
+			$url_without_size = preg_replace( '/-\d+x\d+(\.[a-zA-Z]+)$/', '$1', $url );
+			if ( $url_without_size !== $url ) {
+				$id = attachment_url_to_postid( $url_without_size );
+				if ( $id > 0 ) {
+					return $id;
+				}
 			}
 		}
 		

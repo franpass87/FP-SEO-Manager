@@ -273,5 +273,74 @@ class SerpFieldsRenderer extends FieldRenderer {
 		</div>
 		<?php
 	}
+
+	/**
+	 * Render Schema Type selector field.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return void
+	 */
+	public function render_schema_type( WP_Post $post ): void {
+		$current_schema_type = MetaHelper::get_meta_string( $post->ID, '_fp_seo_schema_type' );
+		
+		// Default schema types based on post type
+		$default_schema = 'WebPage';
+		if ( $post->post_type === 'post' ) {
+			$default_schema = 'Article';
+		} elseif ( $post->post_type === 'product' ) {
+			$default_schema = 'Product';
+		} elseif ( $post->post_type === 'fp_experience' ) {
+			$default_schema = 'TouristTrip';
+		}
+		
+		// Use default if not set
+		if ( empty( $current_schema_type ) ) {
+			$current_schema_type = $default_schema;
+		}
+
+		// Available schema types
+		$schema_types = array(
+			'Article' => __( 'Article (Articoli di blog)', 'fp-seo-performance' ),
+			'BlogPosting' => __( 'BlogPosting (Post di blog)', 'fp-seo-performance' ),
+			'NewsArticle' => __( 'NewsArticle (Notizie)', 'fp-seo-performance' ),
+			'WebPage' => __( 'WebPage (Pagine generiche)', 'fp-seo-performance' ),
+			'ContactPage' => __( 'ContactPage (Pagina contatti)', 'fp-seo-performance' ),
+			'AboutPage' => __( 'AboutPage (Pagina chi siamo)', 'fp-seo-performance' ),
+			'Product' => __( 'Product (Prodotto WooCommerce)', 'fp-seo-performance' ),
+			'TouristTrip' => __( 'TouristTrip (Esperienze turistiche)', 'fp-seo-performance' ),
+			'Event' => __( 'Event (Eventi con date specifiche)', 'fp-seo-performance' ),
+			'TouristAttraction' => __( 'TouristAttraction (Attrazioni turistiche)', 'fp-seo-performance' ),
+			'Service' => __( 'Service (Servizi offerti)', 'fp-seo-performance' ),
+			'Offer' => __( 'Offer (Prezzi e offerte)', 'fp-seo-performance' ),
+		);
+
+		?>
+		<!-- Schema Type Selector -->
+		<div>
+			<label for="fp-seo-schema-type" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
+				<span style="display: flex; align-items: center; gap: 8px;">
+					<span style="font-size: 16px;">📋</span>
+					<?php esc_html_e( 'Tipo Schema', 'fp-seo-performance' ); ?>
+					<span style="display: inline-flex; padding: 2px 8px; background: #8b5cf6; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700;">Schema.org</span>
+				</span>
+			</label>
+			<select 
+				id="fp-seo-schema-type" 
+				name="fp_seo_schema_type"
+				style="width: 100%; padding: 10px 14px; font-size: 14px; border: 2px solid #8b5cf6; border-radius: 8px; background: #fff; transition: all 0.2s ease;"
+			>
+				<?php foreach ( $schema_types as $type => $label ) : ?>
+					<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $current_schema_type, $type ); ?>>
+						<?php echo esc_html( $label ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+			<p class="description" style="margin: 8px 0 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+				<?php esc_html_e( 'Seleziona il tipo di schema più appropriato per questo contenuto. Il tipo viene usato per generare il JSON-LD Schema.org.', 'fp-seo-performance' ); ?>
+			</p>
+			<input type="hidden" name="fp_seo_schema_type_sent" value="1" />
+		</div>
+		<?php
+	}
 }
 

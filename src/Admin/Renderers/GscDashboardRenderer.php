@@ -78,10 +78,10 @@ class GscDashboardRenderer {
 	private function render_metrics_grid( array $metrics ): void {
 		?>
 		<div class="fp-seo-gsc-metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 20px 0 32px;">
-			<?php $this->render_metric_stat( '🖱️', __( 'Clicks', 'fp-seo-performance' ), number_format_i18n( $metrics['clicks'] ), true ); ?>
-			<?php $this->render_metric_stat( '👁️', __( 'Impressions', 'fp-seo-performance' ), number_format_i18n( $metrics['impressions'] ), false ); ?>
-			<?php $this->render_metric_stat( '📈', __( 'CTR', 'fp-seo-performance' ), $metrics['ctr'] . '%', false ); ?>
-			<?php $this->render_metric_stat( '🎯', __( 'Avg Position', 'fp-seo-performance' ), (string) $metrics['position'], false ); ?>
+			<?php $this->render_metric_stat( '🖱️', __( 'Clicks', 'fp-seo-performance' ), number_format_i18n( $metrics['clicks'] ?? 0 ), true ); ?>
+			<?php $this->render_metric_stat( '👁️', __( 'Impressions', 'fp-seo-performance' ), number_format_i18n( $metrics['impressions'] ?? 0 ), false ); ?>
+			<?php $this->render_metric_stat( '📈', __( 'CTR', 'fp-seo-performance' ), ( $metrics['ctr'] ?? '0' ) . '%', false ); ?>
+			<?php $this->render_metric_stat( '🎯', __( 'Avg Position', 'fp-seo-performance' ), (string) ( $metrics['position'] ?? 0 ), false ); ?>
 		</div>
 		<?php
 	}
@@ -136,8 +136,9 @@ class GscDashboardRenderer {
 			<tbody>
 				<?php foreach ( $top_pages as $page ) : ?>
 					<?php
-					$post_id = url_to_postid( $page['url'] );
-					$title   = $post_id ? get_the_title( $post_id ) : parse_url( $page['url'], PHP_URL_PATH );
+				$post_id = url_to_postid( $page['url'] ?? '' );
+				$parsed_path = parse_url( $page['url'] ?? '', PHP_URL_PATH );
+			$title       = $post_id ? get_the_title( $post_id ) : ( is_string( $parsed_path ) ? $parsed_path : ( $page['url'] ?? '' ) );
 					$edit_url = $post_id ? get_edit_post_link( $post_id ) : '';
 					?>
 					<tr>
@@ -163,4 +164,18 @@ class GscDashboardRenderer {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

@@ -25,6 +25,17 @@ class AdminAssetsServiceProvider extends AbstractAdminServiceProvider {
 	use ServiceBooterTrait;
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			\FP\SEO\Infrastructure\Providers\CoreServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Register admin assets service in the container.
 	 *
 	 * @param Container $container The container instance.

@@ -22,132 +22,35 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * CRITICAL: Disable plugin ONLY on the media library grid page (upload.php without post editing).
- * This prevents interference with thumbnail display in the media library.
- * NOTE: Using raw $_SERVER because WordPress functions may not be available yet.
- */
-$fp_seo_request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-$fp_seo_ajax_action = isset( $_REQUEST['action'] ) ? $_REQUEST['action'] : '';
+// Define plugin file constant
+if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
+	define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
+}
 
-// Only block on pure media library pages, NOT when editing posts
-$fp_seo_is_pure_media_library = (
-	// Media library grid view (upload.php without item parameter means grid view)
-	( strpos( $fp_seo_request_uri, 'upload.php' ) !== false && strpos( $fp_seo_request_uri, 'item=' ) === false ) ||
-	// Media upload popup (not when inserting into post)
-	strpos( $fp_seo_request_uri, 'media-new.php' ) !== false ||
-	// AJAX calls for media library grid only
-	( strpos( $fp_seo_request_uri, 'admin-ajax.php' ) !== false && 
-	  in_array( $fp_seo_ajax_action, array( 'query-attachments' ), true )
-	)
-);
+// Load version utility
+require_once __DIR__ . '/src/Utils/Version.php';
 
-// NOTE: Nectar Slider is now excluded from supported post types in PostTypes::analyzable()
-// so no hooks will be registered for it. The global block below is kept as a safety measure
-// but is no longer strictly necessary. It can be removed in the future if desired.
+// Define plugin version constant
+if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
+	define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.72' ) );
+}
 
-// If on pure media library page, do NOT load the plugin
-if ( $fp_seo_is_pure_media_library ) {
+// Load Kernel for bootstrap
+require_once __DIR__ . '/src/Infrastructure/Bootstrap/Kernel.php';
+
+// Initialize kernel
+$kernel = new FP\SEO\Infrastructure\Bootstrap\Kernel( __FILE__, FP_SEO_PERFORMANCE_VERSION );
+
+// Check if plugin should load (early exit for media library pages)
+if ( ! $kernel->should_load() ) {
 	return; // Exit early, plugin will not be loaded
 }
 
-// Clean up temporary variables
-unset( $fp_seo_request_uri, $fp_seo_ajax_action, $fp_seo_is_pure_media_library );
+// Initialize kernel (handles autoloading, error handling, container setup)
+$kernel->init();
 
-if ( ! defined( 'FP_SEO_PERFORMANCE_FILE' ) ) {
-		define( 'FP_SEO_PERFORMANCE_FILE', __FILE__ );
-}
-
-require_once __DIR__ . '/src/Utils/Version.php';
-
-if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-		define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.57' ) );
-}
-
-$autoload = __DIR__ . '/vendor/autoload.php';
-
-if ( is_readable( $autoload ) ) {
-	require_once $autoload;
-}
-
-// Autoloader di fallback per classi critiche se l'autoload PSR-4 non funziona
-spl_autoload_register(
-	function ( $class ) {
-		// Namespace del plugin
-		if ( strpos( $class, 'FP\\SEO\\' ) !== 0 ) {
-			return false;
-		}
-
-		// Rimuove il namespace base
-		$relative_class = substr( $class, strlen( 'FP\\SEO\\' ) );
-		
-		// Converte namespace in percorso file
-		$file = __DIR__ . '/src/' . str_replace( '\\', '/', $relative_class ) . '.php';
-
-		// Carica il file se esiste
-		if ( file_exists( $file ) ) {
-			require_once $file;
-			return true;
-		}
-
-		return false;
-	},
-	true, // Prepend per avere priorità
-	false // Non throw exception, ritorna false
-);
-
-// CRITICAL: Register error handler very early to catch fatal errors from other plugins
-// This helps prevent WordPress from completely crashing when other plugins have fatal errors
-register_shutdown_function( function() {
-	$error = error_get_last();
-	if ( $error !== null && in_array( $error['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
-		// Check if error is from FP-Multilanguage
-		if ( strpos( $error['file'], 'FP-Multilanguage' ) !== false ) {
-			// Log the error but don't break WordPress completely
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
-				error_log( 'FP SEO: Detected fatal error from FP-Multilanguage: ' . $error['message'] . ' in ' . $error['file'] . ' on line ' . $error['line'] );
-			}
-			// Don't prevent WordPress from showing the error, but log it for debugging
-		}
-	}
-} );
-
-// Carica Container prima di Plugin per evitare errori di autoload
-require_once __DIR__ . '/src/Infrastructure/Container.php';
+// Load Plugin orchestrator (now available via autoloader)
 require_once __DIR__ . '/src/Infrastructure/Plugin.php';
 
-add_action(
-	'init',
-	static function () {
-		load_plugin_textdomain(
-			'fp-seo-performance',
-			false,
-			dirname( plugin_basename( __FILE__ ) ) . '/languages'
-		);
-	},
-	0
-);
-
+// Initialize plugin (text domain and capability registration moved to CoreServiceProvider)
 FP\SEO\Infrastructure\Plugin::instance()->init();
-
-add_action(
-	'init',
-	static function () {
-		if ( ! function_exists( 'get_role' ) ) {
-			return;
-		}
-
-		$capability = \FP\SEO\Utils\Options::get_capability();
-
-		if ( empty( $capability ) || 'manage_options' === $capability ) {
-			return;
-		}
-
-		$administrator = get_role( 'administrator' );
-
-		if ( $administrator && ! $administrator->has_cap( $capability ) ) {
-			$administrator->add_cap( $capability );
-		}
-	},
-	5
-);

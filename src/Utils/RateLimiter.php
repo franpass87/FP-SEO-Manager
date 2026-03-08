@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Utils;
 
 use FP\SEO\Exceptions\RateLimitException;
+use FP\SEO\Infrastructure\Contracts\CacheInterface;
 
 /**
  * Rate limiter with sliding window algorithm.
@@ -52,12 +53,12 @@ class RateLimiter {
 	/**
 	 * Cache instance.
 	 */
-	private AdvancedCache $cache;
+	private CacheInterface $cache;
 
 	/**
 	 * Constructor.
 	 */
-	public function __construct( AdvancedCache $cache ) {
+	public function __construct( CacheInterface $cache ) {
 		$this->cache = $cache;
 	}
 
@@ -229,13 +230,13 @@ class RateLimiter {
 			$requests = $this->clean_old_requests( $requests, $window );
 			
 			$limit_key = 'requests_per_' . $window;
-			$limit = $limits[ $limit_key ];
-			
+			$limit     = $limits[ $limit_key ] ?? 0;
+
 			$status[ $window ] = [
 				'current' => count( $requests ),
 				'limit' => $limit,
 				'remaining' => max( 0, $limit - count( $requests ) ),
-				'percentage' => round( ( count( $requests ) / $limit ) * 100, 2 ),
+				'percentage' => $limit > 0 ? round( ( count( $requests ) / $limit ) * 100, 2 ) : 0,
 				'reset_time' => $this->get_reset_time( $window ),
 			];
 		}

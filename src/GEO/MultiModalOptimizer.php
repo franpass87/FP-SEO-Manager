@@ -78,9 +78,7 @@ class MultiModalOptimizer {
 		$images  = array();
 
 		// Extract img tags
-		preg_match_all( '/<img[^>]+>/i', $content, $img_tags );
-
-		if ( empty( $img_tags[0] ) ) {
+		if ( false === preg_match_all( '/<img[^>]+>/i', $content, $img_tags ) || empty( $img_tags[0] ) ) {
 			return $images;
 		}
 
@@ -94,8 +92,6 @@ class MultiModalOptimizer {
 
 		// Featured image removed - no longer using featured images
 		// Images array will only contain images from content, not featured images
-			}
-		}
 
 		return $images;
 	}
@@ -328,11 +324,10 @@ class MultiModalOptimizer {
 
 		// Look for nearest heading before image
 		$content_before = substr( $content, 0, $pos );
-		$headings       = array();
 
-		preg_match_all( '/<h[2-6][^>]*>(.*?)<\/h[2-6]>/is', $content_before, $heading_matches );
+		$heading_match_result = preg_match_all( '/<h[2-6][^>]*>(.*?)<\/h[2-6]>/is', $content_before, $heading_matches );
 
-		if ( ! empty( $heading_matches[1] ) ) {
+		if ( false !== $heading_match_result && ! empty( $heading_matches[1] ) ) {
 			$last_heading = end( $heading_matches[1] );
 			return 'Section: ' . wp_strip_all_tags( $last_heading );
 		}
@@ -394,12 +389,15 @@ class MultiModalOptimizer {
 			$alt_caption = ( $image['alt'] ?? '' ) . ' ' . ( $image['caption'] ?? '' );
 
 			// Extract quoted strings
-			preg_match_all( '/"([^"]+)"/', $alt_caption, $quoted );
+			$quoted_result  = preg_match_all( '/"([^"]+)"/', $alt_caption, $quoted );
 
 			// Extract numbers (metrics, percentages, etc.)
-			preg_match_all( '/\b\d+[%]?\b/', $alt_caption, $numbers );
+			$numbers_result = preg_match_all( '/\b\d+[%]?\b/', $alt_caption, $numbers );
 
-			$ocr_text = array_merge( $quoted[1] ?? array(), $numbers[0] ?? array() );
+			$ocr_text = array_merge(
+				( false !== $quoted_result  ? $quoted[1]  : array() ),
+				( false !== $numbers_result ? $numbers[0] : array() )
+			);
 
 			return implode( ', ', $ocr_text );
 		}

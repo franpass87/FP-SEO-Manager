@@ -73,7 +73,7 @@ class ProductSchemaGenerator extends AbstractSchemaGenerator {
 			'type' => 'review',
 		) );
 
-		if ( ! empty( $reviews ) ) {
+		if ( is_array( $reviews ) && ! empty( $reviews ) ) {
 			$schema['aggregateRating'] = array(
 				'@type' => 'AggregateRating',
 				'ratingValue' => $product->get_average_rating(),
@@ -110,5 +110,19 @@ class ProductSchemaGenerator extends AbstractSchemaGenerator {
 		return 'Product';
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

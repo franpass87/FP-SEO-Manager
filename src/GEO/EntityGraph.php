@@ -87,7 +87,7 @@ class EntityGraph {
 		foreach ( $auto_entities as $auto_entity ) {
 			$exists = false;
 			foreach ( $entities as $entity ) {
-				if ( strtolower( $entity['name'] ) === strtolower( $auto_entity['name'] ) ) {
+				if ( strtolower( $entity['name'] ?? '' ) === strtolower( $auto_entity['name'] ?? '' ) ) {
 					$exists = true;
 					break;
 				}
@@ -113,9 +113,9 @@ class EntityGraph {
 		$entities = array();
 
 		// Extract proper nouns (capitalized words)
-		preg_match_all( '/\b[A-ZÀÈÉÌÒÙ][a-zàèéìòù]{2,}(?:\s+[A-ZÀÈÉÌÒÙ][a-zàèéìòù]{2,})*\b/', $content, $matches );
+		$preg_result = preg_match_all( '/\b[A-ZÀÈÉÌÒÙ][a-zàèéìòù]{2,}(?:\s+[A-ZÀÈÉÌÒÙ][a-zàèéìòù]{2,})*\b/', $content, $matches );
 
-		if ( empty( $matches[0] ) ) {
+		if ( false === $preg_result || empty( $matches[0] ) ) {
 			return $entities;
 		}
 
@@ -155,10 +155,9 @@ class EntityGraph {
 	 */
 	private function detect_entity_type( string $entity_name, string $content ): string {
 		// Context analysis around entity mentions
-		$pattern = '/(?:.{0,50})\b' . preg_quote( $entity_name, '/' ) . '\b(?:.{0,50})/i';
-		preg_match_all( $pattern, $content, $contexts );
-
-		$context_text = implode( ' ', $contexts[0] ?? array() );
+		$pattern      = '/(?:.{0,50})\b' . preg_quote( $entity_name, '/' ) . '\b(?:.{0,50})/i';
+		$preg_result  = preg_match_all( $pattern, $content, $contexts );
+		$context_text = ( false !== $preg_result ) ? implode( ' ', $contexts[0] ) : '';
 		$context_lower = strtolower( $context_text );
 
 		// Technology indicators
@@ -210,7 +209,7 @@ class EntityGraph {
 		}
 
 		// Fallback: get first sentence containing entity
-		$sentences = preg_split( '/[.!?]/', $content );
+		$sentences = preg_split( '/[.!?]/', $content ) ?: array();
 		foreach ( $sentences as $sentence ) {
 			if ( stripos( $sentence, $entity_name ) !== false && strlen( $sentence ) > 20 ) {
 				return trim( $sentence );
@@ -376,7 +375,7 @@ class EntityGraph {
 	 */
 	private function detect_relationship_predicate( string $entity1, string $entity2, string $content ): ?string {
 		// Look for both entities in same sentence
-		$sentences = preg_split( '/[.!?]/', $content );
+		$sentences = preg_split( '/[.!?]/', $content ) ?: array();
 
 		foreach ( $sentences as $sentence ) {
 			$has_entity1 = stripos( $sentence, $entity1 ) !== false;
@@ -470,8 +469,8 @@ class EntityGraph {
 			'topics'     => $tags,
 			'language'   => $this->detect_language( $post ),
 			'post_type'  => $post->post_type,
-			'created_at' => gmdate( 'c', strtotime( $post->post_date_gmt ) ),
-			'updated_at' => gmdate( 'c', strtotime( $post->post_modified_gmt ) ),
+		'created_at' => ( false !== ( $ts_created = strtotime( $post->post_date_gmt ) ) ) ? gmdate( 'c', $ts_created ) : gmdate( 'c' ),
+		'updated_at' => ( false !== ( $ts_updated = strtotime( $post->post_modified_gmt ) ) ) ? gmdate( 'c', $ts_updated ) : gmdate( 'c' ),
 		);
 	}
 
@@ -533,7 +532,7 @@ class EntityGraph {
 		// Maximum possible relationships in undirected graph
 		$max_relationships = ( $entity_count * ( $entity_count - 1 ) ) / 2;
 
-		if ( $max_relationships === 0 || $max_relationships < 1 ) {
+		if ( $max_relationships < 1 ) {
 			return 0.0;
 		}
 

@@ -49,7 +49,7 @@ class KeywordsMetaboxScriptsManager {
 	 * @return void
 	 */
 	private function render_scripts(): void {
-		$post_id = get_the_ID();
+		$post_id = get_the_ID() ?: 0;
 		$nonce   = wp_create_nonce( 'fp_seo_keywords_nonce' );
 		?>
 		<script>
@@ -177,5 +177,19 @@ class KeywordsMetaboxScriptsManager {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

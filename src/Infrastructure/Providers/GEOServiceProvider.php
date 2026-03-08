@@ -15,16 +15,17 @@ namespace FP\SEO\Infrastructure\Providers;
 
 use FP\SEO\Infrastructure\AbstractServiceProvider;
 use FP\SEO\Infrastructure\Container;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Infrastructure\Traits\ConditionalServiceTrait;
 use FP\SEO\Infrastructure\Traits\HookHelperTrait;
 use FP\SEO\Infrastructure\Traits\ServiceRegistrationTrait;
 use FP\SEO\GEO\Router;
-use FP\SEO\Front\SchemaGeo;
-use FP\SEO\Shortcodes\GeoShortcodes;
-use FP\SEO\Admin\GeoMetaBox;
+use FP\SEO\Frontend\Renderers\SchemaGeoRenderer;
+// GeoShortcodes is registered in FrontendServiceProvider
+use FP\SEO\Admin\GeoMetabox;
 use FP\SEO\Admin\GeoSettings;
-use FP\SEO\Linking\LinkingAjax;
+use FP\SEO\Links\Handlers\LinkingAjax;
 use FP\SEO\Integrations\AutoIndexing;
 use FP\SEO\GEO\FreshnessSignals;
 use FP\SEO\GEO\CitationFormatter;
@@ -32,6 +33,7 @@ use FP\SEO\GEO\AuthoritySignals;
 use FP\SEO\GEO\SemanticChunker;
 use FP\SEO\GEO\EntityGraph;
 use FP\SEO\GEO\MultiModalOptimizer;
+use FP\SEO\GEO\ImageSeoOptimizer;
 use FP\SEO\GEO\TrainingDatasetFormatter;
 use FP\SEO\Utils\Logger;
 
@@ -48,22 +50,52 @@ class GEOServiceProvider extends AbstractServiceProvider {
 	use ServiceRegistrationTrait;
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			CoreServiceProvider::class,
+			FrontendServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Register GEO services in the container.
 	 *
 	 * @param Container $container The container instance.
 	 * @return void
 	 */
 	public function register( Container $container ): void {
-		// Only register if GEO is enabled
+		// Register ImageSeoOptimizer with dependencies (always available, not just when GEO is enabled)
+		$container->singleton( ImageSeoOptimizer::class, function( Container $container ) {
+			$logger = $container->get( \FP\SEO\Infrastructure\Contracts\LoggerInterface::class );
+			$image_extractor = new \FP\SEO\Editor\ImageExtractor();
+			$image_manager = new \FP\SEO\Editor\Services\ImageManagementService();
+			return new ImageSeoOptimizer( $logger, $image_extractor, $image_manager );
+		} );
+		
+		// Alias for backward compatibility with string-based access
+		$container->bind( 'image_seo_optimizer', function( Container $container ) {
+			return $container->get( ImageSeoOptimizer::class );
+		} );
+
+		// Only register GEO-specific services if GEO is enabled
 		if ( ! $this->is_geo_enabled() ) {
 			return;
 		}
 
 		// Frontend GEO services (always register if GEO is enabled)
+		// Register SchemaGeoRenderer with HookManager dependency
+		$container->singleton( SchemaGeoRenderer::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			return new SchemaGeoRenderer( $hook_manager );
+		} );
+
+		// Note: GeoShortcodes is registered in FrontendServiceProvider with proper dependencies
 		$this->register_singletons( $container, array(
 			Router::class,
-			SchemaGeo::class,
-			GeoShortcodes::class,
 			AutoIndexing::class, // Frontend + backend
 		) );
 
@@ -80,9 +112,19 @@ class GEOServiceProvider extends AbstractServiceProvider {
 
 		// Admin GEO services (only in admin context)
 		if ( $this->is_admin_context() ) {
+			// Register GeoMetabox with HookManager dependency
+			$container->singleton( GeoMetabox::class, function( Container $container ) {
+				$hook_manager = $container->get( HookManagerInterface::class );
+				return new GeoMetabox( $hook_manager );
+			} );
+
+			// Register GeoSettings with HookManager dependency
+			$container->singleton( GeoSettings::class, function( Container $container ) {
+				$hook_manager = $container->get( HookManagerInterface::class );
+				return new GeoSettings( $hook_manager );
+			} );
+
 			$this->register_singletons( $container, array(
-				GeoMetaBox::class,
-				GeoSettings::class,
 				LinkingAjax::class,
 			) );
 		}
@@ -101,20 +143,20 @@ class GEOServiceProvider extends AbstractServiceProvider {
 		}
 
 		// Boot frontend GEO services
+		// Note: GeoShortcodes is booted in FrontendServiceProvider
+		$this->boot_service( $container, SchemaGeoRenderer::class, 'warning', 'Failed to register SchemaGeoRenderer' );
 		$this->boot_services_simple( $container, array(
 			Router::class,
-			SchemaGeo::class,
-			GeoShortcodes::class,
 			AutoIndexing::class,
 		), 'warning', 'Failed to register GEO' );
 
-		// Boot GeoMetaBox (admin only)
+		// Boot GeoMetabox (admin only)
 		if ( $this->is_admin_context() ) {
 			$this->boot_service(
 				$container,
-				GeoMetaBox::class,
+				GeoMetabox::class,
 				'warning',
-				'Failed to register GeoMetaBox'
+				'Failed to register GeoMetabox'
 			);
 		}
 
@@ -162,8 +204,8 @@ class GEOServiceProvider extends AbstractServiceProvider {
 			flush_rewrite_rules();
 		} catch ( \Throwable $e ) {
 			// Log errore ma non bloccare l'attivazione
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && class_exists( '\FP\SEO\Utils\Logger' ) ) {
-				\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to flush rewrite rules on GEO activation', array(
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				\FP\SEO\Utils\LoggerHelper::error( 'FP SEO: Failed to flush rewrite rules on GEO activation', array(
 					'error' => $e->getMessage(),
 				) );
 			}

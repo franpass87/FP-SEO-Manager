@@ -25,6 +25,17 @@ use FP\SEO\Editor\SchemaMetaboxes;
 class SchemaMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			\FP\SEO\Infrastructure\Providers\CoreServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Get the metabox class name that this provider manages.
 	 *
 	 * @return string The metabox class name.

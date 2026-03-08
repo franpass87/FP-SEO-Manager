@@ -53,12 +53,12 @@ class ArticleSchemaGenerator extends AbstractSchemaGenerator {
 		$schema = $this->build_base_schema();
 		$schema['headline'] = get_the_title( $post_id );
 		$schema['url'] = get_permalink( $post_id );
-		$schema['datePublished'] = get_the_date( 'c', $post_id );
-		$schema['dateModified'] = get_the_modified_date( 'c', $post_id );
+		$schema['datePublished']  = get_the_date( 'c', $post_id ) ?: '';
+		$schema['dateModified']   = get_the_modified_date( 'c', $post_id ) ?: '';
 		$schema['author'] = array(
 			'@type' => 'Person',
-			'name' => $author->display_name ?? '',
-			'url' => $author ? get_author_posts_url( $author->ID ) : '',
+			'name' => $author ? $author->display_name : '',
+			'url'  => $author ? get_author_posts_url( $author->ID ) : '',
 		);
 		$schema['publisher'] = array(
 			'@type' => 'Organization',

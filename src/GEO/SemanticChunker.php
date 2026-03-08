@@ -255,7 +255,7 @@ class SemanticChunker {
 	 */
 	private function split_into_paragraphs( string $text ): array {
 		// Split by double newlines or paragraph tags
-		$paragraphs = preg_split( '/\n\s*\n|<\/?p[^>]*>/i', $text );
+		$paragraphs = preg_split( '/\n\s*\n|<\/?p[^>]*>/i', $text ) ?: array();
 
 		// Filter empty paragraphs
 		return array_values( array_filter( array_map( 'trim', $paragraphs ) ) );
@@ -414,8 +414,8 @@ class SemanticChunker {
 				'post_title' => $post->post_title,
 				'post_url'   => get_permalink( $post ),
 				'author'     => get_the_author_meta( 'display_name', $post->post_author ),
-				'published'  => gmdate( 'c', strtotime( $post->post_date_gmt ) ),
-				'updated'    => gmdate( 'c', strtotime( $post->post_modified_gmt ) ),
+				'published'  => ( $ts_pub = strtotime( $post->post_date_gmt ) ) ? gmdate( 'c', $ts_pub ) : gmdate( 'c' ),
+				'updated'    => ( $ts_upd = strtotime( $post->post_modified_gmt ) ) ? gmdate( 'c', $ts_upd ) : gmdate( 'c' ),
 			);
 		}
 

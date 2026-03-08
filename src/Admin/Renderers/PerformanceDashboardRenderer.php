@@ -158,10 +158,16 @@ class PerformanceDashboardRenderer {
 				<span class="fp-seo-tooltip-trigger" title="<?php echo esc_attr( __( 'Metriche in tempo reale delle performance del plugin. Valori bassi = buono.', 'fp-seo-performance' ) ); ?>">ℹ️</span>
 			</h2>
 			<div class="metrics-grid">
-				<?php $this->render_metric_item( '⏱️', __( 'Execution Time', 'fp-seo-performance' ), esc_attr( __( 'Tempo medio di esecuzione delle operazioni del plugin. Ottimale: <0.5s, Buono: <1s, Da migliorare: >1s', 'fp-seo-performance' ) ), round( $performance_data['execution_time']['total'], 3 ) . 's', $performance_data['execution_time']['total'] < 1 ); ?>
-				<?php $this->render_metric_item( '🗄️', __( 'Database Queries', 'fp-seo-performance' ), esc_attr( __( 'Numero di query al database. Meno query = sito più veloce. Ottimale: <50, Buono: <100, Troppo: >150', 'fp-seo-performance' ) ), (string) $performance_data['database']['total_queries'], $performance_data['database']['total_queries'] < 100 ); ?>
-				<?php $this->render_metric_item( '🔌', __( 'API Calls', 'fp-seo-performance' ), esc_attr( __( 'Chiamate a servizi esterni (OpenAI, Google API, ecc). Troppe chiamate rallentano il sito. Usa la cache!', 'fp-seo-performance' ) ), (string) $performance_data['api_calls']['total_calls'], $performance_data['api_calls']['total_calls'] < 10 ); ?>
-				<?php $this->render_metric_item( '💾', __( 'Memory Usage', 'fp-seo-performance' ), esc_attr( __( 'Memoria RAM usata dal plugin. Ottimale: <50MB, Buono: <100MB, Alto: >150MB. Se troppo alta, disattiva funzionalità non necessarie.', 'fp-seo-performance' ) ), $performance_data['memory']['peak_mb'] . 'MB', $performance_data['memory']['peak_mb'] < 100 ); ?>
+			<?php
+			$exec_total   = $performance_data['execution_time']['total'] ?? 0;
+			$db_queries   = $performance_data['database']['total_queries'] ?? 0;
+			$api_calls    = $performance_data['api_calls']['total_calls'] ?? 0;
+			$memory_peak  = $performance_data['memory']['peak_mb'] ?? 0;
+			?>
+			<?php $this->render_metric_item( '⏱️', __( 'Execution Time', 'fp-seo-performance' ), esc_attr( __( 'Tempo medio di esecuzione delle operazioni del plugin. Ottimale: <0.5s, Buono: <1s, Da migliorare: >1s', 'fp-seo-performance' ) ), round( $exec_total, 3 ) . 's', $exec_total < 1 ); ?>
+			<?php $this->render_metric_item( '🗄️', __( 'Database Queries', 'fp-seo-performance' ), esc_attr( __( 'Numero di query al database. Meno query = sito più veloce. Ottimale: <50, Buono: <100, Troppo: >150', 'fp-seo-performance' ) ), (string) $db_queries, $db_queries < 100 ); ?>
+			<?php $this->render_metric_item( '🔌', __( 'API Calls', 'fp-seo-performance' ), esc_attr( __( 'Chiamate a servizi esterni (OpenAI, Google API, ecc). Troppe chiamate rallentano il sito. Usa la cache!', 'fp-seo-performance' ) ), (string) $api_calls, $api_calls < 10 ); ?>
+			<?php $this->render_metric_item( '💾', __( 'Memory Usage', 'fp-seo-performance' ), esc_attr( __( 'Memoria RAM usata dal plugin. Ottimale: <50MB, Buono: <100MB, Alto: >150MB. Se troppo alta, disattiva funzionalità non necessarie.', 'fp-seo-performance' ) ), $memory_peak . 'MB', $memory_peak < 100 ); ?>
 			</div>
 		</div>
 		<?php

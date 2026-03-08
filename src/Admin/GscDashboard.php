@@ -13,6 +13,7 @@ namespace FP\SEO\Admin;
 
 use FP\SEO\Admin\Renderers\GscDashboardRenderer;
 use FP\SEO\Integrations\GscData;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Adds GSC widgets to SEO Performance dashboard
@@ -32,18 +33,32 @@ class GscDashboard {
 	private $renderer;
 
 	/**
-	 * Constructor
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
 	 */
-	public function __construct() {
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
 		$this->gsc_data = new GscData();
 		$this->renderer = new GscDashboardRenderer();
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
 	 * Register hooks
 	 */
 	public function register(): void {
-		add_action( 'fpseo_dashboard_after_quick_stats', array( $this, 'render_gsc_widget' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'fpseo_dashboard_after_quick_stats', array( $this, 'render_gsc_widget' ) );
+		} else {
+			add_action( 'fpseo_dashboard_after_quick_stats', array( $this, 'render_gsc_widget' ) );
+		}
 	}
 
 	/**

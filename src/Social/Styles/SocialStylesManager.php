@@ -41,6 +41,16 @@ class SocialStylesManager {
 	 */
 	public function register_hooks(): void {
 		add_action( 'admin_head', array( $this, 'render_all_styles' ) );
+		add_action( 'admin_footer', array( $this, 'render_all_styles' ) );
+	}
+	
+	/**
+	 * Render styles inline (for use in metabox).
+	 *
+	 * @return void
+	 */
+	public function render_inline(): void {
+		$this->render_all_styles();
 	}
 
 	/**
@@ -84,6 +94,46 @@ class SocialStylesManager {
 	private function render_social_icon_styles(): void {
 		?>
 		/* Enhanced Social Media Styles */
+		.fp-seo-ui {
+			width: 100%;
+		}
+
+		.fp-seo-card {
+			background: #fff;
+			border: 1px solid #e5e7eb;
+			border-radius: 8px;
+			box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+			overflow: hidden;
+		}
+
+		.fp-seo-card-header {
+			padding: 16px 20px;
+			border-bottom: 1px solid #e5e7eb;
+			background: #f9fafb;
+		}
+
+		.fp-seo-heading-3 {
+			margin: 0;
+			font-size: 16px;
+			font-weight: 600;
+			color: #111827;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.fp-seo-text-sm {
+			font-size: 13px;
+		}
+
+		.fp-seo-text-muted {
+			color: #6b7280;
+		}
+
+		.fp-seo-card-body {
+			padding: 20px;
+		}
+
 		.fp-seo-social-icon {
 			margin-right: var(--fp-seo-space-2);
 		}
@@ -101,25 +151,63 @@ class SocialStylesManager {
 	 */
 	private function render_tab_styles(): void {
 		?>
+		.fp-seo-tabs {
+			display: flex;
+			gap: 8px;
+			margin-bottom: 20px;
+			border-bottom: 2px solid #e5e7eb;
+		}
+
 		.fp-seo-tab {
 			position: relative;
 			overflow: hidden;
+			padding: 12px 16px;
+			background: transparent;
+			border: none;
+			border-bottom: 3px solid transparent;
+			cursor: pointer;
+			font-size: 14px;
+			font-weight: 500;
+			color: #6b7280;
+			transition: all 0.2s ease;
+			display: flex;
+			align-items: center;
+			gap: 6px;
 		}
 
-		.fp-seo-tab::before {
-			content: '';
-			position: absolute;
-			bottom: 0;
-			left: 0;
-			right: 0;
-			height: 3px;
-			background: var(--platform-color);
-			transform: scaleX(0);
-			transition: var(--fp-seo-transition);
+		.fp-seo-tab:hover {
+			color: #111827;
+			background: #f9fafb;
 		}
 
-		.fp-seo-tab-active::before {
-			transform: scaleX(1);
+		.fp-seo-tab-active {
+			color: var(--platform-color, #3b82f6);
+			border-bottom-color: var(--platform-color, #3b82f6);
+			font-weight: 600;
+		}
+
+		.fp-seo-tab-label {
+			display: inline-block;
+		}
+
+		.fp-seo-tab-content {
+			display: none;
+		}
+
+		.fp-seo-tab-content-active {
+			display: block;
+			animation: fadeIn 0.3s ease;
+		}
+
+		@keyframes fadeIn {
+			from {
+				opacity: 0;
+				transform: translateY(10px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
 		}
 		<?php
 	}
@@ -221,6 +309,103 @@ class SocialStylesManager {
 	 */
 	private function render_form_styles(): void {
 		?>
+		.fp-seo-form-fields {
+			margin-top: 20px;
+		}
+
+		.fp-seo-form-group {
+			margin-bottom: 16px;
+		}
+
+		.fp-seo-label {
+			display: block;
+			margin-bottom: 6px;
+			font-size: 13px;
+			font-weight: 500;
+			color: #374151;
+		}
+
+		.fp-seo-char-count {
+			float: right;
+			font-size: 12px;
+			color: #6b7280;
+			font-weight: normal;
+		}
+
+		.fp-seo-input,
+		.fp-seo-textarea {
+			width: 100%;
+			padding: 8px 12px;
+			border: 1px solid #d1d5db;
+			border-radius: 6px;
+			font-size: 14px;
+			transition: border-color 0.2s ease;
+		}
+
+		.fp-seo-input:focus,
+		.fp-seo-textarea:focus {
+			outline: none;
+			border-color: #3b82f6;
+			box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+		}
+
+		.fp-seo-textarea {
+			resize: vertical;
+			min-height: 80px;
+		}
+
+		.fp-seo-image-input-group {
+			display: flex;
+			gap: 8px;
+		}
+
+		.fp-seo-image-input-group .fp-seo-input {
+			flex: 1;
+		}
+
+		.fp-seo-btn {
+			padding: 8px 16px;
+			border: 1px solid #d1d5db;
+			border-radius: 6px;
+			background: #fff;
+			color: #374151;
+			font-size: 14px;
+			font-weight: 500;
+			cursor: pointer;
+			transition: all 0.2s ease;
+		}
+
+		.fp-seo-btn:hover {
+			background: #f9fafb;
+			border-color: #9ca3af;
+		}
+
+		.fp-seo-btn-primary {
+			background: #3b82f6;
+			color: #fff;
+			border-color: #3b82f6;
+		}
+
+		.fp-seo-btn-primary:hover {
+			background: #2563eb;
+			border-color: #2563eb;
+		}
+
+		.fp-seo-btn-secondary {
+			background: #fff;
+			color: #374151;
+			border-color: #d1d5db;
+		}
+
+		.fp-seo-btn-sm {
+			padding: 6px 12px;
+			font-size: 13px;
+		}
+
+		.fp-seo-media-button {
+			white-space: nowrap;
+		}
+
 		.fp-seo-form-control-group {
 			display: flex;
 			gap: var(--fp-seo-space-2);
@@ -370,5 +555,19 @@ class SocialStylesManager {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

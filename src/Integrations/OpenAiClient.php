@@ -12,9 +12,10 @@ declare(strict_types=1);
 namespace FP\SEO\Integrations;
 
 use OpenAI\Client as OpenAiClientClass;
-use OpenAI\OpenAI as OpenAiFactory;
-use FP\SEO\Utils\Options;
-use FP\SEO\Utils\Logger;
+// Don't import OpenAI\OpenAI to avoid triggering autoloader before we can control it
+// Use fully qualified class name \OpenAI\OpenAI instead
+use FP\SEO\Infrastructure\Contracts\LoggerInterface;
+use FP\SEO\Infrastructure\Contracts\OptionsInterface;
 
 /**
  * Handles OpenAI API integration for AI-powered SEO suggestions.
@@ -29,44 +30,71 @@ class OpenAiClient {
 	private ?OpenAiClientClass $client = null;
 
 	/**
+	 * Logger instance.
+	 *
+	 * @var LoggerInterface
+	 */
+	private LoggerInterface $logger;
+
+	/**
+	 * Options instance.
+	 *
+	 * @var OptionsInterface
+	 */
+	private OptionsInterface $options;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param LoggerInterface  $logger  Logger instance.
+	 * @param OptionsInterface $options Options instance.
+	 */
+	public function __construct( LoggerInterface $logger, OptionsInterface $options ) {
+		$this->logger  = $logger;
+		$this->options = $options;
+	}
+
+	/**
 	 * Initialize the OpenAI client.
 	 *
 	 * @return OpenAiClientClass|null
 	 */
 	private function get_client(): ?OpenAiClientClass {
+		// Return cached client if available
 		if ( null !== $this->client ) {
 			return $this->client;
 		}
 
 		$api_key = $this->get_api_key();
-
 		if ( empty( $api_key ) ) {
 			return null;
 		}
 
-		// Verify OpenAI factory class exists
-		if ( ! class_exists( OpenAiFactory::class ) ) {
-			Logger::error( 'OpenAI library not loaded', array(
-				'openai_factory_class' => class_exists( OpenAiFactory::class ),
-				'client_class' => class_exists( OpenAiClientClass::class ),
-				'autoload_working' => spl_autoload_functions() !== false,
-			) );
-			return null;
-		}
-
+		$factory_class = '\\OpenAI\\OpenAI';
+		
 		try {
-			// Use the OpenAI factory class to create client
-			$this->client = OpenAiFactory::client( $api_key );
-			
+			// Use call_user_func with fully qualified class name
+			// The custom autoloader registered in Kernel should handle loading safely
+			$this->client = call_user_func( array( $factory_class, 'client' ), $api_key );
 			return $this->client;
 		} catch ( \Throwable $e ) {
-			Logger::error( 'Failed to initialize OpenAI client', array(
-				'error' => $e->getMessage(),
-				'trace' => $e->getTraceAsString(),
-				'file' => $e->getFile(),
-				'line' => $e->getLine(),
-				'api_key_length' => strlen( $api_key ),
-			) );
+			$error_message = $e->getMessage();
+			
+			// If it's a redeclaration error, log it
+			if ( strpos( $error_message, 'Cannot redeclare' ) !== false ) {
+				$this->logger->error( 'OpenAI class redeclaration error', array(
+					'error' => $error_message,
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+					'class_exists' => class_exists( $factory_class, false ),
+				) );
+			} else {
+				$this->logger->error( 'Failed to create OpenAI client', array(
+					'error' => $error_message,
+					'file' => $e->getFile(),
+					'line' => $e->getLine(),
+				) );
+			}
 			return null;
 		}
 	}
@@ -77,12 +105,12 @@ class OpenAiClient {
 	 * @return string
 	 */
 	private function get_api_key(): string {
-		$api_key = Options::get_option( 'ai.openai_api_key', '' );
+		$api_key = $this->options->get_option( 'ai.openai_api_key', '' );
 		
 		// Debug logging to help diagnose API key issues
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			$all_options = Options::get();
-			Logger::debug( 'OpenAI API key retrieval', array(
+			$all_options = $this->options->get();
+			$this->logger->debug( 'OpenAI API key retrieval', array(
 				'api_key_length' => strlen( $api_key ),
 				'api_key_empty' => empty( $api_key ),
 				'ai_section_exists' => isset( $all_options['ai'] ),
@@ -111,6 +139,16 @@ class OpenAiClient {
 	 * @param string $title         Current post title.
 	 * @param string $focus_keyword Optional focus keyword to optimize for.
 	 * @return array{success: bool, data?: array{seo_title: string, meta_description: string, slug: string, focus_keyword: string}, error?: string}
+	 * @throws \RuntimeException If OpenAI API call fails.
+	 * @throws \InvalidArgumentException If post_id is invalid.
+	 * 
+	 * @example
+	 * $client = new OpenAiClient();
+	 * $result = $client->generate_seo_suggestions(123, 'Post content...', 'Post Title', 'keyword');
+	 * if ($result['success']) {
+	 *     $seo_title = $result['data']['seo_title'];
+	 *     $meta_desc = $result['data']['meta_description'];
+	 * }
 	 */
 	public function generate_seo_suggestions( int $post_id, string $content, string $title, string $focus_keyword = '' ): array {
 		// Pulisci il contenuto HTML per cache key
@@ -159,7 +197,7 @@ class OpenAiClient {
 			try {
 				$context = $this->gather_post_context( $post_id );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'Error gathering post context', array(
+				$this->logger->error( 'Error gathering post context', array(
 					'post_id' => $post_id,
 					'error' => $e->getMessage(),
 				) );
@@ -170,7 +208,7 @@ class OpenAiClient {
 			try {
 				$prompt = $this->build_prompt( $title, $clean_content, $language, $focus_keyword, $context );
 			} catch ( \Throwable $e ) {
-				Logger::error( 'Error building prompt', array(
+				$this->logger->error( 'Error building prompt', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 				) );
@@ -187,7 +225,7 @@ class OpenAiClient {
 				$model = 'gpt-5-nano'; // Default fallback
 			}
 		} catch ( \Throwable $e ) {
-			Logger::error( 'Error getting model', array( 'error' => $e->getMessage() ) );
+			$this->logger->error( 'Error getting model', array( 'error' => $e->getMessage() ) );
 			$model = 'gpt-5-nano'; // Default fallback
 		}
 
@@ -204,27 +242,29 @@ class OpenAiClient {
 					'content' => $prompt,
 				),
 			),
-			'max_completion_tokens'  => 4096, // Aumentato a 4096 per GPT-5 Nano (massimo sicuro)
 		);
 
-		// GPT-5 Nano only supports temperature=1 (default), so omit it for that model
+		// GPT-5 Nano requires max_completion_tokens, other models use max_tokens
 		$model_lower = strtolower( $model );
-		if ( strpos( $model_lower, 'gpt-5-nano' ) === false ) {
+		if ( strpos( $model_lower, 'gpt-5-nano' ) !== false ) {
+			$api_params['max_completion_tokens'] = 4096; // GPT-5 Nano requires this parameter (massimo sicuro)
+		} else {
+			$api_params['max_tokens'] = 4096; // Standard models use max_tokens
 			$api_params['temperature'] = 0.7;
 		}
 
-		Logger::debug( 'Calling OpenAI API', array( 'model' => $api_params['model'], 'params' => array_keys( $api_params ) ) );
+		$this->logger->debug( 'Calling OpenAI API', array( 'model' => $api_params['model'], 'params' => array_keys( $api_params ) ) );
 
 		try {
 			$response = $client->chat()->create( $api_params );
-			Logger::debug( 'OpenAI API response received', array( 'type' => gettype( $response ), 'choices_count' => isset( $response->choices ) ? count( $response->choices ) : 0 ) );
+			$this->logger->debug( 'OpenAI API response received', array( 'type' => gettype( $response ), 'choices_count' => isset( $response->choices ) ? count( $response->choices ) : 0 ) );
 			
 			// Debug full response structure
 			if ( isset( $response->choices[0] ) ) {
 				$message = $response->choices[0]->message;
 				$finish_reason = $response->choices[0]->finishReason ?? 'unknown';
 				
-				Logger::debug( 'OpenAI response details', array(
+				$this->logger->debug( 'OpenAI response details', array(
 					'finish_reason' => $finish_reason,
 					'message_role' => $message->role ?? 'NULL',
 					'has_content' => ! empty( $message->content ),
@@ -233,21 +273,21 @@ class OpenAiClient {
 				
 				// Check if there's a refusal
 				if ( ! empty( $message->refusal ) ) {
-					Logger::error( 'OpenAI request refused', array( 'refusal' => $message->refusal ) );
+					$this->logger->error( 'OpenAI request refused', array( 'refusal' => $message->refusal ) );
 					return array(
 						'success' => false,
 						'error'   => sprintf( __( 'OpenAI ha rifiutato la richiesta: %s', 'fp-seo-performance' ), $message->refusal ),
 					);
 				}
 			} else {
-				Logger::error( 'No choices in OpenAI response' );
+				$this->logger->error( 'No choices in OpenAI response' );
 				return array(
 					'success' => false,
 					'error'   => __( 'Risposta OpenAI non valida: nessuna scelta disponibile.', 'fp-seo-performance' ),
 				);
 			}
-		} catch ( \Exception $e ) {
-			Logger::error( 'OpenAI API call exception', array( 'message' => $e->getMessage() ) );
+		} catch ( \Throwable $e ) {
+			$this->logger->error( 'OpenAI API call exception', array( 'message' => $e->getMessage() ) );
 			return array(
 				'success' => false,
 				'error'   => sprintf( __( 'Errore API OpenAI: %s', 'fp-seo-performance' ), $e->getMessage() ),
@@ -256,10 +296,10 @@ class OpenAiClient {
 
 		$result = $response->choices[0]->message->content ?? '';
 
-		Logger::debug( 'Extracted OpenAI result', array( 'length' => strlen( $result ) ) );
+		$this->logger->debug( 'Extracted OpenAI result', array( 'length' => strlen( $result ) ) );
 
 			if ( empty( $result ) ) {
-				Logger::error( 'Empty result from OpenAI API', array(
+				$this->logger->error( 'Empty result from OpenAI API', array(
 					'model' => $api_params['model'],
 					'finish_reason' => $response->choices[0]->finishReason ?? 'unknown',
 				) );
@@ -300,7 +340,7 @@ class OpenAiClient {
 			return $response_data;
 
 		} catch ( \Throwable $e ) {
-			Logger::error( 'Fatal error in generate_seo_suggestions', array(
+			$this->logger->error( 'Fatal error in generate_seo_suggestions', array(
 				'message' => $e->getMessage(),
 				'trace' => $e->getTraceAsString(),
 				'file' => $e->getFile(),
@@ -393,7 +433,10 @@ class OpenAiClient {
 		$context_info = '';
 		
 		if ( ! empty( $context['post_type'] ) && 'post' !== $context['post_type'] ) {
-			$post_type_label = get_post_type_object( $context['post_type'] )->labels->singular_name ?? $context['post_type'];
+			$post_type_obj   = get_post_type_object( $context['post_type'] );
+			$post_type_label = ( $post_type_obj !== null )
+				? ( $post_type_obj->labels->singular_name ?? $context['post_type'] )
+				: $context['post_type'];
 			$context_info .= "\nTipo di contenuto: " . $this->sanitize_prompt_input( $post_type_label );
 		}
 
@@ -472,7 +515,7 @@ Rispondi SOLO con JSON puro.',
 
 		$sanitized = $input;
 		foreach ( $patterns as $pattern ) {
-			$sanitized = preg_replace( $pattern, '', $sanitized );
+			$sanitized = preg_replace( $pattern, '', $sanitized ) ?? $sanitized;
 		}
 
 		// Limit length to prevent token exhaustion
@@ -489,8 +532,8 @@ Rispondi SOLO con JSON puro.',
 	 */
 	private function parse_ai_response( string $response ): ?array {
 		// Rimuovi eventuali markdown code blocks
-		$response = preg_replace( '/```json\s*/', '', $response );
-		$response = preg_replace( '/```\s*$/', '', $response );
+		$response = preg_replace( '/```json\s*/', '', $response ) ?? $response;
+		$response = preg_replace( '/```\s*$/', '', $response ) ?? $response;
 		$response = trim( $response );
 
 		$data = json_decode( $response, true );
@@ -556,7 +599,7 @@ Rispondi SOLO con JSON puro.',
 	 * @return string
 	 */
 	private function get_model(): string {
-		return Options::get_option( 'ai.openai_model', 'gpt-5-nano' );
+		return $this->options->get_option( 'ai.openai_model', 'gpt-5-nano' );
 	}
 
 	/**
@@ -567,26 +610,34 @@ Rispondi SOLO con JSON puro.',
 	 * @return string Generated content.
 	 */
 	public function generate_content( string $prompt, array $options = array() ): string {
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] OpenAiClient::generate_content - Entry, prompt length: ' . strlen( $prompt ) );
+		}
+
 		$client = $this->get_client();
 
 		if ( null === $client ) {
+			if ( $debug ) {
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Client is null, throwing exception' );
+			}
 			throw new \Exception( 'OpenAI client not configured' );
 		}
 
+		if ( $debug ) {
+			error_log( '[FP-SEO] OpenAiClient::generate_content - Client obtained, merging options' );
+		}
 		$default_options = array(
 			'model' => $this->get_model(),
 			'temperature' => 0.7,
-			'max_completion_tokens' => 1000,
+			'max_tokens' => 1000, // Will be converted to max_completion_tokens for GPT-5 Nano
 		);
 
 		$options = array_merge( $default_options, $options );
 
-		// Support both old and new parameter names for backward compatibility
-		$max_tokens_param = isset( $options['max_completion_tokens'] ) 
-			? 'max_completion_tokens' 
-			: ( isset( $options['max_tokens'] ) ? 'max_tokens' : 'max_completion_tokens' );
-		
-		$max_tokens_value = $options[$max_tokens_param] ?? 1000;
+		// Get max_tokens value - support both parameter names
+		$max_tokens_value = $options['max_tokens'] ?? $options['max_completion_tokens'] ?? 1000;
 
 		// Build API request parameters
 		$api_params = array(
@@ -597,21 +648,86 @@ Rispondi SOLO con JSON puro.',
 					'content' => $prompt,
 				),
 			),
-			'max_completion_tokens' => $max_tokens_value,
 		);
 
-		// GPT-5 Nano only supports temperature=1 (default), so omit it for that model
+		// GPT-5 Nano requires max_completion_tokens, other models use max_tokens
 		$model = strtolower( $options['model'] );
-		if ( strpos( $model, 'gpt-5-nano' ) === false ) {
-			$api_params['temperature'] = $options['temperature'];
+		if ( strpos( $model, 'gpt-5-nano' ) !== false ) {
+			// If max_completion_tokens is explicitly provided, use it; otherwise use max_tokens
+			if ( isset( $options['max_completion_tokens'] ) ) {
+				$api_params['max_completion_tokens'] = $options['max_completion_tokens'];
+			} else {
+				$api_params['max_completion_tokens'] = $max_tokens_value;
+			}
+			// GPT-5 Nano only supports temperature=1 (default), so don't set it if it's not 1
+			if ( isset( $options['temperature'] ) && $options['temperature'] == 1.0 ) {
+				$api_params['temperature'] = 1.0;
+			}
+			// Otherwise, omit temperature to use default (1)
+		} else {
+			$api_params['max_tokens'] = $max_tokens_value; // Standard models use max_tokens
+			if ( isset( $options['temperature'] ) ) {
+				$api_params['temperature'] = $options['temperature'];
+			}
 		}
 
+		if ( $debug ) {
+			error_log( '[FP-SEO] OpenAiClient::generate_content - Calling API, model: ' . $api_params['model'] );
+			error_log( '[FP-SEO] OpenAiClient::generate_content - API params keys: ' . json_encode( array_keys( $api_params ) ) );
+		}
 		try {
 			$response = $client->chat()->create( $api_params );
+			if ( $debug ) {
+				error_log( '[FP-SEO] OpenAiClient::generate_content - API response received, type: ' . gettype( $response ) );
+			}
 
-			return $response->choices[0]->message->content ?? '';
-		} catch ( \Exception $e ) {
-			throw new \Exception( 'OpenAI API error: ' . $e->getMessage() );
+			// Try multiple ways to extract content (depending on API version)
+			$content = '';
+			if ( isset( $response->choices[0]->message->content ) ) {
+				$content = $response->choices[0]->message->content;
+			} elseif ( isset( $response->choices[0]->message->text ) ) {
+				$content = $response->choices[0]->message->text;
+			} elseif ( isset( $response['choices'][0]['message']['content'] ) ) {
+				$content = $response['choices'][0]['message']['content'];
+			} elseif ( is_array( $response ) && isset( $response[0]['message']['content'] ) ) {
+				$content = $response[0]['message']['content'];
+			}
+			
+			if ( $debug && empty( $content ) ) {
+				error_log( '[FP-SEO] OpenAiClient::generate_content - WARNING: Empty content in response' );
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Model used: ' . $api_params['model'] );
+				
+				if ( isset( $response->usage ) ) {
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Usage: ' . print_r( $response->usage, true ) );
+				}
+				if ( isset( $response->choices[0]->finishReason ) ) {
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Finish reason: ' . $response->choices[0]->finishReason );
+				}
+				if ( isset( $response->choices[0]->message->refusal ) ) {
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Refusal: ' . $response->choices[0]->message->refusal );
+				}
+				if ( isset( $response->choices[0]->message ) ) {
+					$message_vars = get_object_vars( $response->choices[0]->message );
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Message properties: ' . implode( ', ', array_keys( $message_vars ) ) );
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Message structure: ' . print_r( $response->choices[0]->message, true ) );
+				}
+				if ( isset( $response->choices[0] ) ) {
+					error_log( '[FP-SEO] OpenAiClient::generate_content - Choice 0 structure: ' . print_r( $response->choices[0], true ) );
+				}
+				$response_dump = print_r( $response, true );
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Full response (first 3000 chars): ' . substr( $response_dump, 0, 3000 ) );
+			}
+
+			if ( $debug ) {
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Returning content, length: ' . strlen( $content ) );
+			}
+			return $content;
+		} catch ( \Throwable $e ) {
+			if ( $debug ) {
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Error: ' . $e->getMessage() );
+				error_log( '[FP-SEO] OpenAiClient::generate_content - Stack trace: ' . $e->getTraceAsString() );
+			}
+			throw $e;
 		}
 	}
 }

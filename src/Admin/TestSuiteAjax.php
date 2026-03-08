@@ -11,16 +11,38 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+
 /**
  * Gestisce le richieste AJAX per la test suite.
  */
 class TestSuiteAjax {
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_run_tests', array( $this, 'handle_run_tests' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'wp_ajax_fp_seo_run_tests', array( $this, 'handle_run_tests' ) );
+		} else {
+			add_action( 'wp_ajax_fp_seo_run_tests', array( $this, 'handle_run_tests' ) );
+		}
 	}
 
 	/**
@@ -60,15 +82,16 @@ class TestSuiteAjax {
 			
 			$output = ob_get_clean();
 
-			// Return HTML output
 			wp_send_json_success( array(
 				'html' => $output,
 			) );
-		} catch ( \Exception $e ) {
+			return;
+		} catch ( \Throwable $e ) {
 			ob_end_clean();
 			wp_send_json_error( array(
 				'message' => __( 'Errore durante esecuzione test: ', 'fp-seo-performance' ) . $e->getMessage(),
 			) );
+			return;
 		}
 	}
 }

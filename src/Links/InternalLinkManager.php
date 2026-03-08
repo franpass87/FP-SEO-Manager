@@ -13,8 +13,11 @@ namespace FP\SEO\Links;
 
 use FP\SEO\Links\Handlers\InternalLinkAjaxHandler;
 use FP\SEO\Links\Scripts\InternalLinkScriptsManager;
+use FP\SEO\Links\Services\LinkAnalysisService;
+use FP\SEO\Links\Services\LinkSuggestionService;
 use FP\SEO\Links\Styles\InternalLinkStylesManager;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Utils\CacheHelper;
 use FP\SEO\Utils\PerformanceConfig;
 
 /**
@@ -52,19 +55,52 @@ class InternalLinkManager {
 	private $ajax_handler;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Link suggestion service.
+	 *
+	 * @var LinkSuggestionService
+	 */
+	private LinkSuggestionService $suggestion_service;
+
+	/**
+	 * Link analysis service.
+	 *
+	 * @var LinkAnalysisService
+	 */
+	private LinkAnalysisService $analysis_service;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+		$this->suggestion_service = new LinkSuggestionService();
+		$this->analysis_service = new LinkAnalysisService();
+	}
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_links_menu' ) );
+		$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+		$hook_manager->add_action( 'admin_menu', array( $this, 'add_links_menu' ) );
 		// Register AJAX handler
-		$this->ajax_handler = new InternalLinkAjaxHandler( $this );
+		$this->ajax_handler = new InternalLinkAjaxHandler( $this, $hook_manager );
 		$this->ajax_handler->register();
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_links_metabox' ) );
 		// DISABLED: output_link_analysis causes issues in frontend - only register in admin
 		// add_action( 'wp_head', array( $this, 'output_link_analysis' ) );
 		if ( is_admin() ) {
-			add_action( 'admin_head', array( $this, 'output_link_analysis' ) );
+			$hook_manager->add_action( 'admin_head', array( $this, 'output_link_analysis' ) );
 		}
 
 		// Initialize and register styles and scripts managers
@@ -72,6 +108,23 @@ class InternalLinkManager {
 		$this->styles_manager->register_hooks();
 		$this->scripts_manager = new InternalLinkScriptsManager();
 		$this->scripts_manager->register_hooks();
+	}
+
+	/**
+	 * Get hook manager from container.
+	 *
+	 * @return HookManagerInterface
+	 */
+	private function get_hook_manager(): HookManagerInterface {
+		if ( $this->hook_manager ) {
+			return $this->hook_manager;
+		}
+		
+		// Fallback: get from container
+		$plugin = \FP\SEO\Infrastructure\Plugin::instance();
+		$container = $plugin->get_container();
+		$this->hook_manager = $container->get( HookManagerInterface::class );
+		return $this->hook_manager;
 	}
 
 	/**
@@ -114,310 +167,11 @@ class InternalLinkManager {
 	 * @return array<string, mixed>
 	 */
 	public function get_link_suggestions( int $post_id, array $options = array() ): array {
-		$cache_key = 'fp_seo_link_suggestions_' . $post_id . '_' . md5( serialize( $options ) );
-		
-		return Cache::remember( $cache_key, function() use ( $post_id, $options ) {
-			$post = get_post( $post_id );
-			if ( ! $post ) {
-				return array();
-			}
-
-			$content = $post->post_content;
-			$title = $post->post_title;
-			$excerpt = $post->post_excerpt;
-
-			// Extract keywords from content
-			$keywords = $this->extract_keywords( $content . ' ' . $title . ' ' . $excerpt );
-			
-			// Get potential target posts
-			$target_posts = $this->get_potential_target_posts( $post_id, $keywords, $options );
-			
-			// Score and rank suggestions
-			$suggestions = $this->score_link_suggestions( $post_id, $target_posts, $keywords, $content );
-			
-			// Limit results
-			return array_slice( $suggestions, 0, self::MAX_SUGGESTIONS );
-		}, HOUR_IN_SECONDS );
+		return $this->suggestion_service->get_suggestions( $post_id, $options );
 	}
 
-	/**
-	 * Extract keywords from content.
-	 *
-	 * @param string $content Content to analyze.
-	 * @return array<string, int>
-	 */
-	private function extract_keywords( string $content ): array {
-		// Remove HTML tags and normalize
-		$content = wp_strip_all_tags( $content );
-		$content = strtolower( $content );
-		
-		// Remove common stop words
-		$stop_words = array(
-			'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-			'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
-			'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those',
-			'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'
-		);
-		
-		// Split into words and filter
-		$words = preg_split( '/\s+/', $content );
-		$words = array_filter( $words, function( $word ) use ( $stop_words ) {
-			return strlen( $word ) > 2 && ! in_array( $word, $stop_words, true );
-		});
-		
-		// Count word frequency
-		$keyword_counts = array_count_values( $words );
-		
-		// Sort by frequency
-		arsort( $keyword_counts );
-		
-		return array_slice( $keyword_counts, 0, 20, true );
-	}
 
-	/**
-	 * Get potential target posts for linking.
-	 *
-	 * @param int $post_id Current post ID.
-	 * @param array<string, int> $keywords Keywords to match.
-	 * @param array<string, mixed> $options Options.
-	 * @return array<int, WP_Post>
-	 */
-	private function get_potential_target_posts( int $post_id, array $keywords, array $options ): array {
-		$args = array(
-			'post_type' => $options['post_types'] ?? array( 'post', 'page' ),
-			'post_status' => 'publish',
-			'post__not_in' => array( $post_id ),
-			'posts_per_page' => 50,
-			'orderby' => 'relevance',
-			'meta_query' => array(
-				array(
-					'key' => '_fp_seo_focus_keywords',
-					'compare' => 'EXISTS'
-				)
-			)
-		);
 
-		// Add keyword search if available
-		if ( ! empty( $keywords ) ) {
-			$search_terms = array_keys( array_slice( $keywords, 0, 5, true ) );
-			$args['s'] = implode( ' ', $search_terms );
-		}
-
-		$posts = get_posts( $args );
-		
-		// If not enough posts found, get more without keyword search
-		if ( count( $posts ) < 20 ) {
-			unset( $args['s'] );
-			$args['posts_per_page'] = 100;
-			$additional_posts = get_posts( $args );
-			$posts = array_merge( $posts, $additional_posts );
-		}
-
-		return $posts;
-	}
-
-	/**
-	 * Score and rank link suggestions.
-	 *
-	 * @param int $post_id Current post ID.
-	 * @param array<int, WP_Post> $target_posts Target posts.
-	 * @param array<string, int> $keywords Keywords.
-	 * @param string $content Current content.
-	 * @return array<string, mixed>
-	 */
-	private function score_link_suggestions( int $post_id, array $target_posts, array $keywords, string $content ): array {
-		$suggestions = array();
-
-		foreach ( $target_posts as $target_post ) {
-			$score = $this->calculate_link_score( $post_id, $target_post, $keywords, $content );
-			
-			if ( $score > 0.3 ) { // Minimum relevance threshold
-				$suggestions[] = array(
-					'post_id' => $target_post->ID,
-					'title' => $target_post->post_title,
-					'url' => get_permalink( $target_post->ID ),
-					'excerpt' => get_the_excerpt( $target_post->ID ),
-					'score' => $score,
-					'keywords' => $this->get_matching_keywords( $target_post, $keywords ),
-					'anchor_text' => $this->suggest_anchor_text( $target_post, $keywords ),
-					'context' => $this->find_best_context( $content, $target_post, $keywords )
-				);
-			}
-		}
-
-		// Sort by score
-		usort( $suggestions, function( $a, $b ) {
-			return $b['score'] <=> $a['score'];
-		});
-
-		return $suggestions;
-	}
-
-	/**
-	 * Calculate link relevance score.
-	 *
-	 * @param int $post_id Current post ID.
-	 * @param WP_Post $target_post Target post.
-	 * @param array<string, int> $keywords Keywords.
-	 * @param string $content Current content.
-	 * @return float
-	 */
-	private function calculate_link_score( int $post_id, $target_post, array $keywords, string $content ): float {
-		$score = 0.0;
-
-		// Keyword matching (40% of score)
-		$target_keywords = $this->extract_keywords( $target_post->post_content . ' ' . $target_post->post_title );
-		$keyword_matches = array_intersect_key( $keywords, $target_keywords );
-		$keyword_score = count( $keyword_matches ) / max( count( $keywords ), 1 );
-		$score += $keyword_score * 0.4;
-
-		// Content similarity (30% of score)
-		$content_similarity = $this->calculate_content_similarity( $content, $target_post->post_content );
-		$score += $content_similarity * 0.3;
-
-		// Post authority (20% of score)
-		$authority_score = $this->calculate_post_authority( $target_post );
-		$score += $authority_score * 0.2;
-
-		// Category relevance (10% of score)
-		$category_score = $this->calculate_category_relevance( $post_id, $target_post->ID );
-		$score += $category_score * 0.1;
-
-		return min( $score, 1.0 );
-	}
-
-	/**
-	 * Calculate content similarity between two texts.
-	 *
-	 * @param string $text1 First text.
-	 * @param string $text2 Second text.
-	 * @return float
-	 */
-	private function calculate_content_similarity( string $text1, string $text2 ): float {
-		$text1 = wp_strip_all_tags( strtolower( $text1 ) );
-		$text2 = wp_strip_all_tags( strtolower( $text2 ) );
-
-		$words1 = array_unique( preg_split( '/\s+/', $text1 ) );
-		$words2 = array_unique( preg_split( '/\s+/', $text2 ) );
-
-		$intersection = array_intersect( $words1, $words2 );
-		$union = array_unique( array_merge( $words1, $words2 ) );
-
-		return count( $intersection ) / max( count( $union ), 1 );
-	}
-
-	/**
-	 * Calculate post authority score.
-	 *
-	 * @param WP_Post $post Post object.
-	 * @return float
-	 */
-	private function calculate_post_authority( $post ): float {
-		$score = 0.0;
-
-		// Comment count (normalized)
-		$comment_count = get_comments_number( $post->ID );
-		$score += min( $comment_count / 10, 1.0 ) * 0.3;
-
-		// View count (if available)
-		$view_count = get_post_meta( $post->ID, 'post_views_count', true );
-		if ( $view_count ) {
-			$score += min( (int) $view_count / 1000, 1.0 ) * 0.4;
-		}
-
-		// Social shares (if available)
-		$shares = get_post_meta( $post->ID, 'social_shares', true );
-		if ( $shares ) {
-			$score += min( (int) $shares / 100, 1.0 ) * 0.3;
-		}
-
-		return min( $score, 1.0 );
-	}
-
-	/**
-	 * Calculate category relevance between posts.
-	 *
-	 * @param int $post1_id First post ID.
-	 * @param int $post2_id Second post ID.
-	 * @return float
-	 */
-	private function calculate_category_relevance( int $post1_id, int $post2_id ): float {
-		$categories1 = wp_get_post_categories( $post1_id );
-		$categories2 = wp_get_post_categories( $post2_id );
-
-		if ( empty( $categories1 ) || empty( $categories2 ) ) {
-			return 0.0;
-		}
-
-		$intersection = array_intersect( $categories1, $categories2 );
-		$union = array_unique( array_merge( $categories1, $categories2 ) );
-
-		return count( $intersection ) / max( count( $union ), 1 );
-	}
-
-	/**
-	 * Get matching keywords between posts.
-	 *
-	 * @param WP_Post $target_post Target post.
-	 * @param array<string, int> $keywords Source keywords.
-	 * @return array<string>
-	 */
-	private function get_matching_keywords( $target_post, array $keywords ): array {
-		$target_keywords = $this->extract_keywords( $target_post->post_content . ' ' . $target_post->post_title );
-		$matches = array_intersect_key( $keywords, $target_keywords );
-		
-		return array_keys( $matches );
-	}
-
-	/**
-	 * Suggest anchor text for link.
-	 *
-	 * @param WP_Post $target_post Target post.
-	 * @param array<string, int> $keywords Keywords.
-	 * @return string
-	 */
-	private function suggest_anchor_text( $target_post, array $keywords ): string {
-		$title = $target_post->post_title;
-		
-		// Check if any keywords match the title
-		$title_words = explode( ' ', strtolower( $title ) );
-		foreach ( array_keys( $keywords ) as $keyword ) {
-			if ( in_array( $keyword, $title_words, true ) ) {
-				return $title; // Use full title if keyword matches
-			}
-		}
-
-		// Use first few words of title
-		$words = explode( ' ', $title );
-		return implode( ' ', array_slice( $words, 0, 4 ) );
-	}
-
-	/**
-	 * Find best context for link placement.
-	 *
-	 * @param string $content Current content.
-	 * @param WP_Post $target_post Target post.
-	 * @param array<string, int> $keywords Keywords.
-	 * @return string
-	 */
-	private function find_best_context( string $content, $target_post, array $keywords ): string {
-		$sentences = preg_split( '/[.!?]+/', $content );
-		$best_sentence = '';
-		$best_score = 0;
-
-		foreach ( $sentences as $sentence ) {
-			$sentence_keywords = $this->extract_keywords( $sentence );
-			$matches = array_intersect_key( $keywords, $sentence_keywords );
-			$score = count( $matches );
-
-			if ( $score > $best_score ) {
-				$best_score = $score;
-				$best_sentence = trim( $sentence );
-			}
-		}
-
-		return $best_sentence ?: wp_trim_words( $content, 20 );
-	}
 
 	/**
 	 * Render internal links metabox.
@@ -507,9 +261,9 @@ class InternalLinkManager {
 		$links = array();
 
 		// Find all internal links
-		preg_match_all( '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>([^<]+)<\/a>/i', $content, $matches, PREG_SET_ORDER );
+		$preg_result = preg_match_all( '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>([^<]+)<\/a>/i', $content, $matches, PREG_SET_ORDER );
 
-		foreach ( $matches as $match ) {
+		foreach ( false !== $preg_result ? $matches : array() as $match ) {
 			$url = $match[1];
 			$text = $match[2];
 
@@ -800,16 +554,21 @@ class InternalLinkManager {
 	private function get_site_link_analysis(): array {
 		$cache_key = 'fp_seo_site_link_analysis';
 		
-		return Cache::remember( $cache_key, function() {
+		return CacheHelper::remember( $cache_key, function() {
 			global $wpdb;
 			
 			// Get all published posts
-		$posts = get_posts( array(
+		$args = array(
 			'post_type' => array( 'post', 'page' ),
 			'post_status' => 'publish',
 			'posts_per_page' => 1000, // Limit to prevent memory issues on large sites
 			'fields' => 'ids'
-		) );
+		);
+		
+		// Optimize query arguments for plugin query
+		$args = \FP\SEO\Utils\QueryOptimizer::optimize_query_args( $args );
+		
+		$posts = get_posts( $args );
 			
 			$total_links = 0;
 			$posts_with_links = 0;
@@ -855,19 +614,23 @@ class InternalLinkManager {
 		global $wpdb;
 		
 		$post_url = get_permalink( $post_id );
+		if ( ! $post_url ) {
+			return true;
+		}
 		$post_path = str_replace( home_url(), '', $post_url );
-		
-		// Search for links to this post
+
+		// Search for links to this post — check both absolute URL and relative path
 		$count = $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} 
-			WHERE post_content LIKE %s 
+			WHERE ( post_content LIKE %s OR post_content LIKE %s )
 			AND post_status = 'publish' 
 			AND ID != %d",
 			'%' . $wpdb->esc_like( $post_url ) . '%',
+			'%' . $wpdb->esc_like( $post_path ) . '%',
 			$post_id
 		) );
 		
-		return $count === 0;
+		return (int) $count === 0;
 	}
 
 	/**
@@ -982,60 +745,7 @@ class InternalLinkManager {
 		$existing_links = $this->get_existing_internal_links( $post_id );
 		$suggestions = $this->get_link_suggestions( $post_id );
 		
-		return array(
-			'existing_links' => count( $existing_links ),
-			'suggestions' => count( $suggestions ),
-			'link_density' => $this->calculate_post_link_density( $post_id ),
-			'recommendations' => $this->get_post_link_recommendations( $post_id, $existing_links, $suggestions )
-		);
-	}
-
-	/**
-	 * Calculate link density for a post.
-	 *
-	 * @param int $post_id Post ID.
-	 * @return float
-	 */
-	private function calculate_post_link_density( int $post_id ): float {
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			return 0.0;
-		}
-
-		$content = wp_strip_all_tags( $post->post_content );
-		$word_count = str_word_count( $content );
-		$existing_links = $this->get_existing_internal_links( $post_id );
-		$link_count = count( $existing_links );
-
-		return $word_count > 0 ? ( $link_count / $word_count ) * 100 : 0.0;
-	}
-
-	/**
-	 * Get recommendations for a specific post.
-	 *
-	 * @param int $post_id Post ID.
-	 * @param array<string, mixed> $existing_links Existing links.
-	 * @param array<string, mixed> $suggestions Link suggestions.
-	 * @return array<string>
-	 */
-	private function get_post_link_recommendations( int $post_id, array $existing_links, array $suggestions ): array {
-		$recommendations = array();
-		$link_count = count( $existing_links );
-		
-		if ( $link_count < 3 ) {
-			$recommendations[] = __( 'Add more internal links (recommended: 3-5 per post).', 'fp-seo-performance' );
-		}
-		
-		if ( ! empty( $suggestions ) ) {
-			$top_suggestion = $suggestions[0];
-			$recommendations[] = sprintf( 
-				__( 'Consider linking to "%s" (relevance: %d%%)', 'fp-seo-performance' ), 
-				$top_suggestion['title'], 
-				round( $top_suggestion['score'] * 100 )
-			);
-		}
-		
-		return $recommendations;
+		return $this->analysis_service->analyze_post( $post_id, $existing_links, $suggestions );
 	}
 
 	// AJAX handler removed - now handled by InternalLinkAjaxHandler
@@ -1046,7 +756,7 @@ class InternalLinkManager {
 	 * @param int $post_id Post ID.
 	 * @return array<string, mixed>
 	 */
-	private function optimize_post_links( int $post_id ): array {
+	public function optimize_post_links( int $post_id ): array {
 		// This would implement AI-powered link optimization
 		// For now, return basic optimization suggestions
 		
@@ -1083,22 +793,15 @@ class InternalLinkManager {
 			return;
 		}
 
-		// Double check we're in admin context
-		if ( ! function_exists( 'is_admin' ) || ! is_admin() ) {
-			return;
-		}
-
 		$post_id = get_the_ID();
 		if ( ! $post_id ) {
 			return;
 		}
 
-		// Only output in admin or if explicitly enabled (but still check admin)
-		$options = \FP\SEO\Utils\Options::get();
+		$options              = \FP\SEO\Utils\OptionsHelper::get();
 		$enable_link_analysis = $options['advanced']['enable_link_analysis_frontend'] ?? false;
-		
-		// Never output in frontend, even if enabled
-		if ( ! is_admin() || ! $enable_link_analysis ) {
+
+		if ( ! $enable_link_analysis ) {
 			return;
 		}
 
@@ -1106,12 +809,15 @@ class InternalLinkManager {
 		
 		echo "\n<!-- FP SEO Performance Internal Link Analysis -->\n";
 		echo '<script type="application/ld+json">' . "\n";
-		echo wp_json_encode( array(
-			'@context' => 'https://schema.org',
-			'@type' => 'WebPage',
-			'identifier' => get_permalink( $post_id ),
-			'linkAnalysis' => $link_analysis
+		$json = wp_json_encode( array(
+			'@context'     => 'https://schema.org',
+			'@type'        => 'WebPage',
+			'identifier'   => get_permalink( $post_id ),
+			'linkAnalysis' => $link_analysis,
 		), JSON_PRETTY_PRINT );
+		if ( false !== $json ) {
+			echo $json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
 		echo "\n</script>\n";
 		echo "<!-- End FP SEO Performance Internal Link Analysis -->\n";
 	}

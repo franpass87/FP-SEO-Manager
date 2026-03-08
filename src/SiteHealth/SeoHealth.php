@@ -174,9 +174,9 @@ class SeoHealth {
 
 			if ( preg_match( "#<meta\s+name=[\"']robots[\"'][^>]*content=[\"']([^\"']+)[\"']#i", $body, $robots_match ) ) {
 				$robots_content = strtolower( $robots_match[1] );
-				if ( str_contains( $robots_content, 'noindex' ) || str_contains( $robots_content, 'nofollow' ) ) {
-					$robots_allows_indexing = false;
-				}
+			if ( str_contains( $robots_content, 'noindex' ) ) {
+				$robots_allows_indexing = false;
+			}
 			}
 
 			if ( ! $robots_allows_indexing ) {

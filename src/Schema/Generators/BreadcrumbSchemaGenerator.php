@@ -38,11 +38,11 @@ class BreadcrumbSchemaGenerator extends AbstractSchemaGenerator {
 	 * @param int|null $post_id Optional post ID (not used, uses current page).
 	 * @return array<string, mixed>|null
 	 */
-	public function generate( ?int $post_id = null ): ?array {
+	public function generate( ?int $post_id = null ): array {
 		$breadcrumbs = $this->get_breadcrumb_items();
 		
 		if ( empty( $breadcrumbs ) ) {
-			return null;
+			return [];
 		}
 
 		$list_items = array();
@@ -86,15 +86,21 @@ class BreadcrumbSchemaGenerator extends AbstractSchemaGenerator {
 
 		if ( is_singular() ) {
 			$post = get_post();
-			$post_type = get_post_type();
+			if ( ! $post instanceof \WP_Post ) {
+				return $breadcrumbs;
+			}
+			$post_type = $post->post_type;
 
 			// Add post type archive if exists
 			$post_type_obj = get_post_type_object( $post_type );
 			if ( $post_type_obj && $post_type_obj->has_archive ) {
-				$breadcrumbs[] = array(
-					'name' => $post_type_obj->labels->name,
-					'url' => get_post_type_archive_link( $post_type ),
-				);
+				$archive_url = get_post_type_archive_link( $post_type );
+				if ( $archive_url ) {
+					$breadcrumbs[] = array(
+						'name' => $post_type_obj->labels->name ?? '',
+						'url'  => $archive_url,
+					);
+				}
 			}
 
 			// Add categories for posts
@@ -129,20 +135,38 @@ class BreadcrumbSchemaGenerator extends AbstractSchemaGenerator {
 			);
 		} elseif ( is_category() ) {
 			$category = get_queried_object();
-			$breadcrumbs[] = array(
-				'name' => $category->name,
-				'url' => get_category_link( $category->term_id ),
-			);
+			if ( $category instanceof \WP_Term ) {
+				$breadcrumbs[] = array(
+					'name' => $category->name,
+					'url'  => get_category_link( $category->term_id ),
+				);
+			}
 		} elseif ( is_tag() ) {
 			$tag = get_queried_object();
-			$breadcrumbs[] = array(
-				'name' => $tag->name,
-				'url' => get_tag_link( $tag->term_id ),
-			);
+			if ( $tag instanceof \WP_Term ) {
+				$breadcrumbs[] = array(
+					'name' => $tag->name,
+					'url'  => get_tag_link( $tag->term_id ),
+				);
+			}
 		}
 
 		return $breadcrumbs;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

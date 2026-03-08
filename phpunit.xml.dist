@@ -3,6 +3,13 @@
     bootstrap="tests/bootstrap.php"
     colors="true"
     verbose="true"
+    beStrictAboutTestsThatDoNotTestAnything="true"
+    beStrictAboutOutputDuringTests="true"
+    beStrictAboutTodoAnnotatedTests="true"
+    enforceTimeLimit="true"
+    timeoutForSmallTests="1"
+    timeoutForMediumTests="10"
+    timeoutForLargeTests="60"
 >
     <testsuites>
         <testsuite name="Unit">
@@ -10,6 +17,12 @@
         </testsuite>
         <testsuite name="Integration">
             <directory suffix="Test.php">tests/integration</directory>
+        </testsuite>
+        <testsuite name="Backend">
+            <directory suffix="Test.php">tests/backend</directory>
+        </testsuite>
+        <testsuite name="Frontend">
+            <directory suffix="Test.php">tests/frontend</directory>
         </testsuite>
     </testsuites>
 </phpunit>

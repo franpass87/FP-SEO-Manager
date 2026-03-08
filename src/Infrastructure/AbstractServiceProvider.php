@@ -54,6 +54,19 @@ abstract class AbstractServiceProvider implements ServiceProviderInterface {
 	public function deactivate(): void {
 		// Default: no deactivation actions needed.
 	}
+
+	/**
+	 * Get dependencies for this service provider.
+	 *
+	 * Default implementation returns empty array (no dependencies).
+	 * Override in subclasses to declare dependencies.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> Array of dependency class names.
+	 */
+	public function get_dependencies(): array {
+		// Default: no dependencies.
+		return array();
+	}
 }
 
 

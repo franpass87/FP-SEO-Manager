@@ -30,8 +30,8 @@ class AnalysisTabRenderer extends SettingsTabRenderer {
 	 * @param array<string, mixed> $options Current plugin options.
 	 */
 	public function render( array $options ): void {
-		$analysis = $options['analysis'];
-		$scoring  = $options['scoring'];
+		$analysis = $options['analysis'] ?? array();
+		$scoring  = $options['scoring'] ?? array();
 		?>
 		<h3><?php esc_html_e( 'Checks', 'fp-seo-performance' ); ?></h3>
 		<p><?php esc_html_e( 'Enable or disable individual analyzer checks.', 'fp-seo-performance' ); ?></p>

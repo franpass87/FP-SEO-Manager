@@ -165,21 +165,31 @@ class HowToSchemaCheck implements CheckInterface {
 					$types[] = (string) $payload['@type'];
 				}
 
-				// Se è HowTo, raccoglie gli step
-				if ( strtolower( (string) $payload['@type'] ) === 'howto' && isset( $payload['step'] ) ) {
-					if ( is_array( $payload['step'] ) ) {
-						foreach ( $payload['step'] as $step ) {
-							if ( is_array( $step ) && isset( $step['@type'] ) && strtolower( (string) $step['@type'] ) === 'howtoStep' ) {
+			// Se è HowTo, raccoglie gli step (senza ricorrere sui figli già processati)
+			if ( strtolower( (string) $payload['@type'] ) === 'howto' && isset( $payload['step'] ) ) {
+				if ( is_array( $payload['step'] ) ) {
+					foreach ( $payload['step'] as $step ) {
+						if ( is_array( $step ) && isset( $step['@type'] ) ) {
+							$step_type = strtolower( (string) $step['@type'] );
+							// Supporta sia HowToStep che HowToSection (che contiene step figli)
+							if ( 'howtostep' === $step_type || 'howtosection' === $step_type ) {
 								$howto_data[] = $step;
 							}
 						}
 					}
 				}
+				// Non ricorrere su $payload['step'] per evitare doppio conteggio
+				return;
 			}
+		}
 
-			foreach ( $payload as $value ) {
-				$this->collect_howto_data( $value, $types, $howto_data );
+		foreach ( $payload as $key => $value ) {
+			// Salta la chiave 'step' se già processata sopra per evitare doppio conteggio
+			if ( 'step' === $key ) {
+				continue;
 			}
+			$this->collect_howto_data( $value, $types, $howto_data );
+		}
 		}
 	}
 

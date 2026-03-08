@@ -53,9 +53,9 @@ class SocialMetaTagsOutput {
 	 * @return void
 	 */
 	private function output_open_graph_tags( array $meta, array $defaults ): void {
-		$title       = ! empty( $meta['facebook_title'] ) ? $meta['facebook_title'] : $defaults['title'];
-		$description = ! empty( $meta['facebook_description'] ) ? $meta['facebook_description'] : $defaults['description'];
-		$permalink   = $defaults['permalink'];
+		$title       = ! empty( $meta['facebook_title'] ) ? $meta['facebook_title'] : ( $defaults['title'] ?? '' );
+		$description = ! empty( $meta['facebook_description'] ) ? $meta['facebook_description'] : ( $defaults['description'] ?? '' );
+		$permalink   = $defaults['permalink'] ?? '';
 
 		$og_tags = array(
 			'og:title' => $title,
@@ -67,7 +67,7 @@ class SocialMetaTagsOutput {
 		);
 
 		// Add image
-		$og_image = $this->get_social_image( $meta, 'facebook', $defaults['post_id'] );
+		$og_image = $this->get_social_image( $meta, 'facebook', $defaults['post_id'] ?? 0 );
 		if ( $og_image ) {
 			$og_tags['og:image'] = $og_image;
 			$og_tags['og:image:width'] = 1200;
@@ -90,9 +90,9 @@ class SocialMetaTagsOutput {
 	 * @return void
 	 */
 	private function output_twitter_card_tags( array $meta, array $defaults ): void {
-		$title       = ! empty( $meta['twitter_title'] ) ? $meta['twitter_title'] : $defaults['title'];
-		$description = ! empty( $meta['twitter_description'] ) ? $meta['twitter_description'] : $defaults['description'];
-		$permalink   = $defaults['permalink'];
+		$title       = ! empty( $meta['twitter_title'] ) ? $meta['twitter_title'] : ( $defaults['title'] ?? '' );
+		$description = ! empty( $meta['twitter_description'] ) ? $meta['twitter_description'] : ( $defaults['description'] ?? '' );
+		$permalink   = $defaults['permalink'] ?? '';
 
 		$twitter_tags = array(
 			'twitter:card' => $meta['twitter_card_type'] ?? 'summary_large_image',
@@ -102,7 +102,7 @@ class SocialMetaTagsOutput {
 		);
 
 		// Add image
-		$twitter_image = $this->get_social_image( $meta, 'twitter', $defaults['post_id'] );
+		$twitter_image = $this->get_social_image( $meta, 'twitter', $defaults['post_id'] ?? 0 );
 		if ( $twitter_image ) {
 			$twitter_tags['twitter:image'] = $twitter_image;
 			$twitter_tags['twitter:image:alt'] = $title;
@@ -123,9 +123,9 @@ class SocialMetaTagsOutput {
 	 * @return void
 	 */
 	private function output_linkedin_tags( array $meta, array $defaults ): void {
-		$title       = ! empty( $meta['linkedin_title'] ) ? $meta['linkedin_title'] : $defaults['title'];
-		$description = ! empty( $meta['linkedin_description'] ) ? $meta['linkedin_description'] : $defaults['description'];
-		$permalink   = $defaults['permalink'];
+		$title       = ! empty( $meta['linkedin_title'] ) ? $meta['linkedin_title'] : ( $defaults['title'] ?? '' );
+		$description = ! empty( $meta['linkedin_description'] ) ? $meta['linkedin_description'] : ( $defaults['description'] ?? '' );
+		$permalink   = $defaults['permalink'] ?? '';
 
 		$linkedin_tags = array(
 			'linkedin:title' => $title,
@@ -133,7 +133,7 @@ class SocialMetaTagsOutput {
 			'linkedin:url' => $permalink,
 		);
 
-		$linkedin_image = $this->get_social_image( $meta, 'linkedin', $defaults['post_id'] );
+		$linkedin_image = $this->get_social_image( $meta, 'linkedin', $defaults['post_id'] ?? 0 );
 		if ( $linkedin_image ) {
 			$linkedin_tags['linkedin:image'] = $linkedin_image;
 		}
@@ -153,9 +153,9 @@ class SocialMetaTagsOutput {
 	 * @return void
 	 */
 	private function output_pinterest_tags( array $meta, array $defaults ): void {
-		$title       = ! empty( $meta['pinterest_title'] ) ? $meta['pinterest_title'] : $defaults['title'];
-		$description = ! empty( $meta['pinterest_description'] ) ? $meta['pinterest_description'] : $defaults['description'];
-		$permalink   = $defaults['permalink'];
+		$title       = ! empty( $meta['pinterest_title'] ) ? $meta['pinterest_title'] : ( $defaults['title'] ?? '' );
+		$description = ! empty( $meta['pinterest_description'] ) ? $meta['pinterest_description'] : ( $defaults['description'] ?? '' );
+		$permalink   = $defaults['permalink'] ?? '';
 
 		$pinterest_tags = array(
 			'pinterest:title' => $title,
@@ -163,7 +163,7 @@ class SocialMetaTagsOutput {
 			'pinterest:url' => $permalink,
 		);
 
-		$pinterest_image = $this->get_social_image( $meta, 'pinterest', $defaults['post_id'] );
+		$pinterest_image = $this->get_social_image( $meta, 'pinterest', $defaults['post_id'] ?? 0 );
 		if ( $pinterest_image ) {
 			$pinterest_tags['pinterest:image'] = $pinterest_image;
 		}
@@ -190,7 +190,14 @@ class SocialMetaTagsOutput {
 			return $platform_image;
 		}
 
-		// Featured image check removed - no longer using featured images
+		// Fallback to featured image if no social image is set
+		$thumbnail_id = get_post_thumbnail_id( $post_id );
+		if ( $thumbnail_id ) {
+			$featured_image_url = wp_get_attachment_image_url( $thumbnail_id, 'large' );
+			if ( $featured_image_url ) {
+				return $featured_image_url;
+			}
+		}
 
 		// Check for default social image
 		$default_image = get_option( 'fp_seo_social_default_image' );
@@ -201,5 +208,19 @@ class SocialMetaTagsOutput {
 		return null;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

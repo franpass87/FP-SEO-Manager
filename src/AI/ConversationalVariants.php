@@ -14,8 +14,6 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
-use FP\SEO\Utils\Logger;
-
 use FP\SEO\Integrations\OpenAiClient;
 use WP_Post;
 
@@ -55,9 +53,11 @@ class ConversationalVariants {
 
 	/**
 	 * Constructor
+	 *
+	 * @param OpenAiClient $openai_client OpenAI client instance.
 	 */
-	public function __construct() {
-		$this->openai_client = new OpenAiClient();
+	public function __construct( OpenAiClient $openai_client ) {
+		$this->openai_client = $openai_client;
 	}
 
 	/**
@@ -144,17 +144,17 @@ class ConversationalVariants {
 
 		try {
 			$variant = $this->openai_client->generate_content( $prompt, array(
-			'model'       => 'gpt-5-nano',
+			'model'       => 'gpt-4o-mini',
 			'temperature' => 0.5,
-			'max_completion_tokens'  => $this->get_max_tokens_for_type( $type ),
+			'max_tokens'  => $this->get_max_tokens_for_type( $type ), // Use standard max_tokens parameter
 		) );
 
 			return trim( $variant );
 
-		} catch ( \Exception $e ) {
-			Logger::error( 'Variant Generation Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ?? 0 ) );
-			return $this->generate_rule_based_variant( $post, $type );
-		}
+	} catch ( \Throwable $e ) {
+		error_log( 'FP SEO ConversationalVariants error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
+		return $this->generate_rule_based_variant( $post, $type );
+	}
 	}
 
 	/**
@@ -293,7 +293,7 @@ Rispondi SOLO con il contenuto trasformato, senza introduzioni o spiegazioni.',
 		$content = wp_strip_all_tags( $post->post_content );
 
 		// Split into sentences
-		$sentences = preg_split( '/[.!?]+/', $content, -1, PREG_SPLIT_NO_EMPTY );
+		$sentences = preg_split( '/[.!?]+/', $content, -1, PREG_SPLIT_NO_EMPTY ) ?: array();
 		$sentences = array_map( 'trim', $sentences );
 		$sentences = array_filter( $sentences );
 
@@ -435,7 +435,7 @@ Rispondi SOLO con il contenuto trasformato, senza introduzioni o spiegazioni.',
 	 */
 	private function extract_action_items( string $content ): string {
 		// Find sentences with action verbs
-		$sentences = preg_split( '/[.!?]+/', $content, -1, PREG_SPLIT_NO_EMPTY );
+		$sentences = preg_split( '/[.!?]+/', $content, -1, PREG_SPLIT_NO_EMPTY ) ?: array();
 
 		$action_verbs = array( 'devi', 'puoi', 'dovresti', 'clicca', 'vai', 'apri', 'configura', 'installa', 'attiva', 'crea', 'aggiungi' );
 		$action_items = array();

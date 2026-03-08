@@ -12,7 +12,9 @@ declare(strict_types=1);
 namespace FP\SEO\Social;
 
 use FP\SEO\Social\Renderers\SocialFieldsRenderer;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Infrastructure\Contracts\LoggerInterface;
+use FP\SEO\Infrastructure\Contracts\CacheInterface;
 use FP\SEO\Utils\MetadataResolver;
 use FP\SEO\Utils\PerformanceConfig;
 use FP\SEO\Utils\WPBakeryContentExtractor;
@@ -23,7 +25,7 @@ use function get_queried_object_id;
 use function get_the_excerpt;
 use function strip_shortcodes;
 use function do_shortcode;
-use function get_the_post_thumbnail_url;
+// Removed: get_the_post_thumbnail_url - no longer used to prevent interference with featured image
 use function get_the_title;
 use function is_singular;
 use function trim;
@@ -65,6 +67,40 @@ class ImprovedSocialMediaManager {
 	 * @var \FP\SEO\Social\Scripts\SocialScriptsManager|null
 	 */
 	private $scripts_manager;
+
+	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Logger instance.
+	 *
+	 * @var LoggerInterface|null
+	 */
+	private ?LoggerInterface $logger = null;
+
+	/**
+	 * Cache instance.
+	 *
+	 * @var CacheInterface|null
+	 */
+	private ?CacheInterface $cache = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 * @param LoggerInterface|null      $logger       Optional logger instance.
+	 * @param CacheInterface|null       $cache        Optional cache instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null, ?LoggerInterface $logger = null, ?CacheInterface $cache = null ) {
+		$this->hook_manager = $hook_manager;
+		$this->logger       = $logger;
+		$this->cache        = $cache;
+	}
 
 	/**
 	 * Supported social platforms.
@@ -109,8 +145,8 @@ class ImprovedSocialMediaManager {
 			try {
 				$this->renderer = new \FP\SEO\Social\Renderers\SocialFieldsRenderer( $this );
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialFieldsRenderer', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialFieldsRenderer', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
@@ -121,23 +157,27 @@ class ImprovedSocialMediaManager {
 		// Initialize AJAX handler
 		if ( class_exists( 'FP\SEO\Social\Handlers\SocialAjaxHandler' ) ) {
 			try {
-				$this->ajax_handler = new \FP\SEO\Social\Handlers\SocialAjaxHandler( $this );
+				$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+				$this->ajax_handler = new \FP\SEO\Social\Handlers\SocialAjaxHandler( $this, $hook_manager );
 				$this->ajax_handler->register();
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialAjaxHandler', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialAjaxHandler', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
 				}
 				// Fallback to original methods
-				add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
-				add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
+				$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+				$hook_manager->add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
+				$hook_manager->add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
 			}
 		} else {
 			// Fallback to original methods
-			add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
-			add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
+			$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+			$hook_manager->add_action( 'wp_ajax_fp_seo_preview_social', array( $this, 'ajax_preview_social' ) );
+			$hook_manager->add_action( 'wp_ajax_fp_seo_optimize_social', array( $this, 'ajax_optimize_social' ) );
+			$hook_manager->add_action( 'wp_ajax_fp_seo_get_featured_image_url', array( $this, 'ajax_get_featured_image_url' ) );
 		}
 
 		// Initialize meta tags output
@@ -145,8 +185,8 @@ class ImprovedSocialMediaManager {
 			try {
 				$this->meta_tags_output = new \FP\SEO\Social\Output\SocialMetaTagsOutput();
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialMetaTagsOutput', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialMetaTagsOutput', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
@@ -160,8 +200,8 @@ class ImprovedSocialMediaManager {
 				$this->styles_manager = new \FP\SEO\Social\Styles\SocialStylesManager( $this );
 				$this->styles_manager->register_hooks();
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialStylesManager', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialStylesManager', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
@@ -175,8 +215,8 @@ class ImprovedSocialMediaManager {
 				$this->scripts_manager = new \FP\SEO\Social\Scripts\SocialScriptsManager( $this );
 				$this->scripts_manager->register_hooks();
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialScriptsManager', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialScriptsManager', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
@@ -189,8 +229,8 @@ class ImprovedSocialMediaManager {
 			try {
 				$this->page_renderer = new \FP\SEO\Social\Renderers\SocialPageRenderer( $this );
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Failed to initialize SocialPageRenderer', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Failed to initialize SocialPageRenderer', array(
 						'error' => $e->getMessage(),
 						'trace' => $e->getTraceAsString(),
 					) );
@@ -198,23 +238,43 @@ class ImprovedSocialMediaManager {
 			}
 		}
 
-		add_action( 'wp_head', array( $this, 'output_meta_tags' ), 1 );
-		add_action( 'admin_menu', array( $this, 'add_social_menu' ) );
+		// Frontend meta tags rendering moved to Frontend/Renderers/SocialRenderer
+		// Admin menu registration moved to AdminPagesServiceProvider
+		// Only register save hooks and assets here
 		// ajax_get_attachment_url removed - no longer handling attachments
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_social_metabox' ) );
 		
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
 		// This is more efficient than registering generic hooks and exiting early
+		$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 10, 1 );
-			}
+			// CRITICAL: Use priority 20 instead of 10 to ensure we run AFTER WordPress core saves _thumbnail_id
+			// WordPress core saves featured image (_thumbnail_id) during save_post with priority 10
+			// By using priority 20, we ensure our hook runs after WordPress has finished saving the featured image
+			$hook_manager->add_action( 'save_post_' . $post_type, array( $this, 'save_social_meta' ), 20, 1 );
 		}
 		
-		// Use priority 5 to ensure wp.media is loaded early, before other plugins
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 5 );
+		// Register assets with default priority (no need to load wp.media early)
+		$hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+	}
+
+	/**
+	 * Get hook manager from container.
+	 *
+	 * @return HookManagerInterface
+	 */
+	private function get_hook_manager(): HookManagerInterface {
+		if ( $this->hook_manager ) {
+			return $this->hook_manager;
+		}
+		
+		// Fallback: get from container
+		$plugin = \FP\SEO\Infrastructure\Plugin::instance();
+		$container = $plugin->get_container();
+		$this->hook_manager = $container->get( HookManagerInterface::class );
+		return $this->hook_manager;
 	}
 
 	/**
@@ -241,14 +301,9 @@ class ImprovedSocialMediaManager {
 		$is_post_editor = in_array( $screen->id, array( 'post', 'page' ), true );
 
 		if ( $is_fp_seo_page || $is_post_editor ) {
-			// Ensure wp.media is available for image uploads (including featured image)
-			// This must be called early to support WordPress core featured image button
-			wp_enqueue_media();
-			
-			// Also ensure set-post-thumbnail script is loaded (required for featured image button)
-			if ( function_exists( 'wp_enqueue_script' ) ) {
-				wp_enqueue_script( 'set-post-thumbnail' );
-			}
+			// WordPress carica wp.media automaticamente quando necessario
+			// Per social media, wp.media verrà caricato lazy quando si clicca su "Select Image"
+			// Non interferiamo con il caricamento nativo per evitare conflitti con featured image
 			
 			wp_enqueue_style( 'fp-seo-ui-system' );
 			wp_enqueue_style( 'fp-seo-notifications' );
@@ -297,12 +352,17 @@ class ImprovedSocialMediaManager {
 		try {
 			// Validate post object
 			if ( ! $post || ! isset( $post->ID ) ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Invalid post object in render_improved_social_metabox', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Invalid post object in render_improved_social_metabox', array(
 						'post' => is_object( $post ) ? get_class( $post ) : gettype( $post ),
 					) );
 				}
 				return;
+			}
+
+			// Ensure register() has been called to initialize all components (renderer, styles, etc.)
+			if ( ! $this->renderer || ! $this->styles_manager ) {
+				$this->register();
 			}
 
 			$social_meta = $this->get_social_meta( $post->ID );
@@ -322,8 +382,8 @@ class ImprovedSocialMediaManager {
 			echo '</p></div>';
 		} catch ( \Throwable $e ) {
 			// Log error but don't break the page
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'FP SEO: Error initializing social metabox', array(
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+				$this->logger->error( 'FP SEO: Error initializing social metabox', array(
 					'error' => $e->getMessage(),
 					'trace' => $e->getTraceAsString(),
 					'file' => $e->getFile(),
@@ -354,20 +414,14 @@ class ImprovedSocialMediaManager {
 	 */
 	private function get_social_meta( int $post_id ): array {
 		try {
-			// Clear cache before retrieving
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'post_meta' );
-			wp_cache_delete( $post_id, 'posts' );
-			if ( function_exists( 'wp_cache_flush_group' ) ) {
-				wp_cache_flush_group( 'post_meta' );
-			}
-			if ( function_exists( 'update_post_meta_cache' ) ) {
-				update_post_meta_cache( array( $post_id ) );
-			}
+			// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+			// WordPress handles cache management automatically - no manual clearing needed
+			// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 			
 			$cache_key = 'fp_seo_social_meta_' . $post_id;
 			
-			return Cache::remember( $cache_key, function() use ( $post_id ) {
+			// Use injected cache if available, otherwise fallback to static method
+			$callback = function() use ( $post_id ) {
 				try {
 					$meta = get_post_meta( $post_id, '_fp_seo_social_meta', true );
 					
@@ -390,19 +444,26 @@ class ImprovedSocialMediaManager {
 					return is_array( $meta ) ? $meta : array();
 				} catch ( \Throwable $e ) {
 					// Return empty array on error
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						\FP\SEO\Utils\Logger::debug( 'FP SEO: Error getting social meta', array(
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+						$this->logger->debug( 'FP SEO: Error getting social meta', array(
 							'error' => $e->getMessage(),
 							'post_id' => $post_id,
 						) );
 					}
 					return array();
 				}
-			}, HOUR_IN_SECONDS );
+			};
+			
+			if ( $this->cache && method_exists( $this->cache, 'remember' ) ) {
+				return $this->cache->remember( $cache_key, $callback, HOUR_IN_SECONDS );
+			}
+			
+			// Fallback to static Cache::remember for backward compatibility
+			return \FP\SEO\Utils\CacheHelper::remember( $cache_key, $callback, HOUR_IN_SECONDS );
 		} catch ( \Throwable $e ) {
 			// Return empty array on error
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'FP SEO: Fatal error getting social meta', array(
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+				$this->logger->error( 'FP SEO: Fatal error getting social meta', array(
 					'error' => $e->getMessage(),
 					'post_id' => $post_id,
 				) );
@@ -448,37 +509,42 @@ class ImprovedSocialMediaManager {
 				$description = get_the_excerpt( $post->ID ) ?: '';
 			}
 			
-			// For image: use social meta if available, then featured image as standard, then default
+			// For image: use social meta if available, then featured image as fallback, then default
 			$image = '';
 			try {
 				// CRITICAL: Ensure we have a valid post ID
 				$post_id = isset( $post->ID ) ? (int) $post->ID : 0;
 				if ( ! $post_id ) {
-					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-						\FP\SEO\Utils\Logger::debug( 'FP SEO: Invalid post ID in get_preview_data', array(
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+						$this->logger->debug( 'FP SEO: Invalid post ID in get_preview_data', array(
 							'post' => is_object( $post ) ? get_class( $post ) : gettype( $post ),
 						) );
 					}
 					$image = '';
 				} else {
-					// Get featured image using multiple methods for robustness
-					$featured_image = '';
-					
-					// Featured image fallback removed - no longer using featured images
-					$featured_image = ''; // No longer used
-					
-					// Priority: social meta > default (featured image removed)
+					// Priority: social meta > featured image > default
 					if ( ! empty( $social_meta['facebook_image'] ) ) {
 						$image = esc_url_raw( $social_meta['facebook_image'] );
 					} else {
-						// Final fallback to default social image (no featured image fallback)
-						$image = get_option( 'fp_seo_social_default_image', '' );
+						// Fallback to featured image if no social image is set
+						$thumbnail_id = get_post_thumbnail_id( $post_id );
+						if ( $thumbnail_id ) {
+							$featured_image_url = wp_get_attachment_image_url( $thumbnail_id, 'large' );
+							if ( $featured_image_url ) {
+								$image = esc_url_raw( $featured_image_url );
+							}
+						}
+						
+						// Final fallback to default social image
+						if ( empty( $image ) ) {
+							$image = get_option( 'fp_seo_social_default_image', '' );
+						}
 					}
 				}
 			} catch ( \Throwable $e ) {
 				// Log error but don't break the page
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					\FP\SEO\Utils\Logger::error( 'FP SEO: Error getting featured image in get_preview_data', array(
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->error( 'FP SEO: Error getting featured image in get_preview_data', array(
 						'error' => $e->getMessage(),
 						'post_id' => isset( $post->ID ) ? $post->ID : 'N/A',
 						'trace' => $e->getTraceAsString(),
@@ -502,20 +568,13 @@ class ImprovedSocialMediaManager {
 			);
 		} catch ( \Throwable $e ) {
 			// Fallback to basic post data
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				\FP\SEO\Utils\Logger::error( 'FP SEO: Error getting preview data', array(
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+				$this->logger->error( 'FP SEO: Error getting preview data', array(
 					'error' => $e->getMessage(),
 					'post_id' => isset( $post->ID ) ? $post->ID : 0,
 				) );
 			}
-			// Get featured image using multiple methods for robustness in fallback
-			// Featured image fallback removed
-			$fallback_image = '';
-			try {
-				// No longer using featured images as fallback
-			} catch ( \Throwable $e ) {
-				$fallback_image = '';
-			}
+		$fallback_image = '';
 			
 			return array(
 				'title' => get_the_title( $post->ID ),
@@ -532,6 +591,15 @@ class ImprovedSocialMediaManager {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_social_meta( int $post_id ): void {
+// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( class_exists( 'FP\SEO\Editor\Helpers\WordPressNativeProtection' ) ) {
+			if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::any_native_meta_field_being_saved() ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
+					$this->logger->debug( 'ImprovedSocialMediaManager::save_social_meta BLOCKED - WordPress native meta field operation detected', array( 'post_id' => $post_id ) );
+				}
+				return;
+			}
+		}
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
@@ -540,10 +608,10 @@ class ImprovedSocialMediaManager {
 		// If not a supported post type, return immediately without any processing
 		if ( ! in_array( $post_type, $supported_types, true ) ) {
 			// Log only in debug mode and only once per post type to avoid spam
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
 				static $logged_types = array();
 				if ( ! isset( $logged_types[ $post_type ] ) ) {
-					\FP\SEO\Utils\Logger::debug( 'ImprovedSocialMediaManager::save_social_meta skipped - unsupported post type', array(
+					$this->logger->debug( 'ImprovedSocialMediaManager::save_social_meta skipped - unsupported post type', array(
 						'post_id' => $post_id,
 						'post_type' => $post_type,
 						'supported_types' => $supported_types,
@@ -578,7 +646,7 @@ class ImprovedSocialMediaManager {
 			$description_decoded = html_entity_decode( (string) $description_raw, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 			$social_meta[ $platform_id . '_description' ] = sanitize_textarea_field( $description_decoded );
 			
-			$social_meta[ $platform_id . '_image' ] = esc_url_raw( $_POST[ 'fp_seo_' . $platform_id . '_image' ] ?? '' );
+			$social_meta[ $platform_id . '_image' ] = esc_url_raw( wp_unslash( $_POST[ 'fp_seo_' . $platform_id . '_image' ] ?? '' ) );
 		}
 
 		// Twitter specific
@@ -587,22 +655,38 @@ class ImprovedSocialMediaManager {
 		update_post_meta( $post_id, '_fp_seo_social_meta', $social_meta );
 
 		// Clear cache
-		Cache::delete( 'fp_seo_social_meta_' . $post_id );
+		if ( $this->cache ) {
+			$this->cache->delete( 'fp_seo_social_meta_' . $post_id );
+		} else {
+			// Fallback to static method for backward compatibility
+			\FP\SEO\Utils\CacheHelper::delete( 'fp_seo_social_meta_' . $post_id );
+		}
 	}
 
 	/**
 	 * Output social media meta tags in head.
+	 *
+	 * @deprecated Frontend rendering is now handled by Frontend/Renderers/SocialRenderer.
+	 *             This method is kept for backward compatibility and is called by SocialRenderer.
+	 * @return void
 	 */
 	public function output_meta_tags(): void {
 		if ( is_admin() || is_feed() ) {
 			return;
 		}
 
-		if ( ! is_singular() ) {
-			return;
+		// Get post ID - support singular posts/pages and homepage
+		$post_id = 0;
+		if ( is_singular() ) {
+			$post_id = get_queried_object_id();
+		} elseif ( is_front_page() && is_home() ) {
+			// Blog homepage
+			$post_id = get_option( 'page_for_posts' );
+		} elseif ( is_front_page() ) {
+			// Static homepage
+			$post_id = get_option( 'page_on_front' );
 		}
 
-		$post_id = get_queried_object_id();
 		if ( ! $post_id ) {
 			return;
 		}
@@ -798,7 +882,14 @@ class ImprovedSocialMediaManager {
 			return $platform_image;
 		}
 
-		// Featured image check removed - no longer using featured images
+		// Fallback to featured image if no social image is set
+		$thumbnail_id = get_post_thumbnail_id( $post_id );
+		if ( $thumbnail_id ) {
+			$featured_image_url = wp_get_attachment_image_url( $thumbnail_id, 'large' );
+			if ( $featured_image_url ) {
+				return $featured_image_url;
+			}
+		}
 
 		// Check for default social image
 		$default_image = get_option( 'fp_seo_social_default_image' );
@@ -836,16 +927,59 @@ class ImprovedSocialMediaManager {
 
 		if ( ! $post_id ) {
 			wp_send_json_error( 'Invalid post ID' );
+			return;
 		}
 
-		$social_meta = $this->get_social_meta( $post_id );
-		$preview_data = $this->get_preview_data( get_post( $post_id ) );
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post ) {
+			wp_send_json_error( 'Post not found' );
+			return;
+		}
+
+		$social_meta  = $this->get_social_meta( $post_id );
+		$preview_data = $this->get_preview_data( $post );
 
 		wp_send_json_success( array(
 			'platform' => $platform,
 			'preview' => $preview_data,
 			'meta' => $social_meta,
 		) );
+		return;
+	}
+
+	/**
+	 * AJAX handler to get featured image URL.
+	 * Used to update social preview when featured image changes.
+	 */
+	public function ajax_get_featured_image_url(): void {
+		check_ajax_referer( 'fp_seo_social_nonce', 'nonce' );
+
+		$thumbnail_id = (int) ( $_POST['thumbnail_id'] ?? 0 );
+
+		if ( ! $thumbnail_id || $thumbnail_id <= 0 ) {
+			wp_send_json_error( 'Invalid thumbnail ID' );
+			return;
+		}
+
+		// Get featured image URL
+		$image_url = wp_get_attachment_image_url( $thumbnail_id, 'large' );
+		if ( ! $image_url ) {
+			// Try medium size
+			$image_url = wp_get_attachment_image_url( $thumbnail_id, 'medium' );
+		}
+		if ( ! $image_url ) {
+			// Try full size
+			$image_url = wp_get_attachment_url( $thumbnail_id );
+		}
+
+		if ( $image_url ) {
+			wp_send_json_success( array(
+				'url' => esc_url_raw( $image_url ),
+				'thumbnail_id' => $thumbnail_id,
+			) );
+		} else {
+			wp_send_json_error( 'Image not found' );
+		}
 	}
 
 	/**
@@ -868,17 +1002,18 @@ class ImprovedSocialMediaManager {
 
 		if ( ! $post_id ) {
 			wp_send_json_error( 'Invalid post ID' );
+			return;
 		}
 
 		$post = get_post( $post_id );
-		if ( ! $post ) {
+		if ( ! $post instanceof \WP_Post ) {
 			wp_send_json_error( 'Post not found' );
+			return;
 		}
 
-		// Use AI to optimize social media content
 		$optimized = $this->optimize_social_with_ai( $post, $platform );
-
 		wp_send_json_success( $optimized );
+		return;
 	}
 
 	/**
@@ -886,25 +1021,8 @@ class ImprovedSocialMediaManager {
 	 * Used as fallback when wp.media is not available.
 	 */
 	public function ajax_get_attachment_url(): void {
-		// Attachment URL handler removed - no longer handling images
 		wp_send_json_error( array( 'message' => __( 'Image handling feature has been removed.', 'fp-seo-performance' ) ), 410 );
 		return;
-		check_ajax_referer( 'fp_seo_get_attachment', 'nonce' );
-
-		$attachment_id = (int) ( $_POST['attachment_id'] ?? 0 );
-
-		if ( ! $attachment_id ) {
-			wp_send_json_error( 'Invalid attachment ID' );
-		}
-
-		// Usa wp_get_attachment_url invece di wp_get_attachment_image_url per evitare interferenze con dimensioni
-		$url = wp_get_attachment_url( $attachment_id );
-
-		if ( ! $url ) {
-			wp_send_json_error( 'Attachment not found' );
-		}
-
-		wp_send_json_success( array( 'url' => $url ) );
 	}
 
 
@@ -919,11 +1037,7 @@ class ImprovedSocialMediaManager {
 	private function optimize_social_with_ai( $post, string $platform ): array {
 		// This method is kept for backward compatibility but should use SocialAjaxHandler
 		if ( $this->ajax_handler ) {
-			// Use reflection to access private method
-			$reflection = new \ReflectionClass( $this->ajax_handler );
-			$method = $reflection->getMethod( 'optimize_social_with_ai' );
-			$method->setAccessible( true );
-			return $method->invoke( $this->ajax_handler, $post, $platform );
+			return $this->ajax_handler->optimize_social_with_ai( $post, $platform );
 		}
 
 		// Fallback implementation (should not be reached if ajax_handler is available)
@@ -991,11 +1105,12 @@ class ImprovedSocialMediaManager {
 			if ( class_exists( '\FP\SEO\Utils\WPBakeryContentExtractor' ) ) {
 				$text = \FP\SEO\Utils\WPBakeryContentExtractor::extract_text( $post_content );
 				
-				if ( ! empty( $text ) ) {
-					// Clean up the extracted text (already cleaned by extract_text, but normalize whitespace)
-					$text = preg_replace( '/\s+/', ' ', $text ); // Normalize whitespace
-					return trim( $text );
-				}
+			if ( ! empty( $text ) ) {
+				// Clean up the extracted text (already cleaned by extract_text, but normalize whitespace)
+				$replaced = preg_replace( '/\s+/', ' ', $text );
+				$text     = ( $replaced !== null && $replaced !== false ) ? $replaced : $text;
+				return trim( $text );
+			}
 			}
 		}
 
@@ -1003,8 +1118,8 @@ class ImprovedSocialMediaManager {
 		// First render shortcodes, then strip tags
 		$rendered = do_shortcode( $post_content );
 		$content = wp_strip_all_tags( $rendered );
-		$content = preg_replace( '/\s+/', ' ', $content ); // Normalize whitespace
-		
+		$content = preg_replace( '/\s+/', ' ', $content ) ?? $content;
+
 		return trim( $content );
 	}
 }

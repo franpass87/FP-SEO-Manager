@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Admin;
 
 use FP\SEO\Admin\Settings\AiTabRenderer;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Registers AI settings tab and related functionality.
@@ -19,11 +20,32 @@ use FP\SEO\Admin\Settings\AiTabRenderer;
 class AiSettings {
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_filter( 'fpseo_settings_tabs', array( $this, 'add_ai_tab' ) );
-		add_action( 'fpseo_settings_render_tab_ai', array( $this, 'render_ai_tab' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_filter( 'fpseo_settings_tabs', array( $this, 'add_ai_tab' ) );
+			$this->hook_manager->add_action( 'fpseo_settings_render_tab_ai', array( $this, 'render_ai_tab' ) );
+		} else {
+			add_filter( 'fpseo_settings_tabs', array( $this, 'add_ai_tab' ) );
+			add_action( 'fpseo_settings_render_tab_ai', array( $this, 'render_ai_tab' ) );
+		}
 	}
 
 	/**

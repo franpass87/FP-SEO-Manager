@@ -43,7 +43,7 @@ class WPBakeryContentExtractor {
 
 		// Combine both
 		$combined = trim( $extracted_text . ' ' . $html_text );
-		return preg_replace( '/\s+/', ' ', $combined );
+		return preg_replace( '/\s+/', ' ', $combined ) ?? $combined;
 	}
 
 	/**
@@ -127,7 +127,9 @@ class WPBakeryContentExtractor {
 		$stack = array();
 		$regex = '/\[([a-zA-Z_]+)([^\]]*)\]|\[\/([a-zA-Z_]+)\]|([^[]+)/';
 
-		preg_match_all( $regex, $content, $matches, PREG_SET_ORDER );
+		if ( false === preg_match_all( $regex, $content, $matches, PREG_SET_ORDER ) ) {
+			return array();
+		}
 
 		foreach ( $matches as $match ) {
 			if ( ! empty( $match[1] ) ) {

@@ -23,37 +23,42 @@ class FaqSchemaGenerator extends AbstractSchemaGenerator {
 	 * Generate FAQPage schema.
 	 *
 	 * @param int|null $post_id Post ID.
-	 * @return array<string, mixed>|null
+	 * @return array<string, mixed>
 	 */
-	public function generate( ?int $post_id = null ): ?array {
+	public function generate( ?int $post_id = null ): array {
 		if ( ! $post_id ) {
-			return null;
+			return [];
 		}
 
-		$faq_questions = get_post_meta( $post_id, '_fp_seo_faq_questions', true );
+		// Use Q&A pairs as single source of truth (unified system)
+		$qa_pairs = get_post_meta( $post_id, '_fp_seo_qa_pairs', true );
 		
-		if ( empty( $faq_questions ) || ! is_array( $faq_questions ) ) {
-			return null;
+		if ( empty( $qa_pairs ) || ! is_array( $qa_pairs ) ) {
+			return [];
 		}
 
 		$main_entity = array();
-		foreach ( $faq_questions as $faq ) {
-			if ( empty( $faq['question'] ) || empty( $faq['answer'] ) ) {
+		foreach ( $qa_pairs as $pair ) {
+			// Extract only question and answer for FAQ Schema
+			$question = isset( $pair['question'] ) ? $pair['question'] : '';
+			$answer = isset( $pair['answer'] ) ? $pair['answer'] : '';
+			
+			if ( empty( $question ) || empty( $answer ) ) {
 				continue;
 			}
 
 			$main_entity[] = array(
 				'@type' => 'Question',
-				'name' => sanitize_text_field( $faq['question'] ),
+				'name' => sanitize_text_field( $question ),
 				'acceptedAnswer' => array(
 					'@type' => 'Answer',
-					'text' => wp_kses_post( $faq['answer'] ),
+					'text' => wp_kses_post( $answer ),
 				),
 			);
 		}
 
 		if ( empty( $main_entity ) ) {
-			return null;
+			return array();
 		}
 
 		$schema = $this->build_base_schema();
@@ -71,5 +76,19 @@ class FaqSchemaGenerator extends AbstractSchemaGenerator {
 		return 'FAQPage';
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

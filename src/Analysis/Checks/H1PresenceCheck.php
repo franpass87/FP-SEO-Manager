@@ -58,8 +58,8 @@ class H1PresenceCheck implements CheckInterface {
 		
 		// Normalize text: decode HTML entities, normalize spaces, remove extra whitespace
 		$text_normalized = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-		$text_normalized = preg_replace( '/\s+/u', ' ', $text_normalized );
-		$text_normalized = trim( $text_normalized );
+		$text_normalized_raw = preg_replace( '/\s+/u', ' ', $text_normalized );
+		$text_normalized = is_string( $text_normalized_raw ) ? trim( $text_normalized_raw ) : trim( $text_normalized );
 		
 		$keyword_normalized = trim( $keyword );
 		
@@ -77,9 +77,11 @@ class H1PresenceCheck implements CheckInterface {
 		$keyword_decoded = html_entity_decode( $keyword_normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		
 		// Normalize spaces around & (remove spaces before/after &)
-		$keyword_amp_normalized = preg_replace( '/\s*&\s*/u', '&', $keyword_decoded );
-		$text_amp_normalized = preg_replace( '/\s*&\s*/u', '&', $text_normalized );
-		
+		$keyword_amp_raw     = preg_replace( '/\s*&\s*/u', '&', $keyword_decoded );
+		$text_amp_raw        = preg_replace( '/\s*&\s*/u', '&', $text_normalized );
+		$keyword_amp_normalized = is_string( $keyword_amp_raw ) ? $keyword_amp_raw : $keyword_decoded;
+		$text_amp_normalized    = is_string( $text_amp_raw ) ? $text_amp_raw : $text_normalized;
+
 		// Try normalized match with & normalization
 		if ( false !== mb_stripos( $text_amp_normalized, $keyword_amp_normalized ) ) {
 			return true;
@@ -94,6 +96,9 @@ class H1PresenceCheck implements CheckInterface {
 		// Split keyword into words (split on spaces, but preserve & as part of word)
 		// Use the decoded and normalized keyword
 		$keyword_parts = preg_split( '/\s+/u', mb_strtolower( $keyword_decoded ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( false === $keyword_parts ) {
+			$keyword_parts = array( mb_strtolower( $keyword_decoded ) );
+		}
 		$text_lower = mb_strtolower( $text_amp_normalized );
 		
 		// Check if all significant words/parts are present
@@ -181,8 +186,8 @@ class H1PresenceCheck implements CheckInterface {
 			// Decode HTML entities to get clean text
 			$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 			// Normalize whitespace
-			$text = preg_replace( '/\s+/u', ' ', $text );
-			$text = trim( $text );
+			$text_replaced = preg_replace( '/\s+/u', ' ', $text );
+			$text          = trim( is_string( $text_replaced ) ? $text_replaced : $text );
 
 			if ( '' !== $text ) {
 				++$count;

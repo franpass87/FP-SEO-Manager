@@ -28,15 +28,15 @@ class HowToSchemaGenerator extends AbstractSchemaGenerator {
 	 * @param int|null $post_id Post ID.
 	 * @return array<string, mixed>|null
 	 */
-	public function generate( ?int $post_id = null ): ?array {
+	public function generate( ?int $post_id = null ): array {
 		if ( ! $post_id ) {
-			return null;
+			return [];
 		}
 
 		$howto_data = get_post_meta( $post_id, '_fp_seo_howto', true );
 		
 		if ( empty( $howto_data ) || ! is_array( $howto_data ) ) {
-			return null;
+			return [];
 		}
 
 		$schema = $this->build_base_schema();
@@ -69,5 +69,19 @@ class HowToSchemaGenerator extends AbstractSchemaGenerator {
 		return 'HowTo';
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

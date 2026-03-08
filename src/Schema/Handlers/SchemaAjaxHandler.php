@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Schema\Handlers;
 
 use FP\SEO\Schema\AdvancedSchemaManager;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use function array_key_exists;
 use function check_ajax_referer;
 use function current_user_can;
@@ -32,12 +33,21 @@ class SchemaAjaxHandler {
 	private $manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param AdvancedSchemaManager $manager Schema manager instance.
+	 * @param HookManagerInterface  $hook_manager Hook manager instance.
 	 */
-	public function __construct( AdvancedSchemaManager $manager ) {
+	public function __construct( AdvancedSchemaManager $manager, HookManagerInterface $hook_manager ) {
 		$this->manager = $manager;
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
@@ -46,8 +56,8 @@ class SchemaAjaxHandler {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_generate_schema', array( $this, 'handle_generate_schema' ) );
-		add_action( 'wp_ajax_fp_seo_preview_schema', array( $this, 'handle_preview_schema' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_generate_schema', array( $this, 'handle_generate_schema' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_preview_schema', array( $this, 'handle_preview_schema' ) );
 	}
 
 	/**
@@ -63,6 +73,7 @@ class SchemaAjaxHandler {
 				array( 'message' => __( 'Permessi insufficienti per generare lo schema.', 'fp-seo-performance' ) ),
 				403
 			);
+			return;
 		}
 
 		$schema_type = sanitize_text_field( $_POST['schema_type'] ?? '' );
@@ -75,6 +86,7 @@ class SchemaAjaxHandler {
 				array( 'message' => __( 'Tipo di schema non valido.', 'fp-seo-performance' ) ),
 				400
 			);
+			return;
 		}
 
 		if ( '' === trim( $schema_data ) ) {
@@ -82,24 +94,27 @@ class SchemaAjaxHandler {
 				array( 'message' => __( 'Inserisci i dati dello schema prima di procedere.', 'fp-seo-performance' ) ),
 				400
 			);
+			return;
 		}
 
 		$data = json_decode( $schema_data, true );
-		if ( json_last_error() !== JSON_ERROR_NONE ) {
+		if ( json_last_error() !== JSON_ERROR_NONE || ! is_array( $data ) ) {
 			wp_send_json_error(
 				array( 'message' => __( 'Il JSON fornito non è valido.', 'fp-seo-performance' ) ),
 				400
 			);
+			return;
 		}
 
 		$schema = array(
 			'@context' => 'https://schema.org',
-			'@type' => $schema_type,
+			'@type'    => $schema_type,
 		);
 
 		$schema = array_merge( $schema, $data );
 
 		wp_send_json_success( $schema );
+		return;
 	}
 
 	/**
@@ -115,6 +130,7 @@ class SchemaAjaxHandler {
 				array( 'message' => __( 'Permessi insufficienti per visualizzare l\'anteprima dello schema.', 'fp-seo-performance' ) ),
 				403
 			);
+			return;
 		}
 
 		$post_id = (int) ( $_POST['post_id'] ?? 0 );
@@ -123,11 +139,27 @@ class SchemaAjaxHandler {
 				array( 'message' => __( 'ID contenuto non valido.', 'fp-seo-performance' ) ),
 				400
 			);
+			return;
 		}
 
-		$schemas = $this->manager->get_active_schemas_public();
+		$schemas = $this->manager->get_active_schemas_public( $post_id );
 		wp_send_json_success( $schemas );
+		return;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

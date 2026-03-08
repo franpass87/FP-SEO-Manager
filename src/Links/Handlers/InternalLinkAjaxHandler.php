@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Links\Handlers;
 
 use FP\SEO\Links\InternalLinkManager;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Utils\Logger;
 use function absint;
 use function check_ajax_referer;
@@ -31,12 +32,21 @@ class InternalLinkAjaxHandler {
 	private $manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param InternalLinkManager $manager Internal link manager instance.
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
 	 */
-	public function __construct( InternalLinkManager $manager ) {
+	public function __construct( InternalLinkManager $manager, HookManagerInterface $hook_manager ) {
 		$this->manager = $manager;
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
@@ -45,9 +55,9 @@ class InternalLinkAjaxHandler {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'wp_ajax_fp_seo_get_link_suggestions', array( $this, 'handle_get_suggestions' ) );
-		add_action( 'wp_ajax_fp_seo_analyze_internal_links', array( $this, 'handle_analyze' ) );
-		add_action( 'wp_ajax_fp_seo_optimize_internal_links', array( $this, 'handle_optimize' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_get_link_suggestions', array( $this, 'handle_get_suggestions' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_analyze_internal_links', array( $this, 'handle_analyze' ) );
+		$this->hook_manager->add_action( 'wp_ajax_fp_seo_optimize_internal_links', array( $this, 'handle_optimize' ) );
 	}
 
 	/**
@@ -62,6 +72,7 @@ class InternalLinkAjaxHandler {
 
 		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid post ID or insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$options = $_POST['options'] ?? array();
@@ -74,6 +85,7 @@ class InternalLinkAjaxHandler {
 		wp_send_json_success( array(
 			'suggestions' => $suggestions,
 		) );
+		return;
 	}
 
 	/**
@@ -88,6 +100,7 @@ class InternalLinkAjaxHandler {
 
 		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid post ID or insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		try {
@@ -96,7 +109,8 @@ class InternalLinkAjaxHandler {
 			wp_send_json_success( array(
 				'analysis' => $analysis,
 			) );
-		} catch ( \Exception $e ) {
+			return;
+		} catch ( \Throwable $e ) {
 			Logger::error( 'Internal links analysis error', array(
 				'post_id' => $post_id,
 				'error' => $e->getMessage(),
@@ -106,6 +120,7 @@ class InternalLinkAjaxHandler {
 				'message' => __( 'Error analyzing internal links.', 'fp-seo-performance' ),
 				'error' => $e->getMessage(),
 			), 500 );
+			return;
 		}
 	}
 
@@ -121,10 +136,12 @@ class InternalLinkAjaxHandler {
 
 		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid post ID or insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$optimization = $this->manager->optimize_post_links( $post_id );
 		wp_send_json_success( $optimization );
+		return;
 	}
 }
 

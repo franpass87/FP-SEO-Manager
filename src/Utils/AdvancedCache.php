@@ -12,7 +12,6 @@ declare(strict_types=1);
 namespace FP\SEO\Utils;
 
 use FP\SEO\Exceptions\CacheException;
-use FP\SEO\Utils\Logger;
 
 /**
  * Advanced caching system with Redis, Memcached, and WordPress object cache support.
@@ -294,7 +293,7 @@ class AdvancedCache {
 				default:
 					return false;
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			$this->stats['errors']++;
 			return false;
 		}
@@ -323,7 +322,7 @@ class AdvancedCache {
 				default:
 					return false;
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			$this->stats['errors']++;
 			return false;
 		}
@@ -350,7 +349,7 @@ class AdvancedCache {
 				default:
 					return false;
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			$this->stats['errors']++;
 			return false;
 		}
@@ -378,7 +377,7 @@ class AdvancedCache {
 				default:
 					return false;
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			$this->stats['errors']++;
 			return false;
 		}
@@ -407,12 +406,12 @@ class AdvancedCache {
 				// PHP 7.0+ supports allowed_classes parameter
 				$unserialized = @unserialize( $value, [ 'allowed_classes' => false ] );
 				return $unserialized !== false ? $unserialized : false;
-			} catch ( \Exception $e ) {
+			} catch ( \Throwable $e ) {
 				// Log error for debugging
 				Logger::debug( 'Redis unserialize error', array( 'error' => $e->getMessage() ) );
 				return false;
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::debug( 'Redis connection error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -428,8 +427,10 @@ class AdvancedCache {
 			$result = $redis->setex( $key, $ttl, serialize( $value ) );
 			$redis->close();
 			return (bool) $result;
-		} catch ( \Exception $e ) {
-			Logger::debug( 'Redis set error', array( 'error' => $e->getMessage() ) );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO AdvancedCache: Redis set error - ' . $e->getMessage() );
+			}
 			return false;
 		}
 	}
@@ -444,7 +445,7 @@ class AdvancedCache {
 			$result = $redis->del( $key );
 			$redis->close();
 			return $result > 0;
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::debug( 'Redis delete error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -464,8 +465,10 @@ class AdvancedCache {
 			}
 			$redis->close();
 			return true;
-		} catch ( \Exception $e ) {
-			Logger::debug( 'Redis clear group error', array( 'error' => $e->getMessage() ) );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO AdvancedCache: Redis clear group error - ' . $e->getMessage() );
+			}
 			return false;
 		}
 	}
@@ -482,8 +485,10 @@ class AdvancedCache {
 			
 			$value = $memcached->get( $key );
 			return $value !== false ? $value : false;
-		} catch ( \Exception $e ) {
-			Logger::debug( 'Memcached get error', array( 'error' => $e->getMessage() ) );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO AdvancedCache: Memcached get error - ' . $e->getMessage() );
+			}
 			return false;
 		}
 	}
@@ -496,7 +501,7 @@ class AdvancedCache {
 			}
 			
 			return $memcached->set( $key, $value, $ttl );
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::debug( 'Memcached set error', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
@@ -510,8 +515,10 @@ class AdvancedCache {
 			}
 			
 			return $memcached->delete( $key );
-		} catch ( \Exception $e ) {
-			Logger::debug( 'Memcached delete error', array( 'error' => $e->getMessage() ) );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO AdvancedCache: Memcached delete error - ' . $e->getMessage() );
+			}
 			return false;
 		}
 	}

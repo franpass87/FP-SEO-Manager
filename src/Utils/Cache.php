@@ -31,12 +31,14 @@ class Cache {
 	/**
 	 * Gets a value from the cache.
 	 *
+	 * @deprecated 0.9.0 Use injected CacheInterface instead. This static method will be removed in a future version.
 	 * @param string $key Cache key.
 	 * @param mixed  $default Default value if cache miss.
 	 *
 	 * @return mixed Cached value or default.
 	 */
 	public static function get( string $key, mixed $default = null ): mixed {
+		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::get() via dependency injection' );
 		$found = false;
 		$value = wp_cache_get( $key, self::CACHE_GROUP, false, $found );
 
@@ -50,6 +52,7 @@ class Cache {
 	/**
 	 * Sets a value in the cache.
 	 *
+	 * @deprecated 0.9.0 Use injected CacheInterface instead. This static method will be removed in a future version.
 	 * @param string $key        Cache key.
 	 * @param mixed  $value      Value to cache.
 	 * @param int    $expiration Expiration time in seconds.
@@ -57,26 +60,31 @@ class Cache {
 	 * @return bool True on success, false on failure.
 	 */
 	public static function set( string $key, mixed $value, int $expiration = self::DEFAULT_EXPIRATION ): bool {
+		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::set() via dependency injection' );
 		return wp_cache_set( $key, $value, self::CACHE_GROUP, $expiration );
 	}
 
 	/**
 	 * Deletes a value from the cache.
 	 *
+	 * @deprecated 0.9.0 Use injected CacheInterface instead. This static method will be removed in a future version.
 	 * @param string $key Cache key.
 	 *
 	 * @return bool True on success, false on failure.
 	 */
 	public static function delete( string $key ): bool {
+		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::delete() via dependency injection' );
 		return wp_cache_delete( $key, self::CACHE_GROUP );
 	}
 
 	/**
 	 * Flushes all cached values for this plugin.
 	 *
+	 * @deprecated 0.9.0 Use injected CacheInterface instead. This static method will be removed in a future version.
 	 * @return bool True on success.
 	 */
 	public static function flush(): bool {
+		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::flush() via dependency injection' );
 		// WordPress doesn't support group-specific flush, so we use a versioning strategy.
 		$version = (int) self::get( '_cache_version', 0 );
 		return self::set( '_cache_version', $version + 1, DAY_IN_SECONDS );
@@ -85,6 +93,7 @@ class Cache {
 	/**
 	 * Gets or sets a cached value using a callback.
 	 *
+	 * @deprecated 0.9.0 Use injected CacheInterface instead. This static method will be removed in a future version.
 	 * @param string   $key        Cache key.
 	 * @param callable $callback   Callback to generate value on cache miss.
 	 * @param int      $expiration Expiration time in seconds.
@@ -92,6 +101,7 @@ class Cache {
 	 * @return mixed Cached or freshly generated value.
 	 */
 	public static function remember( string $key, callable $callback, int $expiration = self::DEFAULT_EXPIRATION ): mixed {
+		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::remember() via dependency injection' );
 		// Check if caching is enabled
 		if ( ! PerformanceConfig::is_feature_enabled( 'cache' ) ) {
 			return $callback();

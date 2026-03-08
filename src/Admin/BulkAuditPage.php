@@ -18,8 +18,10 @@ use FP\SEO\Analysis\Context;
 use FP\SEO\Analysis\Result;
 use FP\SEO\Scoring\ScoreEngine;
 use FP\SEO\Utils\MetadataResolver;
-use FP\SEO\Utils\Options;
 use FP\SEO\Utils\PostTypes;
+use FP\SEO\Utils\QueryOptimizer;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Infrastructure\Contracts\OptionsInterface;
 use WP_Post;
 use WP_Query;
 use function __;
@@ -94,13 +96,44 @@ class BulkAuditPage {
 	private $renderer;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Options instance.
+	 *
+	 * @var OptionsInterface
+	 */
+	private OptionsInterface $options;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 * @param OptionsInterface     $options      Options instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager, OptionsInterface $options ) {
+		$this->hook_manager = $hook_manager;
+		$this->options      = $options;
+	}
+
+	/**
 	 * Hooks WordPress actions for the page.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_page' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax_analyze' ) );
-		add_action( 'admin_post_' . self::EXPORT_ACTION, array( $this, 'handle_export' ) );
+		$hooks = array(
+			'admin_menu'                    => array( $this, 'add_page' ),
+			'admin_enqueue_scripts'        => array( $this, 'enqueue_assets' ),
+			'wp_ajax_' . self::AJAX_ACTION => array( $this, 'handle_ajax_analyze' ),
+			'admin_post_' . self::EXPORT_ACTION => array( $this, 'handle_export' ),
+		);
+
+		foreach ( $hooks as $hook => $callback ) {
+			$this->hook_manager->add_action( $hook, $callback );
+		}
 
 		// Initialize and register styles manager
 		$this->styles_manager = new BulkAuditStylesManager();
@@ -114,7 +147,7 @@ class BulkAuditPage {
 		 * Adds the submenu entry.
 		 */
 	public function add_page(): void {
-		$capability = Options::get_capability();
+		$capability = $this->options->get_capability();
 
 		add_submenu_page(
 				self::PAGE_PARENT,
@@ -170,25 +203,60 @@ class BulkAuditPage {
 		 * Displays the bulk auditor table and controls.
 		 */
 	public function render(): void {
-		$filters  = $this->get_filters();
-		$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );
-		$results  = $this->get_cached_results();
-		$types    = $this->get_allowed_post_types();
-		$statuses = $this->get_allowed_statuses();
+		if ( ! current_user_can( $this->options->get_capability() ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
+		}
+
+		try {
+			$filters  = $this->get_filters();
+			$posts    = $this->query_posts( $filters['post_type'], $filters['status'] );
+			$results  = $this->get_cached_results();
+			$types    = $this->get_allowed_post_types();
+			$statuses = $this->get_allowed_statuses();
 
 		if ( $this->renderer ) {
+			// Create callable closure using Closure::fromCallable to ensure type safety
+			$format_callback = \Closure::fromCallable( array( $this, 'format_timestamp' ) );
+			
 			$this->renderer->render(
 				$filters,
 				$posts,
 				$results,
 				$types,
 				$statuses,
-				array( $this, 'format_timestamp' ),
+				$format_callback,
 				$this->is_analyzer_enabled(),
 				self::PAGE_SLUG,
 				self::NONCE_ACTION,
 				self::EXPORT_ACTION
 			);
+		} else {
+			// Fallback rendering if renderer is not initialized
+			?>
+			<div class="wrap">
+				<h1><?php esc_html_e( 'Bulk Auditor', 'fp-seo-performance' ); ?></h1>
+				<div class="notice notice-error">
+					<p><?php esc_html_e( 'Error: Bulk Auditor renderer not initialized. Please refresh the page or contact support.', 'fp-seo-performance' ); ?></p>
+				</div>
+			</div>
+			<?php
+		}
+		} catch ( \Throwable $e ) {
+			// Log error and show user-friendly message
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO BulkAuditPage Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			?>
+			<div class="wrap">
+				<h1><?php esc_html_e( 'Bulk Auditor', 'fp-seo-performance' ); ?></h1>
+				<div class="notice notice-error">
+					<p><?php esc_html_e( 'An error occurred while loading the bulk auditor. Please try refreshing the page.', 'fp-seo-performance' ); ?></p>
+					<?php if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) : ?>
+						<p><strong><?php esc_html_e( 'Debug Info:', 'fp-seo-performance' ); ?></strong> <?php echo esc_html( $e->getMessage() ); ?></p>
+					<?php endif; ?>
+				</div>
+			</div>
+			<?php
 		}
 	}
 
@@ -198,12 +266,14 @@ class BulkAuditPage {
 	public function handle_ajax_analyze(): void {
 		check_ajax_referer( self::NONCE_ACTION, 'nonce' );
 
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( $this->options->get_capability() ) ) {
 			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		if ( ! $this->is_analyzer_enabled() ) {
 			wp_send_json_error( array( 'message' => __( 'Analyzer is disabled in settings.', 'fp-seo-performance' ) ), 400 );
+			return;
 		}
 
 		$ids = isset( $_POST['post_ids'] ) ? (array) wp_unslash( $_POST['post_ids'] ) : array();
@@ -211,6 +281,7 @@ class BulkAuditPage {
 
 		if ( empty( $ids ) ) {
 			wp_send_json_success( array( 'results' => array() ) );
+			return;
 		}
 
 		$results = array();
@@ -235,7 +306,7 @@ class BulkAuditPage {
 	public function handle_export(): void {
 		check_admin_referer( self::NONCE_ACTION, '_fp_seo_bulk_nonce' );
 
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( $this->options->get_capability() ) ) {
 			wp_die( esc_html__( 'Sorry, you are not allowed to export these results.', 'fp-seo-performance' ) );
 		}
 
@@ -264,6 +335,9 @@ class BulkAuditPage {
 		header( 'Content-Disposition: attachment; filename=' . $filename );
 
 		$output = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+		if ( false === $output ) {
+			wp_die( esc_html__( 'Could not open output stream for CSV export.', 'fp-seo-performance' ) );
+		}
 
 		fputcsv(
 					$output,
@@ -335,14 +409,15 @@ class BulkAuditPage {
 		return $this->get_filters_from_request();
 	}
 
-		/**
-		 * Extracts filter values from the current request variables.
-		 *
-		 * @return array{post_type:string,status:string}
-		 */
+	/**
+	 * Extracts filter values from the current request variables.
+	 *
+	 * @return array{post_type:string,status:string}
+	 */
 	private function get_filters_from_request(): array {
-		$type   = isset( $_REQUEST['post_type'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['post_type'] ) ) : 'all'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
-		$status = isset( $_REQUEST['status'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['status'] ) ) : 'any'; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Filtering view only.
+		// Use $_GET instead of $_REQUEST for better security (WordPress best practice)
+		$type   = isset( $_GET['post_type'] ) ? sanitize_key( (string) wp_unslash( $_GET['post_type'] ) ) : 'all'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Filtering view only, no sensitive operation.
+		$status = isset( $_GET['status'] ) ? sanitize_key( (string) wp_unslash( $_GET['status'] ) ) : 'any'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Filtering view only, no sensitive operation.
 
 		if ( 'all' !== $type && ! in_array( $type, $this->get_allowed_post_types(), true ) ) {
 			$type = 'all';
@@ -369,18 +444,60 @@ class BulkAuditPage {
 	private function query_posts( string $post_type, string $status ): array {
 		$types = $this->get_allowed_post_types();
 
+		// Validate post_type
+		if ( empty( $types ) ) {
+			return array();
+		}
+
+		// Build query args
 		$args = array(
-			'post_type'                  => 'all' === $post_type ? $types : $post_type,
-			'post_status'                => 'any' === $status ? $this->get_allowed_statuses() : $status,
+			'post_type'                  => 'all' === $post_type ? $types : array( $post_type ),
 			'posts_per_page'             => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- Limit scoped to admin reporting view.
 			'orderby'                    => 'date',
 			'order'                      => 'DESC',
 			'no_found_rows'              => true,
 			'update_post_meta_cache'     => false,
 			'update_post_term_cache'     => false,
+			'suppress_filters'           => false,
 		);
 
+		// Handle status filter - WP_Query accepts 'any' as a special value
+		// But 'any' includes all statuses including 'trash', 'inherit', etc.
+		// For better UX, use only standard statuses when 'any' is selected
+		if ( 'any' === $status ) {
+			// Use standard publishable statuses instead of 'any' to avoid including trash/inherit
+			$args['post_status'] = array( 'publish', 'draft', 'pending', 'future', 'private' );
+		} else {
+			// Validate status is in allowed list
+			$allowed_statuses = $this->get_allowed_statuses();
+			if ( in_array( $status, $allowed_statuses, true ) ) {
+				$args['post_status'] = $status;
+			} else {
+				// Fallback to publishable statuses if invalid status
+				$args['post_status'] = array( 'publish', 'draft', 'pending', 'future', 'private' );
+			}
+		}
+
+		// Ensure post_type is always an array for WP_Query
+		if ( ! is_array( $args['post_type'] ) ) {
+			$args['post_type'] = array( $args['post_type'] );
+		}
+
+		// Validate post_type values
+		$args['post_type'] = array_intersect( $args['post_type'], $types );
+		if ( empty( $args['post_type'] ) ) {
+			return array();
+		}
+
+		// Optimize query arguments for plugin query
+		$args = QueryOptimizer::optimize_query_args( $args );
+
 		$query = new WP_Query( $args );
+
+		// WP_Query doesn't return WP_Error, but we check for empty results
+		if ( empty( $query->posts ) || ! is_array( $query->posts ) ) {
+			return array();
+		}
 
 		return $query->posts;
 	}
@@ -531,7 +648,7 @@ class BulkAuditPage {
 		$date_format = (string) get_option( 'date_format', 'Y-m-d' );
 		$time_format = (string) get_option( 'time_format', 'H:i' );
 
-		return wp_date( $date_format . ' ' . $time_format, $timestamp );
+		return wp_date( $date_format . ' ' . $time_format, $timestamp ) ?: '';
 	}
 
 
@@ -539,7 +656,7 @@ class BulkAuditPage {
 		 * Determine whether the analyzer is enabled in settings.
 		 */
 	private function is_analyzer_enabled(): bool {
-		$options = Options::get();
+		$options = $this->options->get();
 
 		return ! empty( $options['general']['enable_analyzer'] );
 	}

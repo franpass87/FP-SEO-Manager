@@ -134,9 +134,11 @@ class Options {
 	/**
 	 * Provides the default option structure.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @return array<string, mixed> Default options.
 	 */
 	public static function get_defaults(): array {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::get_defaults() via dependency injection' );
 		$checks = array();
 
 		foreach ( self::get_check_keys() as $key ) {
@@ -179,15 +181,10 @@ class Options {
 				'publisher_url'      => '',
 				'publisher_logo'     => '',
 				'license_url'        => '',
-				'ai_usage'           => 'allow-with-attribution',
+				'ai_usage'           => 'allow', // Changed to 'allow' to expose everything by default
 				'default_confidence' => 0.7,
 				'pretty_print'       => false,
-				'post_types'         => array(
-					'post' => array(
-						'expose'     => true,
-						'in_sitemap' => true,
-					),
-				),
+				'post_types'         => array(), // Empty array - will be populated with all public post types in sanitization
 			),
 			'ai'          => array(
 				'openai_api_key'        => '',
@@ -215,9 +212,11 @@ class Options {
 	/**
 	 * Retrieves the sanitized options from the database.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @return array<string, mixed> Sanitized option data.
 	 */
 	public static function get(): array {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::get() via dependency injection' );
 		return Cache::remember(
 			'options_data',
 			static function (): array {
@@ -252,11 +251,13 @@ class Options {
 	/**
 	 * Sanitizes an options payload and records validation notices.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @param array<string, mixed> $input Raw option values.
 	 *
 	 * @return array<string, mixed> Sanitized options.
 	 */
 	public static function sanitize( ?array $input ): array {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::sanitize() via dependency injection' );
 		if ( ! is_array( $input ) ) {
 			$input = array();
 		}
@@ -468,8 +469,20 @@ class Options {
 			}
 		}
 
+		// If no post types configured, expose all public post types by default
 		if ( empty( $post_types ) ) {
-			$post_types = $defaults['geo']['post_types'];
+			$public_post_types = get_post_types( array( 'public' => true ), 'names' );
+			// Exclude attachment from default exposure
+			$public_post_types = array_filter( $public_post_types, function( $type ) {
+				return 'attachment' !== $type;
+			} );
+			
+			foreach ( $public_post_types as $post_type ) {
+				$post_types[ $post_type ] = array(
+					'expose'     => true,
+					'in_sitemap' => true,
+				);
+			}
 		}
 
 		$sanitized['geo']['post_types'] = $post_types;
@@ -514,9 +527,11 @@ class Options {
 	 * Usa array_replace_recursive() per garantire che i valori esistenti non vengano persi.
 	 * Questo è fondamentale per preservare le configurazioni durante aggiornamenti/disattivazioni.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @param array<string, mixed> $value Option payload (can be partial).
 	 */
 	public static function update( array $value ): void {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::update() via dependency injection' );
 		// Clear cache before retrieving existing options to ensure fresh data
 		Cache::delete( 'options_data' );
 		
@@ -545,21 +560,20 @@ class Options {
 		
 		// Log per debug
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'Options::update', array(
-				'result' => $result ? 'success' : 'failed',
-				'keys' => array_keys( $sanitized ),
-			) );
+			error_log( '[FP-SEO] Options::update result: ' . ( $result ? 'success' : 'failed' ) . ' keys: ' . implode( ', ', array_keys( $sanitized ) ) );
 		}
 	}
 
 	/**
 	 * Get a specific option value by key path.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @param string $key     Option key (can use dot notation like 'ai.openai_api_key').
 	 * @param mixed  $default Default value if not found.
 	 * @return mixed
 	 */
 	public static function get_option( string $key, mixed $default = null ): mixed {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::get_option() via dependency injection' );
 		$options = self::get();
 		$keys    = explode( '.', $key );
 		$value   = $options;
@@ -576,8 +590,11 @@ class Options {
 
 	/**
 	 * Retrieves the configured capability for admin access.
+	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 */
 	public static function get_capability(): string {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::get_capability() via dependency injection' );
 			$options = self::get();
 
 			return $options['advanced']['capability'] ?? 'manage_options';
@@ -592,7 +609,7 @@ class Options {
 		return Cache::remember(
 			'scoring_weights',
 			static function (): array {
-				$options = self::get();
+				$options = get_option( self::OPTION_KEY, array() );
 
 				$defaults = self::default_scoring_weights();
 				$weights  = $options['scoring']['weights'] ?? $defaults;
@@ -624,17 +641,39 @@ class Options {
 	 * IMPORTANTE: Usa array_replace_recursive per preservare i valori esistenti.
 	 * I defaults vengono applicati SOLO per chiavi mancanti, non sovrascrivono valori esistenti.
 	 *
+	 * @deprecated 0.9.0 Use injected OptionsInterface instead. This static method will be removed in a future version.
 	 * @param array<string, mixed> $value Partial options.
 	 *
 	 * @return array<string, mixed> Options with defaults applied.
 	 */
 	public static function merge_defaults( array $value ): array {
+		_deprecated_function( __METHOD__, '0.9.0', 'OptionsInterface::merge_defaults() via dependency injection' );
 		$defaults = self::get_defaults();
 
 		// array_replace_recursive preserva i valori esistenti in $value
 		// e aggiunge solo i defaults per chiavi mancanti
 		// Questo garantisce che le opzioni personalizzate non vengano sovrascritte
-		return array_replace_recursive( $defaults, $value );
+		$merged = array_replace_recursive( $defaults, $value );
+		
+		// If GEO post_types is completely empty (never configured), 
+		// initialize with all public post types exposed by default
+		if ( isset( $merged['geo']['post_types'] ) && empty( $merged['geo']['post_types'] ) && function_exists( 'get_post_types' ) ) {
+			$public_post_types = get_post_types( array( 'public' => true ), 'names' );
+			// Exclude attachment from default exposure
+			$public_post_types = array_filter( $public_post_types, function( $type ) {
+				return 'attachment' !== $type;
+			} );
+			
+			$merged['geo']['post_types'] = array();
+			foreach ( $public_post_types as $post_type ) {
+				$merged['geo']['post_types'][ $post_type ] = array(
+					'expose'     => true,
+					'in_sitemap' => true,
+				);
+			}
+		}
+		
+		return $merged;
 	}
 
 	/**
@@ -730,10 +769,11 @@ class Options {
 	 * @param string $value Raw language input.
 	 */
 	private static function sanitize_language( string $value ): string {
-				$value = strtolower( trim( $value ) );
-				$value = preg_replace( '/[^a-z\-]/', '', $value );
+			$value    = strtolower( trim( $value ) );
+			$replaced = preg_replace( '/[^a-z\-]/', '', $value );
+			$value    = is_string( $replaced ) ? $replaced : '';
 
-		if ( ! is_string( $value ) || '' === $value ) {
+		if ( '' === $value ) {
 				return self::DEFAULT_LANGUAGE;
 		}
 

@@ -76,18 +76,18 @@ class HealthChecker {
 	 */
 	private function check_performance(): array {
 		$summary = $this->monitor->get_summary();
-		$score = $summary['performance_score'];
+		$score   = $summary['performance_score'] ?? 0;
 
 		$issues = [];
 		if ( $score < 80 ) {
 			$issues[] = 'Performance score is below optimal threshold';
 		}
 
-		if ( $summary['execution_time']['total'] > 5.0 ) {
+		if ( ( $summary['execution_time']['total'] ?? 0 ) > 5.0 ) {
 			$issues[] = 'Total execution time exceeds 5 seconds';
 		}
 
-		if ( $summary['database']['total_queries'] > 50 ) {
+		if ( ( $summary['database']['total_queries'] ?? 0 ) > 50 ) {
 			$issues[] = 'High number of database queries detected';
 		}
 
@@ -113,14 +113,14 @@ class HealthChecker {
 
 		// Check for fragmented tables
 		foreach ( $analysis as $table => $data ) {
-			if ( $data['fragmentation'] > 10 ) {
+			if ( ( $data['fragmentation'] ?? 0 ) > 10 ) {
 				$issues[] = "Table {$table} has high fragmentation ({$data['fragmentation']}%)";
 				$score -= 20;
 			}
 		}
 
 		// Check for slow queries
-		if ( ! $stats['slow_query_log_enabled'] ) {
+		if ( empty( $stats['slow_query_log_enabled'] ) ) {
 			$issues[] = 'Slow query log is not enabled';
 			$score -= 10;
 		}
@@ -203,7 +203,7 @@ class HealthChecker {
 		$memory_peak = memory_get_peak_usage( true );
 		$memory_current = memory_get_usage( true );
 		$memory_limit = wp_convert_hr_to_bytes( ini_get( 'memory_limit' ) );
-		$memory_usage_percent = ( $memory_peak / $memory_limit ) * 100;
+		$memory_usage_percent = $memory_limit > 0 ? ( $memory_peak / $memory_limit ) * 100 : 0;
 
 		$issues = [];
 		$score = 100;
@@ -336,10 +336,10 @@ class HealthChecker {
 				continue;
 			}
 
-			$perms = fileperms( $dir );
-			$octal = substr( sprintf( '%o', $perms ), -4 );
+		$perms = fileperms( $dir );
+		$octal = substr( sprintf( '%o', $perms ), -4 );
 
-			if ( $octal < '0755' ) {
+		if ( octdec( $octal ) < octdec( '0755' ) ) {
 				$issues[] = "Directory {$dir} has insufficient permissions ({$octal})";
 				$score -= 20;
 			}

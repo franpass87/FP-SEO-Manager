@@ -18,6 +18,8 @@ use FP\SEO\Admin\Settings\GeneralTabRenderer;
 use FP\SEO\Admin\Settings\PerformanceTabRenderer;
 use FP\SEO\Admin\Styles\SettingsStylesManager;
 use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Renders and processes the plugin settings interface.
@@ -32,12 +34,34 @@ class SettingsPage {
 	private $styles_manager;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
+	 */
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 */
+	public function __construct( HookManagerInterface $hook_manager ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Hooks WordPress events for settings management.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
-		add_action( 'admin_init', array( $this, 'register_settings' ) );
-		add_action( 'admin_post_fp_seo_perf_import', array( $this, 'handle_import' ) );
+		$hooks = array(
+			'admin_menu'                => array( $this, 'add_settings_page' ),
+			'admin_init'                => array( $this, 'register_settings' ),
+			'admin_post_fp_seo_perf_import' => array( $this, 'handle_import' ),
+		);
+
+		foreach ( $hooks as $hook => $callback ) {
+			$this->hook_manager->add_action( $hook, $callback );
+		}
 
 		// Initialize and register styles manager
 		$this->styles_manager = new SettingsStylesManager();
@@ -48,7 +72,7 @@ class SettingsPage {
 	 * Adds the SEO Performance settings submenu.
 	 */
 	public function add_settings_page(): void {
-		$capability = Options::get_capability();
+		$capability = OptionsHelper::get_capability();
 
 		add_submenu_page(
 			'fp-seo-performance',
@@ -78,9 +102,9 @@ class SettingsPage {
 			array(
 				'type'              => 'array',
 				'sanitize_callback' => array( $this, 'sanitize_options' ),
-				// 'default' viene usato SOLO se l'opzione non esiste (prima installazione)
-				// Le opzioni esistenti vengono sempre preservate
-				'default'           => Options::get_defaults(),
+			// 'default' viene usato SOLO se l'opzione non esiste (prima installazione)
+			// Le opzioni esistenti vengono sempre preservate
+			'default'           => OptionsHelper::get_defaults(),
 			)
 		);
 		
@@ -116,16 +140,27 @@ class SettingsPage {
 		$merged = array_replace_recursive( $existing, $input );
 		
 		// Sanitize the merged options
-		$sanitized = Options::sanitize( $merged );
+		$options_instance = OptionsHelper::get_options();
+		if ( $options_instance ) {
+			$sanitized = $options_instance->sanitize( $merged );
+		} else {
+			set_error_handler( static function () { return true; }, E_USER_DEPRECATED );
+			try {
+				$sanitized = Options::sanitize( $merged );
+			} finally {
+				restore_error_handler();
+			}
+		}
 		
-		// Log per debug
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'sanitize_options', array(
-				'input_keys' => array_keys( $input ),
-				'existing_keys' => array_keys( $existing ),
-				'merged_keys' => array_keys( $merged ),
+		// Log per debug (usando error_log invece di Logger per evitare dipendenze)
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG && WP_DEBUG_LOG ) {
+			$debug_json = wp_json_encode( array(
+				'input_keys'     => array_keys( $input ),
+				'existing_keys'  => array_keys( $existing ),
+				'merged_keys'    => array_keys( $merged ),
 				'sanitized_keys' => array_keys( $sanitized ),
 			) );
+			error_log( 'FP SEO: sanitize_options - ' . ( false !== $debug_json ? $debug_json : '{}' ) );
 		}
 		
 		return $sanitized;
@@ -135,12 +170,13 @@ class SettingsPage {
 	 * Outputs the settings page.
 	 */
 	public function render(): void {
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			wp_die( esc_html__( 'You do not have permission to access these settings.', 'fp-seo-performance' ) );
 		}
 
-		$current_tab = $this->get_current_tab();
-		$options     = Options::get();
+		try {
+			$current_tab = $this->get_current_tab();
+			$options     = OptionsHelper::get();
 
 		if ( isset( $_GET['settings-updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Core handles nonce in options.php redirect.
 			$flag = sanitize_text_field( wp_unslash( (string) $_GET['settings-updated'] ) );
@@ -199,13 +235,30 @@ class SettingsPage {
 			</form>
 		</div>
 			<?php
+		} catch ( \Throwable $e ) {
+			// Log error and show user-friendly message
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO SettingsPage Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			?>
+			<div class="wrap">
+				<h1><?php esc_html_e( 'FP SEO Performance Settings', 'fp-seo-performance' ); ?></h1>
+				<div class="notice notice-error">
+					<p><?php esc_html_e( 'An error occurred while loading the settings page. Please try refreshing the page.', 'fp-seo-performance' ); ?></p>
+					<?php if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) : ?>
+						<p><strong><?php esc_html_e( 'Debug Info:', 'fp-seo-performance' ); ?></strong> <?php echo esc_html( $e->getMessage() ); ?></p>
+					<?php endif; ?>
+				</div>
+			</div>
+			<?php
+		}
 	}
 
 	/**
 	 * Handles the settings import submission.
 	 */
 	public function handle_import(): void {
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			wp_die( esc_html__( 'You do not have permission to import settings.', 'fp-seo-performance' ) );
 		}
 
@@ -216,6 +269,7 @@ class SettingsPage {
 		if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
 			add_settings_error( Options::OPTION_GROUP, 'fp_seo_perf_import_empty', __( 'Import data cannot be empty.', 'fp-seo-performance' ) );
 			$this->redirect_back();
+			return;
 		}
 
 		$decoded = json_decode( $raw, true );
@@ -223,9 +277,20 @@ class SettingsPage {
 		if ( ! is_array( $decoded ) ) {
 			add_settings_error( Options::OPTION_GROUP, 'fp_seo_perf_import_invalid', __( 'Invalid JSON settings payload.', 'fp-seo-performance' ) );
 			$this->redirect_back();
+			return;
 		}
 
-		Options::update( $decoded );
+		$opts = OptionsHelper::get_options();
+		if ( $opts ) {
+			$opts->update( $decoded );
+		} else {
+			set_error_handler( static function () { return true; }, E_USER_DEPRECATED );
+			try {
+				Options::update( $decoded );
+			} finally {
+				restore_error_handler();
+			}
+		}
 
 		add_settings_error( Options::OPTION_GROUP, 'fp_seo_perf_import_success', __( 'Settings imported successfully.', 'fp-seo-performance' ), 'updated' );
 
@@ -261,8 +326,9 @@ class SettingsPage {
 	 * Returns the currently selected tab slug.
 	 */
 	private function get_current_tab(): string {
-		$raw  = $_GET['tab'] ?? ( $_POST['tab'] ?? 'general' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing
-		$tab  = sanitize_key( (string) wp_unslash( $raw ) );
+		// Get tab from GET or POST, sanitize immediately for security
+		$raw = isset( $_GET['tab'] ) ? sanitize_key( (string) wp_unslash( $_GET['tab'] ) ) : ( isset( $_POST['tab'] ) ? sanitize_key( (string) wp_unslash( $_POST['tab'] ) ) : 'general' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing -- Tab selection only, no sensitive operation.
+		$tab  = $raw;
 		$tabs = array( 'general', 'analysis', 'performance', 'automation', 'advanced' );
 
 		// Allow custom tabs via filter

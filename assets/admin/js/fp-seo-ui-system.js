@@ -156,69 +156,118 @@
 
         /**
          * Initialize image selectors
+         * CRITICAL: Completely isolated wp.media frame to prevent interference with WordPress core media
          */
         initImageSelectors: function() {
             $(document).on('click', '.fp-seo-image-select', function(e) {
                 e.preventDefault();
+                e.stopPropagation();
                 
                 const $button = $(this);
                 const $input = $button.siblings('input[type="url"]');
                 const $preview = $button.data('preview-target');
                 
-                if (typeof wp !== 'undefined' && wp.media) {
-                    const frame = wp.media({
-                        title: 'Select Image',
-                        button: {
-                            text: 'Use Image'
-                        },
-                        multiple: false
-                    });
-                    
-                    frame.on('select', function() {
-                        const attachment = frame.state().get('selection').first().toJSON();
-                        $input.val(attachment.url);
-                        
-                        if ($preview) {
-                            $(`#${$preview}`).attr('src', attachment.url);
-                        }
-                    });
-                    
-                    frame.open();
+                if (typeof wp === 'undefined' || !wp.media) {
+                    console.error('FP SEO: wp.media is not available');
+                    return;
                 }
+                
+                // CRITICAL: Create completely isolated frame with unique ID to prevent interference
+                // Use a unique frame ID that won't conflict with WordPress core or other plugins
+                const frameId = 'fp-seo-social-image-' + Date.now();
+                const frame = wp.media({
+                    id: frameId,  // Unique ID to prevent conflicts
+                    title: 'Select Image',
+                    button: {
+                        text: 'Use Image'
+                    },
+                    multiple: false,
+                    library: {
+                        type: 'image'  // Only allow images
+                    },
+                    states: [
+                        new wp.media.controller.Library({
+                            library: wp.media.query({ type: 'image' }),
+                            multiple: false,
+                            title: 'Select Image',
+                            priority: 20,
+                            filterable: 'uploaded',
+                            sortable: 'date'
+                        })
+                    ]
+                });
+                
+                // Handle selection - isolate completely
+                frame.on('select', function() {
+                    const attachment = frame.state().get('selection').first().toJSON();
+                    
+                    // Validate it's an image
+                    if (!attachment.type || attachment.type !== 'image') {
+                        FPSeoUI.showNotification('Please select an image file.', 'error');
+                        frame.close();
+                        return;
+                    }
+                    
+                    $input.val(attachment.url);
+                    
+                    if ($preview) {
+                        $(`#${$preview}`).attr('src', attachment.url);
+                    }
+                    
+                    // Close and detach immediately to prevent interference
+                    frame.close();
+                    frame.detach();
+                });
+                
+                // Clean up on close to prevent memory leaks and interference
+                frame.on('close', function() {
+                    frame.off('select');
+                    frame.off('close');
+                    frame.detach();
+                });
+                
+                frame.open();
             });
         },
 
         /**
          * Initialize AJAX handlers
+         * CRITICAL: Must NOT interfere with WordPress core AJAX requests, especially media/featured image
          */
         initAjaxHandlers: function() {
             // Specific AJAX error handler - only for FP SEO plugin requests
             $(document).ajaxError(function(event, xhr, settings, thrownError) {
-                // Skip if it's a WordPress core request (heartbeat, autosave, etc.)
+                // CRITICAL: Skip ALL WordPress core requests to prevent interference
                 if (settings.data) {
                     const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                    // Skip WordPress core requests (heartbeat, autosave, media, featured image, etc.)
                     if (dataStr.indexOf('action=heartbeat') !== -1 ||
                         dataStr.indexOf('action=autosave') !== -1 ||
-                        dataStr.indexOf('action=wp-remove-post-lock') !== -1) {
+                        dataStr.indexOf('action=wp-remove-post-lock') !== -1 ||
+                        dataStr.indexOf('action=set-post-thumbnail') !== -1 ||
+                        dataStr.indexOf('action=remove-post-thumbnail') !== -1 ||
+                        dataStr.indexOf('action=upload-attachment') !== -1 ||
+                        dataStr.indexOf('action=save-attachment') !== -1 ||
+                        dataStr.indexOf('action=save-attachment-compat') !== -1 ||
+                        dataStr.indexOf('action=query-attachments') !== -1 ||
+                        dataStr.indexOf('action=send-attachment-to-editor') !== -1) {
                         return; // Skip WordPress core requests
                     }
                 }
                 
-                // Only handle errors for FP SEO plugin AJAX requests
+                // For FormData requests, skip all to avoid interfering with media uploads
+                if (settings.data instanceof FormData) {
+                    return; // Skip FormData requests completely to avoid interference with media uploads
+                }
+                
+                // Only handle errors for confirmed FP SEO plugin AJAX requests
                 let isFpSeoRequest = false;
                 
-                if (settings.url && settings.url.indexOf('admin-ajax.php') !== -1) {
-                    // Check if it's a FormData request - we need to check the URL pattern
-                    if (settings.data instanceof FormData) {
-                        // For FormData, we can't inspect directly, but we check if URL contains admin-ajax.php
-                        // and rely on the action being set correctly in the request
-                        // We'll be more conservative and only show errors for confirmed FP SEO actions
-                        return; // Skip FormData requests to avoid false positives
-                    } else if (settings.data) {
-                        const dataStr = typeof settings.data === 'string' ? settings.data : '';
-                        isFpSeoRequest = dataStr.indexOf('action=fp_seo_performance') !== -1 ||
-                                       dataStr.indexOf('action=fp-seo') !== -1;
-                    }
+                if (settings.url && settings.url.indexOf('admin-ajax.php') !== -1 && settings.data) {
+                    const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                    isFpSeoRequest = dataStr.indexOf('action=fp_seo_performance') !== -1 ||
+                                   dataStr.indexOf('action=fp-seo') !== -1 ||
+                                   dataStr.indexOf('action=fp_seo_') !== -1;
                 }
                 
                 // Only show notification for confirmed FP SEO requests with real errors
@@ -228,12 +277,45 @@
             });
 
             // Specific AJAX success handler - only for FP SEO plugin requests
+            // CRITICAL: Must NOT interfere with WordPress core AJAX requests, especially media/featured image
             $(document).ajaxSuccess(function(event, xhr, settings) {
+                // CRITICAL: Skip ALL WordPress core requests to prevent interference
+                if (settings.data) {
+                    const dataStr = typeof settings.data === 'string' ? settings.data : '';
+                    // Skip WordPress core requests (heartbeat, autosave, media, featured image, etc.)
+                    if (dataStr.indexOf('action=heartbeat') !== -1 ||
+                        dataStr.indexOf('action=autosave') !== -1 ||
+                        dataStr.indexOf('action=wp-remove-post-lock') !== -1 ||
+                        dataStr.indexOf('action=set-post-thumbnail') !== -1 ||
+                        dataStr.indexOf('action=remove-post-thumbnail') !== -1 ||
+                        dataStr.indexOf('action=upload-attachment') !== -1 ||
+                        dataStr.indexOf('action=save-attachment') !== -1 ||
+                        dataStr.indexOf('action=save-attachment-compat') !== -1 ||
+                        dataStr.indexOf('action=query-attachments') !== -1 ||
+                        dataStr.indexOf('action=send-attachment-to-editor') !== -1) {
+                        return; // Skip WordPress core requests
+                    }
+                }
+                
+                // For FormData requests, skip all to avoid interfering with media uploads
+                if (settings.data instanceof FormData) {
+                    // Check response to see if it's a WordPress core request
+                    if (xhr.responseJSON && xhr.responseJSON.data && 
+                        (xhr.responseJSON.data.thumbnail_id !== undefined || 
+                         xhr.responseJSON.data.html !== undefined ||
+                         xhr.responseJSON.data.attachment !== undefined)) {
+                        return; // Skip WordPress core media/featured image requests
+                    }
+                    // Skip all FormData requests to be safe
+                    return;
+                }
+                
                 // Only handle success for confirmed FP SEO plugin AJAX requests
                 if (settings.url && settings.url.indexOf('admin-ajax.php') !== -1 && settings.data) {
                     const dataStr = typeof settings.data === 'string' ? settings.data : '';
                     const isFpSeoRequest = dataStr.indexOf('action=fp_seo_performance') !== -1 ||
-                                         dataStr.indexOf('action=fp-seo') !== -1;
+                                         dataStr.indexOf('action=fp-seo') !== -1 ||
+                                         dataStr.indexOf('action=fp_seo_') !== -1;
                     
                     if (isFpSeoRequest && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
                         FPSeoUI.showNotification(xhr.responseJSON.data.message, 'success');

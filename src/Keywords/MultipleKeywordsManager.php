@@ -13,9 +13,12 @@ namespace FP\SEO\Keywords;
 
 use FP\SEO\Keywords\Handlers\KeywordsAjaxHandler;
 use FP\SEO\Keywords\Scripts\KeywordsMetaboxScriptsManager;
+use FP\SEO\Keywords\Services\KeywordsAnalysisService;
+use FP\SEO\Keywords\Services\KeywordsSuggestionService;
 use FP\SEO\Keywords\Styles\KeywordsMetaboxStylesManager;
 use FP\SEO\Keywords\Styles\KeywordsPageStylesManager;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Utils\CacheHelper;
 use FP\SEO\Utils\PerformanceConfig;
 
 /**
@@ -43,6 +46,27 @@ class MultipleKeywordsManager {
 	private $ajax_handler;
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Keywords analysis service.
+	 *
+	 * @var KeywordsAnalysisService
+	 */
+	private KeywordsAnalysisService $analysis_service;
+
+	/**
+	 * Keywords suggestion service.
+	 *
+	 * @var KeywordsSuggestionService
+	 */
+	private KeywordsSuggestionService $suggestion_service;
+
+	/**
 	 * Keywords cache group.
 	 */
 	private const CACHE_GROUP = 'fp_seo_keywords';
@@ -58,26 +82,40 @@ class MultipleKeywordsManager {
 	private const MIN_KEYWORD_LENGTH = 2;
 
 	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+		$this->analysis_service = new KeywordsAnalysisService();
+		$this->suggestion_service = new KeywordsSuggestionService();
+	}
+
+	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', array( $this, 'add_keywords_menu' ) );
+		$hook_manager = $this->hook_manager ?? $this->get_hook_manager();
+		
+		$hook_manager->add_action( 'admin_menu', array( $this, 'add_keywords_menu' ) );
 		// Non registra la metabox separata - il contenuto è integrato in Metabox.php
 		// add_action( 'add_meta_boxes', array( $this, 'add_keywords_metabox' ) );
 		
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
+		// CRITICAL: Use priority 20 instead of 10 to ensure we run AFTER WordPress core saves _thumbnail_id
+		// WordPress core saves featured image (_thumbnail_id) during save_post with priority 10
+		// By using priority 20, we ensure our hook runs after WordPress has finished saving the featured image
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_keywords_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_keywords_meta' ), 10, 1 );
-			}
+			$hook_manager->add_action( 'save_post_' . $post_type, array( $this, 'save_keywords_meta' ), 20, 1 );
 		}
 		
 		// Register AJAX handler
-		$this->ajax_handler = new KeywordsAjaxHandler( $this );
+		$this->ajax_handler = new KeywordsAjaxHandler( $this, $hook_manager );
 		$this->ajax_handler->register();
 
-		add_action( 'wp_head', array( $this, 'output_keywords_meta' ) );
+		// Frontend keywords meta rendering moved to Frontend/Renderers/KeywordsRenderer
 
 		// Initialize and register styles and scripts managers
 		$this->metabox_styles_manager = new KeywordsMetaboxStylesManager();
@@ -86,6 +124,23 @@ class MultipleKeywordsManager {
 		$this->metabox_scripts_manager->register_hooks();
 		$this->page_styles_manager = new KeywordsPageStylesManager();
 		$this->page_styles_manager->register_hooks();
+	}
+
+	/**
+	 * Get hook manager from container.
+	 *
+	 * @return HookManagerInterface
+	 */
+	private function get_hook_manager(): HookManagerInterface {
+		if ( $this->hook_manager ) {
+			return $this->hook_manager;
+		}
+		
+		// Fallback: get from container
+		$plugin = \FP\SEO\Infrastructure\Plugin::instance();
+		$container = $plugin->get_container();
+		$this->hook_manager = $container->get( HookManagerInterface::class );
+		return $this->hook_manager;
 	}
 
 	/**
@@ -120,7 +175,7 @@ class MultipleKeywordsManager {
 	public function get_post_keywords( int $post_id ): array {
 		$cache_key = 'fp_seo_keywords_' . $post_id;
 		
-		return Cache::remember( $cache_key, function() use ( $post_id ) {
+		return CacheHelper::remember( $cache_key, function() use ( $post_id ) {
 			$keywords_meta = get_post_meta( $post_id, '_fp_seo_multiple_keywords', true );
 			return is_array( $keywords_meta ) ? $keywords_meta : array();
 		}, HOUR_IN_SECONDS );
@@ -132,7 +187,7 @@ class MultipleKeywordsManager {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_keywords_meta( int $post_id ): void {
-		// CRITICAL: Check post type FIRST, before any processing
+// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
@@ -179,7 +234,7 @@ class MultipleKeywordsManager {
 		update_post_meta( $post_id, '_fp_seo_multiple_keywords', $keywords_data );
 
 		// Clear cache
-		Cache::delete( 'fp_seo_keywords_' . $post_id );
+		CacheHelper::delete( 'fp_seo_keywords_' . $post_id );
 	}
 
 	/**
@@ -189,98 +244,8 @@ class MultipleKeywordsManager {
 	 * @param array<string, mixed> $keywords_data Keywords data.
 	 * @return array<string, mixed>
 	 */
-	private function analyze_keywords_in_content( int $post_id, array $keywords_data ): array {
-		$post = get_post( $post_id );
-		if ( ! $post ) {
-			return array( 'density' => array(), 'positions' => array() );
-		}
-
-		$content = strtolower( $post->post_content . ' ' . $post->post_title . ' ' . $post->post_excerpt );
-		$content = wp_strip_all_tags( $content );
-		$word_count = str_word_count( $content );
-
-		$all_keywords = array_merge(
-			array( $keywords_data['primary_keyword'] ),
-			$keywords_data['secondary_keywords'],
-			$keywords_data['long_tail_keywords'],
-			$keywords_data['semantic_keywords']
-		);
-
-		$all_keywords = array_filter( $all_keywords );
-
-		$density = array();
-		$positions = array();
-
-		foreach ( $all_keywords as $keyword ) {
-			if ( empty( $keyword ) ) {
-				continue;
-			}
-
-			$keyword_lower = strtolower( $keyword );
-			$keyword_count = substr_count( $content, $keyword_lower );
-			$density_value = $word_count > 0 ? ( $keyword_count / $word_count ) * 100 : 0;
-
-			$density[ $keyword ] = array(
-				'count' => $keyword_count,
-				'density' => round( $density_value, 2 ),
-				'status' => $this->get_density_status( $density_value )
-			);
-
-			// Find keyword positions
-			$positions[ $keyword ] = $this->find_keyword_positions( $content, $keyword_lower );
-		}
-
-		return array(
-			'density' => $density,
-			'positions' => $positions
-		);
-	}
-
-	/**
-	 * Get density status for keyword.
-	 *
-	 * @param float $density Density percentage.
-	 * @return string
-	 */
-	private function get_density_status( float $density ): string {
-		if ( $density < 0.5 ) {
-			return 'low';
-		} elseif ( $density <= 2.5 ) {
-			return 'good';
-		} elseif ( $density <= 3.5 ) {
-			return 'high';
-		} else {
-			return 'over-optimized';
-		}
-	}
-
-	/**
-	 * Find keyword positions in content.
-	 *
-	 * @param string $content Content to search.
-	 * @param string $keyword Keyword to find.
-	 * @return array<string, mixed>
-	 */
-	private function find_keyword_positions( string $content, string $keyword ): array {
-		$positions = array();
-		$offset = 0;
-
-		while ( ( $pos = strpos( $content, $keyword, $offset ) ) !== false ) {
-			$context_start = max( 0, $pos - 50 );
-			$context_end = min( strlen( $content ), $pos + strlen( $keyword ) + 50 );
-			$context = substr( $content, $context_start, $context_end - $context_start );
-
-			$positions[] = array(
-				'position' => $pos,
-				'context' => '...' . $context . '...',
-				'in_title' => $pos < 100, // Rough estimate
-				'in_excerpt' => $pos < 200 // Rough estimate
-			);
-
-			$offset = $pos + 1;
-		}
-
-		return $positions;
+	public function analyze_keywords_in_content( int $post_id, array $keywords_data ): array {
+		return $this->analysis_service->analyze( $post_id, $keywords_data );
 	}
 
 	/**
@@ -323,7 +288,7 @@ class MultipleKeywordsManager {
 				<div class="fp-seo-keyword-suggestions">
 					<h4><?php esc_html_e( 'AI Suggestions', 'fp-seo-performance' ); ?></h4>
 					<div class="fp-seo-suggestions-list">
-						<?php foreach ( $suggestions['primary'] as $suggestion ) : ?>
+						<?php foreach ( $suggestions['primary'] ?? array() as $suggestion ) : ?>
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
@@ -356,7 +321,7 @@ class MultipleKeywordsManager {
 				<div class="fp-seo-keyword-suggestions">
 					<h4><?php esc_html_e( 'AI Suggestions', 'fp-seo-performance' ); ?></h4>
 					<div class="fp-seo-suggestions-list">
-						<?php foreach ( $suggestions['secondary'] as $suggestion ) : ?>
+						<?php foreach ( $suggestions['secondary'] ?? array() as $suggestion ) : ?>
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
@@ -389,7 +354,7 @@ class MultipleKeywordsManager {
 				<div class="fp-seo-keyword-suggestions">
 					<h4><?php esc_html_e( 'AI Suggestions', 'fp-seo-performance' ); ?></h4>
 					<div class="fp-seo-suggestions-list">
-						<?php foreach ( $suggestions['long_tail'] as $suggestion ) : ?>
+						<?php foreach ( $suggestions['long_tail'] ?? array() as $suggestion ) : ?>
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
@@ -422,7 +387,7 @@ class MultipleKeywordsManager {
 				<div class="fp-seo-keyword-suggestions">
 					<h4><?php esc_html_e( 'AI Suggestions', 'fp-seo-performance' ); ?></h4>
 					<div class="fp-seo-suggestions-list">
-						<?php foreach ( $suggestions['semantic'] as $suggestion ) : ?>
+						<?php foreach ( $suggestions['semantic'] ?? array() as $suggestion ) : ?>
 						<div class="fp-seo-suggestion-item" data-keyword="<?php echo esc_attr( $suggestion['keyword'] ); ?>">
 							<span class="fp-seo-suggestion-keyword"><?php echo esc_html( $suggestion['keyword'] ); ?></span>
 							<span class="fp-seo-suggestion-score"><?php echo esc_html( $suggestion['score'] ); ?>%</span>
@@ -473,9 +438,10 @@ class MultipleKeywordsManager {
 				</div>
 			</div>
 		</div>
-		<?php
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-		}
+	<style>
+	.fp-seo-keywords-metabox {
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	}
 		
 		.fp-seo-keywords-tabs {
 			display: flex;
@@ -704,12 +670,13 @@ class MultipleKeywordsManager {
 			margin-top: 20px;
 		}
 		
-		.fp-seo-keywords-actions .button {
-			flex: 1;
-			text-align: center;
-		}
-		<?php
+	.fp-seo-keywords-actions .button {
+		flex: 1;
+		text-align: center;
 	}
+	</style>
+	<?php
+}
 
 	/**
 	 * Get keyword suggestions for a post.
@@ -718,193 +685,7 @@ class MultipleKeywordsManager {
 	 * @return array<string, mixed>
 	 */
 	private function get_keyword_suggestions( int $post_id ): array {
-		$cache_key = 'fp_seo_keyword_suggestions_' . $post_id;
-		
-		return Cache::remember( $cache_key, function() use ( $post_id ) {
-			$post = get_post( $post_id );
-			if ( ! $post ) {
-				return array(
-					'primary' => array(),
-					'secondary' => array(),
-					'long_tail' => array(),
-					'semantic' => array()
-				);
-			}
-
-			$content = $post->post_content . ' ' . $post->post_title . ' ' . $post->post_excerpt;
-			$keywords = $this->extract_content_keywords( $content );
-
-			return array(
-				'primary' => $this->suggest_primary_keywords( $keywords ),
-				'secondary' => $this->suggest_secondary_keywords( $keywords ),
-				'long_tail' => $this->suggest_long_tail_keywords( $keywords, $content ),
-				'semantic' => $this->suggest_semantic_keywords( $keywords )
-			);
-		}, HOUR_IN_SECONDS );
-	}
-
-	/**
-	 * Extract keywords from content.
-	 *
-	 * @param string $content Content to analyze.
-	 * @return array<string, int>
-	 */
-	private function extract_content_keywords( string $content ): array {
-		$content = wp_strip_all_tags( strtolower( $content ) );
-		$words = preg_split( '/\s+/', $content );
-		
-		// Filter out short words and common stop words
-		$stop_words = array(
-			'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-			'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
-			'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those'
-		);
-		
-		$words = array_filter( $words, function( $word ) use ( $stop_words ) {
-			return strlen( $word ) > 2 && ! in_array( $word, $stop_words, true );
-		});
-		
-		return array_count_values( $words );
-	}
-
-	/**
-	 * Suggest primary keywords.
-	 *
-	 * @param array<string, int> $keywords Keywords from content.
-	 * @return array<string, mixed>
-	 */
-	private function suggest_primary_keywords( array $keywords ): array {
-		$suggestions = array();
-		$sorted_keywords = arsort( $keywords );
-		
-		$count = 0;
-		foreach ( $keywords as $keyword => $frequency ) {
-			if ( $count >= 5 ) break;
-			
-			$suggestions[] = array(
-				'keyword' => $keyword,
-				'score' => min( $frequency * 10, 100 )
-			);
-			$count++;
-		}
-		
-		return $suggestions;
-	}
-
-	/**
-	 * Suggest secondary keywords.
-	 *
-	 * @param array<string, int> $keywords Keywords from content.
-	 * @return array<string, mixed>
-	 */
-	private function suggest_secondary_keywords( array $keywords ): array {
-		$suggestions = array();
-		$sorted_keywords = arsort( $keywords );
-		
-		$count = 0;
-		foreach ( $keywords as $keyword => $frequency ) {
-			if ( $count >= 8 ) break;
-			if ( $frequency < 2 ) continue; // Skip low frequency words
-			
-			$suggestions[] = array(
-				'keyword' => $keyword,
-				'score' => min( $frequency * 8, 80 )
-			);
-			$count++;
-		}
-		
-		return $suggestions;
-	}
-
-	/**
-	 * Suggest long tail keywords.
-	 *
-	 * @param array<string, int> $keywords Keywords from content.
-	 * @param string $content Full content.
-	 * @return array<string, mixed>
-	 */
-	private function suggest_long_tail_keywords( array $keywords, string $content ): array {
-		$suggestions = array();
-		$phrases = $this->extract_phrases( $content );
-		
-		foreach ( array_slice( $phrases, 0, 6 ) as $phrase ) {
-			$suggestions[] = array(
-				'keyword' => $phrase,
-				'score' => 75
-			);
-		}
-		
-		return $suggestions;
-	}
-
-	/**
-	 * Suggest semantic keywords.
-	 *
-	 * @param array<string, int> $keywords Keywords from content.
-	 * @return array<string, mixed>
-	 */
-	private function suggest_semantic_keywords( array $keywords ): array {
-		$suggestions = array();
-		$top_keywords = array_slice( array_keys( $keywords ), 0, 3, true );
-		
-		foreach ( $top_keywords as $keyword ) {
-			// Generate semantic variations
-			$variations = $this->generate_semantic_variations( $keyword );
-			foreach ( $variations as $variation ) {
-				$suggestions[] = array(
-					'keyword' => $variation,
-					'score' => 60
-				);
-			}
-		}
-		
-		return array_slice( $suggestions, 0, 8 );
-	}
-
-	/**
-	 * Extract phrases from content.
-	 *
-	 * @param string $content Content to analyze.
-	 * @return array<string>
-	 */
-	private function extract_phrases( string $content ): array {
-		$content = wp_strip_all_tags( strtolower( $content ) );
-		$sentences = preg_split( '/[.!?]+/', $content );
-		$phrases = array();
-		
-		foreach ( $sentences as $sentence ) {
-			$words = preg_split( '/\s+/', trim( $sentence ) );
-			if ( count( $words ) >= 3 && count( $words ) <= 6 ) {
-				$phrases[] = implode( ' ', $words );
-			}
-		}
-		
-		return array_unique( $phrases );
-	}
-
-	/**
-	 * Generate semantic variations of a keyword.
-	 *
-	 * @param string $keyword Base keyword.
-	 * @return array<string>
-	 */
-	private function generate_semantic_variations( string $keyword ): array {
-		// Basic semantic variations - in real implementation, this would use AI
-		$variations = array();
-		
-		// Add common prefixes/suffixes
-		$prefixes = array( 'best', 'top', 'how to', 'guide to', 'tips for' );
-		$suffixes = array( 'guide', 'tips', 'tutorial', 'review', 'comparison' );
-		
-		foreach ( $prefixes as $prefix ) {
-			$variations[] = $prefix . ' ' . $keyword;
-		}
-		
-		foreach ( $suffixes as $suffix ) {
-			$variations[] = $keyword . ' ' . $suffix;
-		}
-		
-		return array_slice( $variations, 0, 3 );
+		return $this->suggestion_service->get_suggestions( $post_id );
 	}
 
 	/**
@@ -1025,7 +806,7 @@ class MultipleKeywordsManager {
 	private function get_site_keywords_analysis(): array {
 		$cache_key = 'fp_seo_site_keywords_analysis';
 		
-		return Cache::remember( $cache_key, function() {
+		return CacheHelper::remember( $cache_key, function() {
 			global $wpdb;
 			
 			// Get all posts with keywords (use prepared statement for security)
@@ -1088,7 +869,7 @@ class MultipleKeywordsManager {
 		<div class="fp-seo-analysis-summary">
 			<div class="fp-seo-analysis-item">
 				<strong><?php esc_html_e( 'Keywords Health Score:', 'fp-seo-performance' ); ?></strong>
-				<span class="fp-seo-score <?php echo $analysis['keyword_coverage'] > 70 ? 'good' : ( $analysis['keyword_coverage'] > 40 ? 'warning' : 'poor' ); ?>">
+				<span class="fp-seo-score <?php $kw_coverage = $analysis['keyword_coverage'] ?? 0; echo $kw_coverage > 70 ? 'good' : ( $kw_coverage > 40 ? 'warning' : 'poor' ); ?>">
 					<?php echo $this->calculate_keywords_health_score( $analysis ); ?>%
 				</span>
 			</div>
@@ -1112,34 +893,37 @@ class MultipleKeywordsManager {
 	 * @return int
 	 */
 	private function calculate_keywords_health_score( array $analysis ): int {
-		$score = 0;
+		$score       = 0;
+		$coverage    = $analysis['keyword_coverage'] ?? 0;
+		$avg_per_post = $analysis['avg_keywords_per_post'] ?? 0;
+		$total       = $analysis['total_keywords'] ?? 0;
 		
 		// Keyword coverage score (50%)
-		if ( $analysis['keyword_coverage'] >= 80 ) {
+		if ( $coverage >= 80 ) {
 			$score += 50;
-		} elseif ( $analysis['keyword_coverage'] >= 60 ) {
+		} elseif ( $coverage >= 60 ) {
 			$score += 40;
-		} elseif ( $analysis['keyword_coverage'] >= 40 ) {
+		} elseif ( $coverage >= 40 ) {
 			$score += 30;
 		} else {
 			$score += 20;
 		}
 		
 		// Average keywords per post score (30%)
-		if ( $analysis['avg_keywords_per_post'] >= 5 ) {
+		if ( $avg_per_post >= 5 ) {
 			$score += 30;
-		} elseif ( $analysis['avg_keywords_per_post'] >= 3 ) {
+		} elseif ( $avg_per_post >= 3 ) {
 			$score += 20;
-		} elseif ( $analysis['avg_keywords_per_post'] >= 1 ) {
+		} elseif ( $avg_per_post >= 1 ) {
 			$score += 10;
 		}
 		
 		// Total keywords score (20%)
-		if ( $analysis['total_keywords'] >= 100 ) {
+		if ( $total >= 100 ) {
 			$score += 20;
-		} elseif ( $analysis['total_keywords'] >= 50 ) {
+		} elseif ( $total >= 50 ) {
 			$score += 15;
-		} elseif ( $analysis['total_keywords'] >= 20 ) {
+		} elseif ( $total >= 20 ) {
 			$score += 10;
 		}
 		
@@ -1153,17 +937,20 @@ class MultipleKeywordsManager {
 	 * @return array<string>
 	 */
 	private function get_keywords_recommendations( array $analysis ): array {
-		$recommendations = array();
+		$recommendations  = array();
+		$coverage         = $analysis['keyword_coverage'] ?? 0;
+		$avg_per_post     = $analysis['avg_keywords_per_post'] ?? 0;
+		$total            = $analysis['total_keywords'] ?? 0;
 		
-		if ( $analysis['keyword_coverage'] < 60 ) {
+		if ( $coverage < 60 ) {
 			$recommendations[] = __( 'Add keywords to more posts to improve coverage.', 'fp-seo-performance' );
 		}
 		
-		if ( $analysis['avg_keywords_per_post'] < 3 ) {
+		if ( $avg_per_post < 3 ) {
 			$recommendations[] = __( 'Increase average keywords per post to at least 3.', 'fp-seo-performance' );
 		}
 		
-		if ( $analysis['total_keywords'] < 50 ) {
+		if ( $total < 50 ) {
 			$recommendations[] = __( 'Add more keywords across your content.', 'fp-seo-performance' );
 		}
 		
@@ -1182,15 +969,17 @@ class MultipleKeywordsManager {
 	 * @param WP_Post $post Post object.
 	 * @return array<string, mixed>
 	 */
-	private function optimize_keywords_with_ai( $post ): array {
+	public function optimize_keywords_with_ai( $post ): array {
 		// This would integrate with the AI Content Optimizer
-		// For now, return basic optimization
-		$content = $post->post_content . ' ' . $post->post_title;
-		$keywords = $this->extract_content_keywords( $content );
+		// For now, return basic optimization using suggestion service
+		$suggestions = $this->suggestion_service->get_suggestions( $post->ID );
+		
+		$primary = ! empty( $suggestions['primary'] ) ? $suggestions['primary'][0]['keyword'] ?? '' : '';
+		$secondary = array_column( array_slice( $suggestions['secondary'] ?? array(), 0, 3 ), 'keyword' );
 		
 		$optimized = array(
-			'primary' => array_keys( array_slice( $keywords, 0, 1, true ) )[0] ?? '',
-			'secondary' => array_keys( array_slice( $keywords, 1, 3, true ) ),
+			'primary' => $primary,
+			'secondary' => $secondary,
 			'message' => __( 'Keywords optimized using AI analysis', 'fp-seo-performance' )
 		);
 		
@@ -1199,6 +988,13 @@ class MultipleKeywordsManager {
 
 	/**
 	 * Output keywords meta data in head.
+	 */
+	/**
+	 * Output keywords meta tags in head.
+	 *
+	 * @deprecated Frontend rendering is now handled by Frontend/Renderers/KeywordsRenderer.
+	 *             This method is kept for backward compatibility and is called by KeywordsRenderer.
+	 * @return void
 	 */
 	public function output_keywords_meta(): void {
 		if ( is_admin() || is_feed() ) {

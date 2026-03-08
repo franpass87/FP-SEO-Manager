@@ -45,22 +45,24 @@ class SearchIntentCheck implements CheckInterface {
 	 * {@inheritDoc}
 	 */
 	public function run( Context $context ): Result {
-		$content = $context->content();
-		$title   = $context->metadata( 'title', '' );
+		$content = $context->plain_text();
+		$title   = $context->title();
 
 		if ( empty( $content ) ) {
 			return new Result(
 				Result::STATUS_WARN,
-				__( 'Contenuto insufficiente per analizzare il search intent.', 'fp-seo-performance' )
+				array( 'error' => 'insufficient_content' ),
+				__( 'Contenuto insufficiente per analizzare il search intent.', 'fp-seo-performance' ),
+				0.05
 			);
 		}
 
 		// Detect search intent.
 		$detection = SearchIntentDetector::detect( $title, $content );
 
-		$intent     = $detection['intent'];
-		$confidence = $detection['confidence'];
-		$signals    = $detection['signals'];
+		$intent     = $detection['intent']     ?? SearchIntentDetector::INTENT_UNKNOWN;
+		$confidence = $detection['confidence'] ?? 0.0;
+		$signals    = $detection['signals']    ?? array();
 
 		// Determine status based on confidence.
 		$status = Result::STATUS_PASS;
@@ -74,10 +76,7 @@ class SearchIntentCheck implements CheckInterface {
 		$intent_label = SearchIntentDetector::get_intent_label( $intent );
 
 		if ( $intent === SearchIntentDetector::INTENT_UNKNOWN ) {
-			$message = sprintf(
-				/* translators: %s: confidence percentage */
-				__( 'Search intent non chiaro. Definisci meglio l\'obiettivo del contenuto per migliorare il posizionamento.', 'fp-seo-performance' )
-			);
+			$message = __( 'Search intent non chiaro. Definisci meglio l\'obiettivo del contenuto per migliorare il posizionamento.', 'fp-seo-performance' );
 		} else {
 			$message = sprintf(
 				/* translators: 1: intent type, 2: confidence percentage */
@@ -105,6 +104,15 @@ class SearchIntentCheck implements CheckInterface {
 			$message .= '</small>';
 		}
 
-		return new Result( $status, $message );
+		return new Result(
+			$status,
+			array(
+				'intent'     => $intent,
+				'confidence' => $confidence,
+				'signals'    => array_slice( $signals, 0, 5 ),
+			),
+			$message,
+			0.05
+		);
 	}
 }

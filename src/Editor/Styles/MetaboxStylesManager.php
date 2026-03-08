@@ -51,6 +51,15 @@ class MetaboxStylesManager {
 
 		$this->render_styles();
 	}
+	
+	/**
+	 * Render styles inline (for use in metabox).
+	 *
+	 * @return void
+	 */
+	public function render_inline(): void {
+		$this->render_styles();
+	}
 
 	/**
 	 * Render all inline styles.
@@ -58,23 +67,38 @@ class MetaboxStylesManager {
 	 * @return void
 	 */
 	private function render_styles(): void {
+		// Check if styles have already been rendered to avoid duplicates
+		// Use a more specific key to allow rendering in different contexts
+		$render_key = 'fp_seo_metabox_styles_rendered_' . ( is_admin() ? 'admin' : 'frontend' );
+		if ( isset( $GLOBALS[ $render_key ] ) && $GLOBALS[ $render_key ] ) {
+			return;
+		}
+		$GLOBALS[ $render_key ] = true;
+		
 		?>
 		<style id="fp-seo-metabox-modern-ui">
 		<?php
-		$this->render_screen_reader_styles();
-		$this->render_slug_hiding_styles();
-		$this->render_metabox_styles();
-		$this->render_score_styles();
-		$this->render_indicator_styles();
-		$this->render_tooltip_styles();
-		$this->render_summary_styles();
-		$this->render_help_banner_styles();
-		$this->render_help_toggle_styles();
-		$this->render_check_help_styles();
-		$this->render_recommendations_styles();
-		$this->render_section_styles();
-		$this->render_analysis_styles();
-		$this->render_responsive_styles();
+		try {
+			$this->render_screen_reader_styles();
+			$this->render_slug_hiding_styles();
+			$this->render_metabox_styles();
+			$this->render_score_styles();
+			$this->render_indicator_styles();
+			$this->render_tooltip_styles();
+			$this->render_summary_styles();
+			$this->render_help_banner_styles();
+			$this->render_help_toggle_styles();
+			$this->render_check_help_styles();
+			$this->render_recommendations_styles();
+			$this->render_section_styles();
+			$this->render_analysis_styles();
+			$this->render_responsive_styles();
+		} catch ( \Throwable $e ) {
+			// Log error but don't break the page
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO: Error rendering styles: ' . $e->getMessage() );
+			}
+		}
 		?>
 		</style>
 		<?php
@@ -952,5 +976,19 @@ class MetaboxStylesManager {
 		<?php
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

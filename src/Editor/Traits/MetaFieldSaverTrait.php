@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace FP\SEO\Editor\Traits;
 
 use FP\SEO\Utils\Logger;
+use FP\SEO\Editor\Helpers\WordPressNativeProtection;
 use function add_post_meta;
 use function clean_post_cache;
 use function delete_post_meta;
@@ -39,7 +40,9 @@ trait MetaFieldSaverTrait {
 			
 			// If update failed, try delete + add
 			if ( false === $result ) {
-				error_log( "FP SEO: update_post_meta failed for {$meta_key}, trying delete + add - post_id: {$post_id}" );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( "FP SEO: update_post_meta failed for {$meta_key}, trying delete + add - post_id: {$post_id}" );
+				}
 				delete_post_meta( $post_id, $meta_key );
 				$result = add_post_meta( $post_id, $meta_key, $value, true );
 			}
@@ -119,14 +122,27 @@ trait MetaFieldSaverTrait {
 	 * @return void
 	 */
 	protected function clear_meta_cache( int $post_id, string $meta_key ): void {
-		wp_cache_delete( $post_id, 'post_meta' );
-		wp_cache_delete( $post_id . '_' . $meta_key, 'post_meta' );
-		clean_post_cache( $post_id );
-		
-		// Force refresh meta cache if function exists
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
+		// CRITICAL: Do NOT clear ANY cache if WordPress is handling a native operation
+		// This includes featured image, edit locks, page templates, attachment metadata, etc.
+		// Clearing cache during native operations can interfere with WordPress core
+		if ( WordPressNativeProtection::should_skip_cache_clearing( $post_id, $meta_key ) ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				$native_keys = WordPressNativeProtection::get_native_meta_keys_being_saved();
+				Logger::debug( "FP SEO: Skipping ALL cache clearing for {$meta_key} (WordPress native operation detected)", array( 
+					'post_id' => $post_id,
+					'native_keys' => $native_keys,
+					'is_native_ajax' => defined( 'DOING_AJAX' ) && DOING_AJAX && isset( $_POST['action'] ) ? sanitize_text_field( wp_unslash( $_POST['action'] ) ) : 'none',
+				) );
+			}
+			return; // Do nothing - WordPress will handle cache management
 		}
+		
+		// CRITICAL: Cache clearing completely disabled to prevent interference with featured image (_thumbnail_id) saving
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache during save_post can interfere with WordPress core saving _thumbnail_id
+		// This includes wp_cache_delete( $post_id, 'post_meta' ) which would delete _thumbnail_id from cache
+		// Cache will be naturally refreshed on next access via WordPress core mechanisms
+		return; // Do nothing - WordPress will handle cache management
 	}
 
 	/**
@@ -138,8 +154,8 @@ trait MetaFieldSaverTrait {
 	 */
 	protected function check_field_presence( string $field_key, string $sent_key ): array {
 		$field_sent = isset( $_POST[ $sent_key ] ) || isset( $_POST[ $field_key ] );
-		$metabox_present = isset( $_POST['fp_seo_performance_metabox_present'] ) && 
-						   $_POST['fp_seo_performance_metabox_present'] === '1';
+		$metabox_present = isset( $_POST['fp_seo_performance_metabox_present'] ) &&
+						   '1' === sanitize_text_field( wp_unslash( $_POST['fp_seo_performance_metabox_present'] ) );
 		
 		return array(
 			'field_sent' => $field_sent,
@@ -160,4 +176,18 @@ trait MetaFieldSaverTrait {
 			   '' === trim( (string) $_POST[ $field_key ] );
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

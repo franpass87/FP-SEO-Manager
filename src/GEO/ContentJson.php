@@ -205,10 +205,10 @@ class ContentJson {
 		}
 
 		// Extract from [fp_claim] shortcodes
-		$pattern = '/\[fp_claim([^\]]+)\]([^\[]*)\[\/fp_claim\]/';
-		preg_match_all( $pattern, $post->post_content, $matches );
+		$pattern      = '/\[fp_claim([^\]]+)\]([^\[]*)\[\/fp_claim\]/';
+		$preg_result  = preg_match_all( $pattern, $post->post_content, $matches );
 
-		if ( ! empty( $matches[1] ) ) {
+		if ( false !== $preg_result && ! empty( $matches[1] ) ) {
 			foreach ( $matches[1] as $index => $attrs_str ) {
 				$attrs = shortcode_parse_atts( $attrs_str );
 				if ( ! empty( $attrs['statement'] ) ) {

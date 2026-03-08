@@ -149,7 +149,16 @@ class SocialFieldsRenderer {
 			return esc_url_raw( $social_meta['facebook_image'] );
 		}
 
-		// Priority 4: Default social image
+		// Priority 4: Fallback to featured image
+		$thumbnail_id = get_post_thumbnail_id( $post_id );
+		if ( $thumbnail_id ) {
+			$featured_image_url = wp_get_attachment_image_url( $thumbnail_id, 'large' );
+			if ( $featured_image_url ) {
+				return esc_url_raw( $featured_image_url );
+			}
+		}
+
+		// Priority 5: Default social image
 		return get_option( 'fp_seo_social_default_image', '' );
 	}
 
@@ -167,7 +176,8 @@ class SocialFieldsRenderer {
 		$img_src = ! empty( $preview_image_url ) ? esc_url( $preview_image_url ) : 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'1\' height=\'1\'%3E%3C/svg%3E';
 
 		$title_decoded = $this->decode_html_entities( $preview_data['title'] ?? '' );
-		$desc_decoded = $this->decode_html_entities( $preview_data['description'] ?? '' );
+		$desc_decoded  = $this->decode_html_entities( $preview_data['description'] ?? '' );
+		$url           = $preview_data['url'] ?? '';
 
 		?>
 		<div class="fp-seo-social-preview-container">
@@ -249,7 +259,7 @@ class SocialFieldsRenderer {
 					   name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_title"
 					   value="<?php echo esc_attr( $title_value ); ?>"
 					   maxlength="<?php echo esc_attr( (string) $platform_data['title_limit'] ); ?>"
-					   class="fp-seo-input"
+					   class="fp-seo-input fp-seo-character-counter"
 					   data-platform="<?php echo esc_attr( $platform_id ); ?>"
 					   data-field="title">
 			</div>
@@ -266,7 +276,7 @@ class SocialFieldsRenderer {
 						  name="fp_seo_<?php echo esc_attr( $platform_id ); ?>_description"
 						  maxlength="<?php echo esc_attr( (string) $platform_data['description_limit'] ); ?>"
 						  rows="3"
-						  class="fp-seo-textarea"
+						  class="fp-seo-textarea fp-seo-character-counter"
 						  data-platform="<?php echo esc_attr( $platform_id ); ?>"
 						  data-field="description"><?php echo esc_textarea( $description_value ); ?></textarea>
 			</div>
@@ -350,6 +360,7 @@ class SocialFieldsRenderer {
 			}
 			return html_entity_decode( '&#' . $code . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		}, $text );
+		$decoded = $decoded ?? $text;
 
 		// Decode hex entities (&#x26; -> &)
 		$decoded = preg_replace_callback( '/&#x([0-9A-Fa-f]+);/i', function( $matches ) {
@@ -359,6 +370,7 @@ class SocialFieldsRenderer {
 			}
 			return html_entity_decode( '&#x' . $matches[1] . ';', ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		}, $decoded );
+		$decoded = $decoded ?? $text;
 
 		// Decode named entities using html_entity_decode
 		$decoded = html_entity_decode( $decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8' );

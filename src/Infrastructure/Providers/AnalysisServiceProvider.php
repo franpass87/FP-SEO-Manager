@@ -68,6 +68,18 @@ class AnalysisServiceProvider extends AbstractServiceProvider {
 		// Analyzer and ScoreEngine don't need explicit booting,
 		// they are used on-demand by other services
 	}
+
+	/**
+	 * Get dependencies for this service provider.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>>
+	 */
+	public function get_dependencies(): array {
+		// Analysis depends on Core services (Cache, Logger, Options)
+		return array(
+			CoreServiceProvider::class,
+		);
+	}
 }
 
 

@@ -14,7 +14,6 @@ namespace FP\SEO\AI;
 use FP\SEO\Integrations\OpenAiClient;
 use function do_shortcode;
 use function esc_html;
-use function get_current_blog_id;
 use function get_post_meta;
 use function json_decode;
 use function mb_substr;
@@ -36,13 +35,23 @@ class HowToGenerator {
 	 *
 	 * @var OpenAiClient
 	 */
-	private OpenAiClient $openai_client;
+	private ?OpenAiClient $openai_client;
 
 	/**
 	 * Constructor
+	 *
+	 * @param OpenAiClient|null $openai_client OpenAI client instance.
 	 */
-	public function __construct() {
-		$this->openai_client = new OpenAiClient();
+	public function __construct( ?OpenAiClient $openai_client = null ) {
+		if ( null !== $openai_client ) {
+			$this->openai_client = $openai_client;
+		} else {
+			try {
+				$this->openai_client = \FP\SEO\Infrastructure\Plugin::instance()->get_container()->get( OpenAiClient::class );
+			} catch ( \Throwable $e ) {
+				$this->openai_client = null;
+			}
+		}
 	}
 
 	/**
@@ -54,7 +63,7 @@ class HowToGenerator {
 	 * @throws \Exception If generation fails.
 	 */
 	public function generate_steps( int $post_id, WP_Post $post ): array {
-		if ( ! $this->openai_client->is_configured() ) {
+		if ( null === $this->openai_client || ! $this->openai_client->is_configured() ) {
 			throw new \Exception( 'OpenAI API key non configurata. Vai in Impostazioni > FP SEO.' );
 		}
 
@@ -66,9 +75,9 @@ class HowToGenerator {
 
 		$prompt = $this->build_prompt( $post->post_title, $content );
 		$response = $this->openai_client->generate_content( $prompt, array(
-			'model'                => 'gpt-4o-mini',
-			'temperature'          => 0.3,
-			'max_completion_tokens' => 2000,
+			'model'       => 'gpt-4o-mini',
+			'temperature' => 0.3,
+			'max_tokens'  => 2000, // Use standard max_tokens parameter
 		) );
 
 		$steps = $this->parse_response( $response );
@@ -176,8 +185,8 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 */
 	private function parse_response( string $response ): array {
 		// Clean response
-		$response = preg_replace( '/```json\s*/', '', $response );
-		$response = preg_replace( '/```\s*$/', '', $response );
+		$response = preg_replace( '/```json\s*/', '', $response ) ?? $response;
+		$response = preg_replace( '/```\s*$/', '', $response ) ?? $response;
 		$response = trim( $response );
 
 		$data = json_decode( $response, true );
@@ -209,4 +218,18 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 		return $howto_steps;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

@@ -11,7 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Displays contextual admin notices for the plugin.
@@ -19,10 +20,30 @@ use FP\SEO\Utils\Options;
 class Notices {
 
 	/**
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
+	 */
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
+		$this->hook_manager = $hook_manager;
+	}
+
+	/**
 	 * Hooks the notice renderer into WordPress.
 	 */
 	public function register(): void {
-		add_action( 'admin_notices', array( $this, 'render' ) );
+		if ( $this->hook_manager ) {
+			$this->hook_manager->add_action( 'admin_notices', array( $this, 'render' ) );
+		} else {
+			add_action( 'admin_notices', array( $this, 'render' ) );
+		}
 	}
 
 	/**
@@ -33,7 +54,7 @@ class Notices {
 			return;
 		}
 
-		if ( ! current_user_can( Options::get_capability() ) ) {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
 			return;
 		}
 
@@ -41,18 +62,18 @@ class Notices {
 			return;
 		}
 
-		$options = Options::get();
+		$options = OptionsHelper::get();
 
 		$notices = array();
 
-		if ( $options['performance']['enable_psi'] && '' === $options['performance']['psi_api_key'] ) {
+		if ( ! empty( $options['performance']['enable_psi'] ) && '' === ( $options['performance']['psi_api_key'] ?? '' ) ) {
 			$notices[] = array(
 				'type'    => 'warning',
 				'message' => __( 'PageSpeed Insights is enabled but no API key is configured. Add a key or disable PSI hints.', 'fp-seo-performance' ),
 			);
 		}
 
-		if ( $options['general']['admin_bar_badge'] && ! $options['general']['enable_analyzer'] ) {
+		if ( ! empty( $options['general']['admin_bar_badge'] ) && empty( $options['general']['enable_analyzer'] ) ) {
 			$notices[] = array(
 				'type'    => 'warning',
 				'message' => __( 'The admin bar badge requires the analyzer to be enabled. Update your general settings to avoid missing scores.', 'fp-seo-performance' ),

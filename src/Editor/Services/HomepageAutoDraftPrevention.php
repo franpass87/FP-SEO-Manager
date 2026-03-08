@@ -59,9 +59,9 @@ class HomepageAutoDraftPrevention {
 				array( '%d' )
 			);
 			
-			// Clear cache
-			clean_post_cache( $post->ID );
-			wp_cache_delete( $post->ID, 'posts' );
+			// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id) saving
+			// WordPress handles cache management automatically - no manual clearing needed
+			// Clearing cache during save_post can interfere with WordPress core saving _thumbnail_id
 			
 			unset( $correcting[ $post->ID ] );
 			
@@ -176,8 +176,12 @@ class HomepageAutoDraftPrevention {
 		
 		// If status is auto-draft, fix it immediately
 		if ( $current_status === 'auto-draft' ) {
-			// Get original status before update
-			$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
+			// Get original status saved by save_original_status() via transient
+			$original_status = get_transient( 'fp_seo_homepage_original_status_' . $post_id );
+			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
+				// Fallback to post meta (legacy) then to 'publish'
+				$original_status = get_post_meta( $post_id, '_fp_seo_original_status', true );
+			}
 			if ( empty( $original_status ) || $original_status === 'auto-draft' ) {
 				$original_status = 'publish'; // Default to publish for homepage
 			}
@@ -191,14 +195,16 @@ class HomepageAutoDraftPrevention {
 				array( '%d' )
 			);
 			
-			// Clear cache
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'posts' );
+			// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id) saving
+			// WordPress handles cache management automatically - no manual clearing needed
+			// Clearing cache during save_post can interfere with WordPress core saving _thumbnail_id
 			
-			Logger::warning( 'HomepageAutoDraftPrevention - Fixed homepage status after update', array(
-				'post_id' => $post_id,
-				'fixed_status' => $original_status,
-			) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				Logger::warning( 'HomepageAutoDraftPrevention - Fixed homepage status after update', array(
+					'post_id' => $post_id,
+					'fixed_status' => $original_status,
+				) );
+			}
 		}
 	}
 
@@ -217,7 +223,24 @@ class HomepageAutoDraftPrevention {
 		}
 		
 		// Same logic as prevent_on_update
-		self::prevent_on_update( $post_id, $post instanceof WP_Post ? $post : get_post( $post_id ) );
+		$post_obj = $post instanceof WP_Post ? $post : get_post( $post_id );
+		if ( $post_obj instanceof WP_Post ) {
+			self::prevent_on_update( $post_id, $post_obj );
+		}
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

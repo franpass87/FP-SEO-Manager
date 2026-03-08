@@ -31,8 +31,13 @@ class MetaHelper {
 	 * @return mixed Meta value or null if not found.
 	 */
 	public static function get_meta( int $post_id, string $meta_key, bool $single = true, bool $update_cache = true ) {
-		if ( $update_cache && function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post_id ) );
+		// CRITICAL: Do NOT update cache if WordPress is handling a native operation
+		// This includes featured image, edit locks, page templates, etc.
+		if ( $update_cache && 
+			 ! \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
+			if ( function_exists( 'update_post_meta_cache' ) ) {
+				update_post_meta_cache( array( $post_id ) );
+			}
 		}
 
 		$value = get_post_meta( $post_id, $meta_key, $single );
@@ -59,7 +64,7 @@ class MetaHelper {
 		}
 
 		// Handle serialized arrays
-		if ( is_string( $value ) && ( $value[0] === 'a:' || $value[0] === 'O:' ) ) {
+		if ( is_string( $value ) && strlen( $value ) > 1 && ( substr( $value, 0, 2 ) === 'a:' || substr( $value, 0, 2 ) === 'O:' ) ) {
 			$unserialized = maybe_unserialize( $value );
 			if ( is_array( $unserialized ) ) {
 				$value = $unserialized;
@@ -103,5 +108,19 @@ class MetaHelper {
 		return is_array( $value ) ? $value : array();
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

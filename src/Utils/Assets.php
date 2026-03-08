@@ -80,14 +80,8 @@ class Assets {
 		}
 		
 		if ( $is_post_editor ) {
-			// Ensure wp.media is available for featured image button (modern WordPress API)
-			// Must be called early, before other scripts
-			wp_enqueue_media();
-			
-			// Also ensure set-post-thumbnail script is loaded (WordPress core script for featured image)
-			if ( function_exists( 'wp_enqueue_script' ) ) {
-				wp_enqueue_script( 'set-post-thumbnail' );
-			}
+			// WordPress carica wp.media e set-post-thumbnail automaticamente quando necessario
+			// Non interferiamo con il caricamento nativo per evitare conflitti con featured image
 			
 			// Force load image-edit script if needed
 			if ( function_exists( 'wp_enqueue_script' ) ) {
@@ -129,6 +123,17 @@ class Assets {
 			return;
 		}
 
+		// CRITICAL: Never run on media library or upload pages to avoid interference
+		$is_media_page = (
+			in_array( $screen->base, array( 'upload', 'media' ), true ) ||
+			$screen->id === 'upload' ||
+			$screen->id === 'attachment'
+		);
+		
+		if ( $is_media_page ) {
+			return;
+		}
+
 		// Only enqueue on post editor pages where featured image is used
 		$is_post_editor = in_array( $screen->base, array( 'post', 'page' ), true );
 		
@@ -154,12 +159,19 @@ class Assets {
 		}
 
 		// CRITICAL: Never load assets on media library or upload pages to avoid interference
-		$is_media_page = in_array( $screen->base, array( 'upload', 'media' ), true ) || $screen->id === 'upload';
+		$is_media_page = (
+			in_array( $screen->base, array( 'upload', 'media' ), true ) ||
+			$screen->id === 'upload' ||
+			$screen->id === 'attachment'
+		);
+		
 		if ( $is_media_page ) {
-			// Explicitly dequeue all FP SEO assets on media library pages
+			// Explicitly dequeue and deregister all FP SEO assets on media library pages
 			wp_dequeue_style( 'fp-seo-ui-system' );
 			wp_dequeue_style( 'fp-seo-notifications' );
 			wp_dequeue_style( 'fp-seo-ai-enhancements' );
+			wp_dequeue_style( 'fp-seo-performance-admin' );
+			
 			wp_dequeue_script( 'fp-seo-ui-system' );
 			wp_dequeue_script( 'fp-seo-performance-bulk' );
 			wp_dequeue_script( 'fp-seo-performance-ai-generator' );
@@ -168,6 +180,17 @@ class Assets {
 			wp_dequeue_script( 'fp-seo-performance-editor-modern' );
 			wp_dequeue_script( 'fp-seo-performance-admin' );
 			wp_dequeue_script( 'fp-seo-performance-metabox-ai-fields' );
+			
+			// Also deregister to prevent them from being enqueued later
+			wp_deregister_script( 'fp-seo-ui-system' );
+			wp_deregister_script( 'fp-seo-performance-bulk' );
+			wp_deregister_script( 'fp-seo-performance-ai-generator' );
+			wp_deregister_script( 'fp-seo-performance-serp-preview' );
+			wp_deregister_script( 'fp-seo-performance-editor' );
+			wp_deregister_script( 'fp-seo-performance-editor-modern' );
+			wp_deregister_script( 'fp-seo-performance-admin' );
+			wp_deregister_script( 'fp-seo-performance-metabox-ai-fields' );
+			
 			return;
 		}
 
@@ -195,6 +218,7 @@ class Assets {
 		}
 
 		// Dequeue heavy assets if not on FP SEO pages or post editor
+		// NOTE: Do NOT dequeue editor-metabox scripts here - they are handled by AssetsManager
 		if ( ! $is_fp_seo_page && ! $is_post_editor ) {
 			wp_dequeue_style( 'fp-seo-ui-system' );
 			wp_dequeue_style( 'fp-seo-notifications' );
@@ -203,6 +227,9 @@ class Assets {
 			wp_dequeue_script( 'fp-seo-performance-bulk' );
 			wp_dequeue_script( 'fp-seo-performance-ai-generator' );
 			wp_dequeue_script( 'fp-seo-performance-serp-preview' );
+			// DO NOT dequeue editor-metabox scripts - they are managed by AssetsManager
+			// wp_dequeue_script( 'fp-seo-performance-editor' );
+			// wp_dequeue_script( 'fp-seo-performance-editor-modern' );
 		}
 	}
 

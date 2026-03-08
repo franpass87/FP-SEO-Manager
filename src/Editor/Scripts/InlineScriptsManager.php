@@ -65,6 +65,15 @@ class InlineScriptsManager {
 	}
 
 	/**
+	 * Inject scripts directly in metabox (fallback if admin_head doesn't work).
+	 *
+	 * @return void
+	 */
+	public function inject_in_metabox(): void {
+		$this->render_character_counters_script();
+	}
+
+	/**
 	 * Render homepage title fix script.
 	 *
 	 * @return void
@@ -407,6 +416,21 @@ class InlineScriptsManager {
 		</script>
 		<?php
 	}
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

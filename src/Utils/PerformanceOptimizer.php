@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Utils;
 
+use WP_Query;
+
 /**
  * Handles performance optimizations for the plugin.
  */
@@ -25,48 +27,71 @@ class PerformanceOptimizer {
 	 * Register performance optimization hooks.
 	 */
 	public function register(): void {
-		// Optimize database queries
-		add_action( 'init', array( $this, 'optimize_database_queries' ) );
+		// DISABLED: These optimizations were causing interference with WordPress core
+		// Specifically, query optimizations interfered with featured image loading
 		
-		// Optimize admin loading
-		add_action( 'admin_init', array( $this, 'optimize_admin_loading' ) );
+		// DISABLED: Optimize database queries
+		// add_action( 'init', array( $this, 'optimize_database_queries' ) );
 		
-		// Optimize meta queries (get_post_meta caching)
-		add_action( 'init', array( $this, 'optimize_meta_queries' ) );
+		// DISABLED: Optimize admin loading
+		// add_action( 'admin_init', array( $this, 'optimize_admin_loading' ) );
 		
-		// Optimize object cache
-		add_action( 'init', array( $this, 'optimize_object_cache' ) );
+		// DISABLED: Optimize meta queries (get_post_meta caching)
+		// add_action( 'init', array( $this, 'optimize_meta_queries' ) );
 		
-		// Add performance monitoring
-		add_action( 'wp_footer', array( $this, 'add_performance_monitoring' ) );
-		add_action( 'admin_footer', array( $this, 'add_performance_monitoring' ) );
+		// DISABLED: Optimize object cache
+		// add_action( 'init', array( $this, 'optimize_object_cache' ) );
 		
-		// Optimize memory usage
-		add_action( 'wp_loaded', array( $this, 'optimize_memory_usage' ) );
+		// DISABLED: Add performance monitoring
+		// add_action( 'wp_footer', array( $this, 'add_performance_monitoring' ) );
+		// add_action( 'admin_footer', array( $this, 'add_performance_monitoring' ) );
+		
+		// DISABLED: Optimize memory usage
+		// add_action( 'wp_loaded', array( $this, 'optimize_memory_usage' ) );
 	}
 
 	/**
-	 * Optimize database queries.
+	 * Optimize database queries selectively for plugin queries only.
 	 */
 	public function optimize_database_queries(): void {
-		// DISABLED: These filters interfere with WordPress's internal queries,
-		// including queries used to load posts in the editor.
-		// They were causing WordPress to load auto-draft posts instead of the correct post.
-		// 
-		// If query optimization is needed in the future, it should be done
-		// in a way that does NOT modify WordPress core queries.
-		return;
-		
-		// OLD CODE - DISABLED
-		// // DISABLED in frontend: Can interfere with page rendering
-		// // Only optimize database queries in admin
-		// if ( ! is_admin() ) {
-		// 	return;
-		// }
-		// 
-		// // Add database query optimizations (admin only)
-		// add_filter( 'posts_where', array( $this, 'optimize_posts_where' ), 10, 2 );
-		// add_filter( 'posts_orderby', array( $this, 'optimize_posts_orderby' ), 10, 2 );
+		// Use selective query optimization that only affects plugin queries
+		// This prevents interference with WordPress core queries
+		add_filter( 'posts_where', array( $this, 'optimize_posts_where_selective' ), 10, 2 );
+		add_filter( 'posts_orderby', array( $this, 'optimize_posts_orderby_selective' ), 10, 2 );
+		add_filter( 'posts_join', array( $this, 'optimize_posts_join_selective' ), 10, 2 );
+	}
+
+	/**
+	 * Optimize WHERE clause selectively for plugin queries.
+	 *
+	 * @param string   $where WHERE clause.
+	 * @param WP_Query $query Query object.
+	 * @return string Modified WHERE clause.
+	 */
+	public function optimize_posts_where_selective( string $where, $query ): string {
+		return QueryOptimizer::optimize_where( $where, $query );
+	}
+
+	/**
+	 * Optimize ORDER BY clause selectively for plugin queries.
+	 *
+	 * @param string   $orderby ORDER BY clause.
+	 * @param WP_Query $query Query object.
+	 * @return string Modified ORDER BY clause.
+	 */
+	public function optimize_posts_orderby_selective( string $orderby, $query ): string {
+		return QueryOptimizer::optimize_orderby( $orderby, $query );
+	}
+
+	/**
+	 * Optimize JOIN clause selectively for plugin queries.
+	 *
+	 * @param string   $join JOIN clause.
+	 * @param WP_Query $query Query object.
+	 * @return string Modified JOIN clause.
+	 */
+	public function optimize_posts_join_selective( string $join, $query ): string {
+		return QueryOptimizer::optimize_join( $join, $query );
 	}
 
 	/**
@@ -86,23 +111,62 @@ class PerformanceOptimizer {
 	}
 
 	/**
-	 * Add performance monitoring.
+	 * Add performance monitoring (always active with aggregated metrics).
 	 */
 	public function add_performance_monitoring(): void {
-		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
-			return;
+		// Always track metrics, not just in debug mode
+		$monitor = PerformanceMonitor::get_instance();
+		
+		// Track request-level metrics
+		$monitor->start_timer( 'request' );
+		
+		// Track memory at start
+		$monitor->record_memory( 'request_start' );
+		
+		// Hook into shutdown to collect final metrics
+		add_action( 'shutdown', array( $this, 'collect_final_metrics' ), 999 );
+		
+		// Only output HTML comment in debug mode
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			$memory_usage = memory_get_peak_usage( true );
+			$memory_limit = ini_get( 'memory_limit' );
+			$memory_percent = ( $memory_usage / wp_convert_hr_to_bytes( $memory_limit ) ) * 100;
+
+			echo sprintf(
+				'<!-- FP SEO Performance Monitor: Memory: %s/%s (%.1f%%) -->',
+				size_format( $memory_usage ),
+				$memory_limit,
+				$memory_percent
+			);
 		}
+	}
 
-		$memory_usage = memory_get_peak_usage( true );
-		$memory_limit = ini_get( 'memory_limit' );
-		$memory_percent = ( $memory_usage / wp_convert_hr_to_bytes( $memory_limit ) ) * 100;
-
-		echo sprintf(
-			'<!-- FP SEO Performance Monitor: Memory: %s/%s (%.1f%%) -->',
-			size_format( $memory_usage ),
-			$memory_limit,
-			$memory_percent
-		);
+	/**
+	 * Collect final metrics at shutdown.
+	 *
+	 * @return void
+	 */
+	public function collect_final_metrics(): void {
+		$monitor = PerformanceMonitor::get_instance();
+		
+		// End request timer
+		$monitor->end_timer( 'request' );
+		
+		// Record final memory
+		$monitor->record_memory( 'request_end' );
+		
+		// Track database queries
+		if ( function_exists( 'get_num_queries' ) ) {
+			$query_count = get_num_queries();
+			// Store in transient for dashboard
+			set_transient( 'fp_seo_perf_query_count', $query_count, HOUR_IN_SECONDS );
+		}
+		
+		// Store aggregated metrics (only in admin to avoid overhead)
+		if ( is_admin() ) {
+			$summary = $monitor->get_summary();
+			set_transient( 'fp_seo_perf_summary', $summary, 5 * MINUTE_IN_SECONDS );
+		}
 	}
 
 	/**
@@ -182,7 +246,8 @@ class PerformanceOptimizer {
 	public function optimize_admin_menu(): void {
 		// Remove unnecessary admin menu items if not needed
 		// Use cached options to avoid extra queries
-		$options = Options::get();
+		$raw_options            = get_option( \FP\SEO\Utils\Options::OPTION_KEY, array() );
+		$options                = is_array( $raw_options ) ? $raw_options : array();
 		$hide_advanced_features = $options['general']['hide_advanced_features'] ?? false;
 
 		if ( $hide_advanced_features ) {
@@ -305,12 +370,8 @@ class PerformanceOptimizer {
 			return;
 		}
 
-		// Clear unused transients periodically
-		if ( ! wp_next_scheduled( 'fp_seo_cleanup_transients' ) ) {
-			wp_schedule_event( time(), 'daily', 'fp_seo_cleanup_transients' );
-		}
-
-		add_action( 'fp_seo_cleanup_transients', array( $this, 'cleanup_expired_transients' ) );
+		// Transient cleanup is now handled by CronServiceProvider via CleanupTransientsJob
+		// This method is kept for backward compatibility but scheduling is handled by the cron job
 	}
 
 	/**

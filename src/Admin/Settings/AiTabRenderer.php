@@ -11,7 +11,6 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin\Settings;
 
-use FP\SEO\Integrations\OpenAiClient;
 use function checked;
 use function esc_attr;
 use function esc_html;
@@ -32,8 +31,8 @@ class AiTabRenderer extends SettingsTabRenderer {
 		$ai_settings = $options['ai'] ?? array();
 		
 		// Check if API key is configured
-		$client       = new OpenAiClient();
-		$is_configured = $client->is_configured();
+		$api_key = $ai_settings['openai_api_key'] ?? '';
+		$is_configured = ! empty( $api_key );
 		?>
 		<div class="fp-seo-settings-section">
 			<h2 class="fp-seo-settings-section__title">

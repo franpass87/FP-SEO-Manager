@@ -17,6 +17,7 @@ use FP\SEO\Infrastructure\AbstractServiceProvider;
 use FP\SEO\Infrastructure\Container;
 use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Infrastructure\Traits\ConditionalServiceTrait;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Admin\GscSettings;
 use FP\SEO\Admin\GscDashboard;
 use FP\SEO\Integrations\GscClient;
@@ -33,6 +34,17 @@ class IntegrationServiceProvider extends AbstractServiceProvider {
 	use ConditionalServiceTrait;
 
 	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			CoreServiceProvider::class,
+		);
+	}
+
+	/**
 	 * Register integration services in the container.
 	 *
 	 * @param Container $container The container instance.
@@ -41,7 +53,10 @@ class IntegrationServiceProvider extends AbstractServiceProvider {
 	public function register( Container $container ): void {
 		// GSC Settings - always register (users need it to configure credentials)
 		if ( $this->is_admin_context() ) {
-			$container->singleton( GscSettings::class );
+			$container->singleton( GscSettings::class, function( Container $container ) {
+				$hook_manager = $container->get( HookManagerInterface::class );
+				return new GscSettings( $hook_manager );
+			} );
 		}
 
 		// GSC Client and Data - only if configured
@@ -51,7 +66,10 @@ class IntegrationServiceProvider extends AbstractServiceProvider {
 
 			// GSC Dashboard - only if configured
 			if ( $this->is_admin_context() ) {
-				$container->singleton( GscDashboard::class );
+				$container->singleton( GscDashboard::class, function( Container $container ) {
+					$hook_manager = $container->get( HookManagerInterface::class );
+					return new GscDashboard( $hook_manager );
+				} );
 			}
 		}
 

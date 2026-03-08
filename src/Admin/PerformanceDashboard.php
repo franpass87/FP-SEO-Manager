@@ -18,6 +18,7 @@ use FP\SEO\Utils\AssetOptimizer;
 use FP\SEO\Utils\DatabaseOptimizer;
 use FP\SEO\Utils\HealthChecker;
 use FP\SEO\Utils\PerformanceMonitor;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Performance dashboard page.
@@ -60,13 +61,27 @@ class PerformanceDashboard {
 	private $renderer;
 
 	/**
-	 * Constructor.
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface
 	 */
-	public function __construct( HealthChecker $health_checker, PerformanceMonitor $monitor, DatabaseOptimizer $db_optimizer, ?AssetOptimizer $asset_optimizer = null ) {
+	private HookManagerInterface $hook_manager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param HealthChecker $health_checker Health checker instance.
+	 * @param PerformanceMonitor $monitor Performance monitor instance.
+	 * @param DatabaseOptimizer $db_optimizer Database optimizer instance.
+	 * @param HookManagerInterface $hook_manager Hook manager instance.
+	 * @param AssetOptimizer|null $asset_optimizer Optional asset optimizer instance.
+	 */
+	public function __construct( HealthChecker $health_checker, PerformanceMonitor $monitor, DatabaseOptimizer $db_optimizer, HookManagerInterface $hook_manager, ?AssetOptimizer $asset_optimizer = null ) {
 		$this->health_checker = $health_checker;
 		$this->monitor = $monitor;
 		$this->db_optimizer = $db_optimizer;
 		$this->asset_optimizer = $asset_optimizer;
+		$this->hook_manager = $hook_manager;
 		$this->renderer = new PerformanceDashboardRenderer();
 	}
 
@@ -74,11 +89,17 @@ class PerformanceDashboard {
 	 * Register dashboard page.
 	 */
 	public function register(): void {
-		add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
-		add_action( 'wp_ajax_fp_seo_run_health_check', [ $this, 'ajax_run_health_check' ] );
-		add_action( 'wp_ajax_fp_seo_optimize_database', [ $this, 'ajax_optimize_database' ] );
-		add_action( 'wp_ajax_fp_seo_optimize_assets', [ $this, 'ajax_optimize_assets' ] );
-		add_action( 'wp_ajax_fp_seo_clear_cache', [ $this, 'ajax_clear_cache' ] );
+		$hooks = array(
+			'admin_menu'                      => array( $this, 'add_admin_menu' ),
+			'wp_ajax_fp_seo_run_health_check' => array( $this, 'ajax_run_health_check' ),
+			'wp_ajax_fp_seo_optimize_database' => array( $this, 'ajax_optimize_database' ),
+			'wp_ajax_fp_seo_optimize_assets'   => array( $this, 'ajax_optimize_assets' ),
+			'wp_ajax_fp_seo_clear_cache'      => array( $this, 'ajax_clear_cache' ),
+		);
+
+		foreach ( $hooks as $hook => $callback ) {
+			$this->hook_manager->add_action( $hook, $callback );
+		}
 
 		// Initialize and register styles and scripts managers
 		$this->styles_manager = new PerformanceDashboardStylesManager();
@@ -122,12 +143,13 @@ class PerformanceDashboard {
 		check_ajax_referer( 'fp_seo_health_check', 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( 'Unauthorized' );
+			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$health_data = $this->health_checker->run_health_check();
-		
 		wp_send_json_success( $health_data );
+		return;
 	}
 
 	/**
@@ -137,12 +159,13 @@ class PerformanceDashboard {
 		check_ajax_referer( 'fp_seo_optimize_database', 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( 'Unauthorized' );
+			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
 		$results = $this->db_optimizer->optimize_tables();
-		
 		wp_send_json_success( $results );
+		return;
 	}
 
 	/**
@@ -152,15 +175,16 @@ class PerformanceDashboard {
 		check_ajax_referer( 'fp_seo_optimize_assets', 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( 'Unauthorized' );
+			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
-		// Trigger asset optimization
 		if ( $this->asset_optimizer ) {
 			$this->asset_optimizer->optimize_all();
 		}
-		
-		wp_send_json_success( 'Assets optimized successfully' );
+
+		wp_send_json_success( array( 'message' => __( 'Assets optimized successfully', 'fp-seo-performance' ) ) );
+		return;
 	}
 
 	/**
@@ -170,17 +194,17 @@ class PerformanceDashboard {
 		check_ajax_referer( 'fp_seo_clear_cache', 'nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( 'Unauthorized' );
+			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'fp-seo-performance' ) ), 403 );
+			return;
 		}
 
-		// Clear all caches
 		wp_cache_flush();
-		
-		// Clear plugin-specific cache (use prepared statement for security)
+
 		global $wpdb;
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", '_transient_fp_seo_%' ) );
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", '_transient_timeout_fp_seo_%' ) );
-		
-		wp_send_json_success( 'Cache cleared successfully' );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_transient_fp_seo_' ) . '%' ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_transient_timeout_fp_seo_' ) . '%' ) );
+
+		wp_send_json_success( array( 'message' => __( 'Cache cleared successfully', 'fp-seo-performance' ) ) );
+		return;
 	}
 }

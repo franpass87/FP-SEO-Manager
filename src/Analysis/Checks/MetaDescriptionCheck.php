@@ -77,8 +77,10 @@ class MetaDescriptionCheck implements CheckInterface {
 		$stop_words = array( 'a', 'an', 'the', 'di', 'da', 'in', 'su', 'per', 'con', 'il', 'la', 'lo', 'gli', 'le', 'un', 'una', 'uno', 'e', 'o', 'ma', 'che', 'è', 'sono', 'del', 'della', 'dei', 'delle', 'al', 'alla', 'ai', 'alle' );
 		
 		// Normalize & to handle variations (B&B, B & B, B and B)
-		$keyword_normalized = preg_replace( '/\s*&\s*/u', '&', $keyword );
-		$text_normalized = preg_replace( '/\s*&\s*/u', '&', $text );
+		$keyword_normalized_raw = preg_replace( '/\s*&\s*/u', '&', $keyword );
+		$keyword_normalized     = is_string( $keyword_normalized_raw ) ? $keyword_normalized_raw : $keyword;
+		$text_normalized_raw    = preg_replace( '/\s*&\s*/u', '&', $text );
+		$text_normalized        = is_string( $text_normalized_raw ) ? $text_normalized_raw : $text;
 		
 		// Try normalized match first
 		if ( false !== mb_stripos( $text_normalized, $keyword_normalized ) ) {
@@ -88,6 +90,9 @@ class MetaDescriptionCheck implements CheckInterface {
 		// Split keyword into words (split on spaces, but preserve & as part of word)
 		// First split on spaces
 		$keyword_parts = preg_split( '/\s+/u', mb_strtolower( $keyword ), -1, PREG_SPLIT_NO_EMPTY );
+		if ( false === $keyword_parts ) {
+			$keyword_parts = array( mb_strtolower( $keyword ) );
+		}
 		$text_lower = mb_strtolower( $text );
 		
 		// Check if all significant words/parts are present

@@ -20,15 +20,16 @@ use FP\SEO\Infrastructure\Traits\ConditionalServiceTrait;
 use FP\SEO\Infrastructure\Traits\HookHelperTrait;
 use FP\SEO\Infrastructure\Traits\FactoryHelperTrait;
 use FP\SEO\Infrastructure\Config\ServiceConfig;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Utils\PerformanceOptimizer;
-use FP\SEO\Utils\AdvancedCache;
+use FP\SEO\Infrastructure\Contracts\CacheInterface;
 use FP\SEO\Utils\RateLimiter;
 use FP\SEO\Utils\PerformanceMonitor;
 use FP\SEO\Utils\DatabaseOptimizer;
 use FP\SEO\Utils\AssetOptimizer;
 use FP\SEO\Utils\HealthChecker;
 use FP\SEO\Admin\PerformanceDashboard;
-use FP\SEO\Utils\Logger;
+use FP\SEO\Utils\LoggerHelper;
 
 /**
  * Performance service provider.
@@ -39,6 +40,17 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 	use ConditionalServiceTrait;
 	use HookHelperTrait;
 	use FactoryHelperTrait;
+
+	/**
+	 * Get an array of service provider class names that this provider depends on.
+	 *
+	 * @return array<class-string<ServiceProviderInterface>> An array of fully qualified class names.
+	 */
+	public function get_dependencies(): array {
+		return array(
+			CoreServiceProvider::class,
+		);
+	}
 
 	/**
 	 * Register performance services in the container.
@@ -53,9 +65,9 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 		// Performance Monitor - always load
 		$container->singleton( PerformanceMonitor::class );
 
-		// Rate Limiter - depends on AdvancedCache
+		// Rate Limiter - depends on CacheInterface
 		$container->singleton( RateLimiter::class, function( Container $container ) {
-			return new RateLimiter( $container->get( AdvancedCache::class ) );
+			return new RateLimiter( $container->get( CacheInterface::class ) );
 		} );
 
 		// Database Optimizer - depends on PerformanceMonitor
@@ -100,7 +112,7 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 					$asset_optimizer->init();
 				}
 			} catch ( \Throwable $e ) {
-				Logger::debug(
+				LoggerHelper::debug(
 					'AssetOptimizer initialization skipped',
 					array( 'reason' => $e->getMessage() )
 				);
@@ -130,7 +142,7 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 					FP_SEO_PERFORMANCE_FILE,
 					$container->get( PerformanceMonitor::class )
 				);
-			} catch ( \Exception $e ) {
+			} catch ( \Throwable $e ) {
 				throw new \RuntimeException(
 					'Failed to create AssetOptimizer: ' . $e->getMessage(),
 					0,
@@ -151,7 +163,7 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 			try {
 				$asset_optimizer = $container->get( AssetOptimizer::class );
 			} catch ( \Throwable $e ) {
-				Logger::debug(
+				LoggerHelper::debug(
 					'AssetOptimizer not available for HealthChecker',
 					array( 'error' => $e->getMessage() )
 				);
@@ -176,16 +188,19 @@ class PerformanceServiceProvider extends AbstractServiceProvider {
 			try {
 				$asset_optimizer = $container->get( AssetOptimizer::class );
 			} catch ( \Throwable $e ) {
-				Logger::debug(
+				LoggerHelper::debug(
 					'AssetOptimizer not available for PerformanceDashboard',
 					array( 'error' => $e->getMessage() )
 				);
 			}
 
+			$hook_manager = $container->get( HookManagerInterface::class );
+
 			return new PerformanceDashboard(
 				$container->get( HealthChecker::class ),
 				$container->get( PerformanceMonitor::class ),
 				$container->get( DatabaseOptimizer::class ),
+				$hook_manager,
 				$asset_optimizer
 			);
 		};

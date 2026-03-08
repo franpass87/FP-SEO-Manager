@@ -16,11 +16,12 @@ namespace FP\SEO\Admin;
 use FP\SEO\Admin\Styles\FreshnessMetaBoxStylesManager;
 use FP\SEO\GEO\FreshnessSignals;
 use FP\SEO\Utils\PostTypes;
+use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
 /**
  * Manages freshness settings metabox
  */
-class FreshnessMetaBox {
+class FreshnessMetabox {
 	/**
 	 * Freshness signals instance
 	 *
@@ -34,10 +35,20 @@ class FreshnessMetaBox {
 	private $styles_manager;
 
 	/**
-	 * Constructor
+	 * Hook manager instance.
+	 *
+	 * @var HookManagerInterface|null
 	 */
-	public function __construct() {
+	private ?HookManagerInterface $hook_manager = null;
+
+	/**
+	 * Constructor
+	 *
+	 * @param HookManagerInterface|null $hook_manager Optional hook manager instance.
+	 */
+	public function __construct( ?HookManagerInterface $hook_manager = null ) {
 		$this->freshness = new FreshnessSignals();
+		$this->hook_manager = $hook_manager;
 	}
 
 	/**
@@ -50,8 +61,14 @@ class FreshnessMetaBox {
 		// CRITICAL: Register hooks ONLY for supported post types to prevent ANY interference
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_meta' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_meta' ), 10, 1 );
+			$hook = 'save_post_' . $post_type;
+			if ( $this->hook_manager ) {
+				// HookManager handles duplicate prevention internally
+				$this->hook_manager->add_action( $hook, array( $this, 'save_meta' ), 10, 1 );
+			} else {
+				if ( ! has_action( $hook, array( $this, 'save_meta' ) ) ) {
+					add_action( $hook, array( $this, 'save_meta' ), 10, 1 );
+				}
 			}
 		}
 
@@ -86,16 +103,9 @@ class FreshnessMetaBox {
 	public function render( \WP_Post $post ): void {
 		wp_nonce_field( 'fp_seo_freshness_metabox', 'fp_seo_freshness_nonce' );
 
-		// Clear cache before retrieving
-		clean_post_cache( $post->ID );
-		wp_cache_delete( $post->ID, 'post_meta' );
-		wp_cache_delete( $post->ID, 'posts' );
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'post_meta' );
-		}
-		if ( function_exists( 'update_post_meta_cache' ) ) {
-			update_post_meta_cache( array( $post->ID ) );
-		}
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 
 		// Get freshness data
 		$freshness_data = $this->freshness->get_freshness_data( $post->ID );
@@ -131,11 +141,12 @@ class FreshnessMetaBox {
 		}
 
 		?>
+		<?php $freshness_score = (float) ( $freshness_data['freshness_score'] ?? 0.0 ); ?>
 		<div class="fp-seo-freshness-metabox">
 			<!-- Freshness Score -->
 			<div style="margin-bottom: 20px; padding: 15px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 6px; text-align: center;">
-				<div style="font-size: 36px; font-weight: bold; color: <?php echo $freshness_data['freshness_score'] > 0.7 ? '#059669' : ( $freshness_data['freshness_score'] > 0.4 ? '#f59e0b' : '#dc2626' ); ?>">
-					<?php echo esc_html( number_format( $freshness_data['freshness_score'] * 100, 0 ) ); ?>
+				<div style="font-size: 36px; font-weight: bold; color: <?php echo esc_attr( $freshness_score > 0.7 ? '#059669' : ( $freshness_score > 0.4 ? '#f59e0b' : '#dc2626' ) ); ?>">
+					<?php echo esc_html( number_format( $freshness_score * 100, 0 ) ); ?>
 				</div>
 				<div style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
 					Freshness Score
@@ -222,6 +233,14 @@ class FreshnessMetaBox {
 	 * @param int $post_id Post ID.
 	 */
 	public function save_meta( int $post_id ): void {
+		// CRITICAL: Do NOT interfere if WordPress is handling a native operation
+		if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FP SEO: FreshnessMetabox::save_meta BLOCKED - WordPress native operation detected' );
+			}
+			return;
+		}
+		
 		// CRITICAL: Check post type FIRST, before any processing
 		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
 		$post_type = get_post_type( $post_id );

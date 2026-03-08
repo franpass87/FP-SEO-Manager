@@ -14,10 +14,9 @@ declare(strict_types=1);
 
 namespace FP\SEO\AI;
 
-use FP\SEO\Utils\Logger;
-
+use FP\SEO\Infrastructure\Contracts\LoggerInterface;
 use FP\SEO\Integrations\OpenAiClient;
-use FP\SEO\Utils\Cache;
+use FP\SEO\Utils\CacheHelper;
 
 /**
  * Extracts Q&A pairs from content for AI consumption
@@ -37,10 +36,21 @@ class QAPairExtractor {
 	private OpenAiClient $openai_client;
 
 	/**
-	 * Constructor
+	 * Logger instance.
+	 *
+	 * @var LoggerInterface
 	 */
-	public function __construct() {
-		$this->openai_client = new OpenAiClient();
+	private LoggerInterface $logger;
+
+	/**
+	 * Constructor
+	 *
+	 * @param OpenAiClient   $openai_client OpenAI client instance.
+	 * @param LoggerInterface $logger        Logger instance.
+	 */
+	public function __construct( OpenAiClient $openai_client, LoggerInterface $logger ) {
+		$this->openai_client = $openai_client;
+		$this->logger        = $logger;
 	}
 
 	/**
@@ -51,11 +61,19 @@ class QAPairExtractor {
 	 * @return array<int, array<string, mixed>> Q&A pairs.
 	 */
 	public function extract_qa_pairs( int $post_id, bool $force = false ): array {
-		// Check cache first
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] QAPairExtractor::extract_qa_pairs - Entry, post_id: ' . $post_id . ', force: ' . ( $force ? 'true' : 'false' ) );
+		}
+
 		if ( ! $force ) {
 			$cached = get_post_meta( $post_id, self::META_QA_PAIRS, true );
 
 			if ( is_array( $cached ) && ! empty( $cached ) ) {
+				if ( $debug ) {
+					error_log( '[FP-SEO] QAPairExtractor::extract_qa_pairs - Returning cached Q&A pairs, count: ' . count( $cached ) );
+				}
 				return $cached;
 			}
 		}
@@ -66,33 +84,38 @@ class QAPairExtractor {
 			return array();
 		}
 
-		// Extract using AI
 		$qa_pairs = $this->extract_with_ai( $post );
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] QAPairExtractor::extract_qa_pairs - extract_with_ai returned, count: ' . count( $qa_pairs ) );
+		}
 
 		// Save to post meta
 		if ( ! empty( $qa_pairs ) ) {
 			update_post_meta( $post_id, self::META_QA_PAIRS, $qa_pairs );
 			
-			// Clear cache to ensure fresh data
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'post_meta' );
+			// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id) saving
+			// WordPress handles cache management automatically - no manual clearing needed
 		} else {
 			// If no Q&A pairs, delete the meta to avoid stale data
 			delete_post_meta( $post_id, self::META_QA_PAIRS );
-			clean_post_cache( $post_id );
-			wp_cache_delete( $post_id, 'post_meta' );
+			
+			// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id) saving
+			// WordPress handles cache management automatically - no manual clearing needed
 		}
 
 		return $qa_pairs;
 	}
 
 	/**
-	 * Extract Q&A pairs using OpenAI GPT-5 Nano
+	 * Extract Q&A pairs using OpenAI GPT-4o Mini
 	 *
 	 * @param \WP_Post $post Post object.
 	 * @return array<int, array<string, mixed>> Extracted Q&A pairs.
 	 */
 	private function extract_with_ai( \WP_Post $post ): array {
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
 		if ( ! $this->openai_client->is_configured() ) {
 			return array();
 		}
@@ -107,15 +130,31 @@ class QAPairExtractor {
 
 		try {
 			$response = $this->openai_client->generate_content( $prompt, array(
-			'model'       => 'gpt-5-nano',
-			'temperature' => 0.3, // Lower temperature for more focused extraction
-			'max_completion_tokens'  => 2000,
-		) );
+				'model'       => 'gpt-4o-mini',
+				'max_tokens'  => 4000,
+				'temperature' => 0.7,
+			) );
 
-			return $this->parse_qa_response( $response, $post );
+			if ( empty( $response ) ) {
+				if ( $debug ) {
+					error_log( '[FP-SEO] QAPairExtractor::extract_with_ai - GPT-4o Mini returned empty response for post_id: ' . $post->ID );
+				}
+				return array();
+			}
+
+			$result = $this->parse_qa_response( $response, $post );
+
+			if ( $debug && empty( $result ) ) {
+				error_log( '[FP-SEO] QAPairExtractor::extract_with_ai - No Q&A pairs parsed from response for post_id: ' . $post->ID );
+			}
+
+			return $result;
 
 		} catch ( \Exception $e ) {
-			Logger::error( 'Q&A Extraction Error', array( 'error' => $e->getMessage(), 'post_id' => $post_id ) );
+			$this->logger->error( 'Q&A Extraction Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ) );
+			return array();
+		} catch ( \Error $e ) {
+			$this->logger->error( 'Q&A Extraction Fatal Error', array( 'error' => $e->getMessage(), 'post_id' => $post->ID ) );
 			return array();
 		}
 	}
@@ -157,7 +196,7 @@ class QAPairExtractor {
 		
 		// Debug logging
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'QAPairExtractor::prepare_content', array(
+			$this->logger->debug( 'QAPairExtractor::prepare_content', array(
 				'post_id' => $post->ID,
 				'original_length' => strlen( $post->post_content ),
 				'processed_length' => strlen( $content ),
@@ -238,25 +277,51 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * @return array<int, array<string, mixed>> Q&A pairs.
 	 */
 	private function parse_qa_response( string $response, \WP_Post $post ): array {
+		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+
 		// Remove markdown code blocks if present
-		$response = preg_replace( '/```json\s*/', '', $response );
-		$response = preg_replace( '/```\s*$/', '', $response );
+		$response = preg_replace( '/```json\s*/', '', $response ) ?? $response;
+		$response = preg_replace( '/```\s*$/', '', $response ) ?? $response;
 		$response = trim( $response );
 
-		$data = json_decode( $response, true );
+		// Try to extract JSON object if there's surrounding text
+		if ( preg_match( '/\{[\s\S]*\}/', $response, $matches ) === 1 ) {
+			$response = $matches[0];
+		}
 
-		if ( ! is_array( $data ) || ! isset( $data['qa_pairs'] ) ) {
+		$data       = json_decode( $response, true );
+		$json_error = json_last_error();
+
+		if ( $json_error !== JSON_ERROR_NONE ) {
+			// Try to fix by removing any text before the first {
+			$first_brace = strpos( $response, '{' );
+			if ( $first_brace !== false && $first_brace > 0 ) {
+				$response   = substr( $response, $first_brace );
+				$data       = json_decode( $response, true );
+				$json_error = json_last_error();
+			}
+
+			if ( $json_error !== JSON_ERROR_NONE ) {
+				if ( $debug ) {
+					error_log( '[FP-SEO] QAPairExtractor::parse_qa_response - JSON decode failed: ' . json_last_error_msg() );
+				}
+				return array();
+			}
+		}
+
+		if ( ! is_array( $data ) || ! isset( $data['qa_pairs'] ) || ! is_array( $data['qa_pairs'] ) ) {
 			return array();
 		}
 
-		$qa_pairs = array();
+		$qa_pairs       = array();
+		$filtered_count = 0;
 
 		foreach ( $data['qa_pairs'] as $pair ) {
 			if ( ! isset( $pair['question'] ) || ! isset( $pair['answer'] ) ) {
+				$filtered_count++;
 				continue;
 			}
 
-			// Sanitize and validate
 			$qa_pair = array(
 				'question'       => sanitize_text_field( $pair['question'] ),
 				'answer'         => sanitize_textarea_field( $pair['answer'] ),
@@ -271,19 +336,16 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 			);
 
 			// Quality filters
-			if ( strlen( $qa_pair['question'] ) < 10 ) {
-				continue; // Too short
-			}
-
-			if ( strlen( $qa_pair['answer'] ) < 30 ) {
-				continue; // Answer too short
-			}
-
-			if ( $qa_pair['confidence'] < 0.5 ) {
-				continue; // Low confidence
+			if ( strlen( $qa_pair['question'] ) < 10 || strlen( $qa_pair['answer'] ) < 30 || $qa_pair['confidence'] < 0.5 ) {
+				$filtered_count++;
+				continue;
 			}
 
 			$qa_pairs[] = $qa_pair;
+		}
+
+		if ( $debug ) {
+			error_log( '[FP-SEO] QAPairExtractor::parse_qa_response - Final: ' . count( $qa_pairs ) . ' pairs, filtered: ' . $filtered_count );
 		}
 
 		return $qa_pairs;
@@ -335,20 +397,30 @@ Rispondi SOLO con il JSON, senza testo aggiuntivo.',
 	 * @return array<int, array<string, mixed>> Q&A pairs.
 	 */
 	public function get_qa_pairs( int $post_id ): array {
-		// Clear cache before retrieving to ensure fresh data
-		clean_post_cache( $post_id );
-		wp_cache_delete( $post_id, 'post_meta' );
+		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
+		// WordPress handles cache management automatically - no manual clearing needed
+		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
 		
-		$qa_pairs = get_post_meta( $post_id, self::META_QA_PAIRS, true );
+		// Use direct database query to bypass WordPress cache completely
+		global $wpdb;
+		$meta_value = $wpdb->get_var( $wpdb->prepare(
+			"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1",
+			$post_id,
+			self::META_QA_PAIRS
+		) );
+		
+		// Unserialize the value if it exists
+		$qa_pairs = $meta_value ? maybe_unserialize( $meta_value ) : false;
 		
 		// Debug logging
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			Logger::debug( 'QAPairExtractor::get_qa_pairs', array(
+			$this->logger->debug( 'QAPairExtractor::get_qa_pairs', array(
 				'post_id' => $post_id,
 				'meta_key' => self::META_QA_PAIRS,
 				'is_array' => is_array( $qa_pairs ),
 				'count' => is_array( $qa_pairs ) ? count( $qa_pairs ) : 0,
 				'raw_value' => $qa_pairs,
+				'meta_value_exists' => ! empty( $meta_value ),
 			) );
 		}
 

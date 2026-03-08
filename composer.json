@@ -48,5 +48,9 @@
             "homepage": "https://francescopasseri.com",
             "role": "Developer"
         }
-    ]
+    ],
+    "require-dev": {
+        "brain/monkey": "^2.6",
+        "phpunit/phpunit": "^11.5"
+    }
 }

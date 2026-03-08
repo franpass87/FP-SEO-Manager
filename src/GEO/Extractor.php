@@ -102,10 +102,10 @@ class Extractor {
 		$citations = array();
 
 		// Extract from [fp_citation] shortcodes
-		$pattern = '/\[fp_citation([^\]]+)\]/';
-		preg_match_all( $pattern, $post->post_content, $matches );
+		$pattern     = '/\[fp_citation([^\]]+)\]/';
+		$preg_result = preg_match_all( $pattern, $post->post_content, $matches );
 
-		if ( ! empty( $matches[1] ) ) {
+		if ( false !== $preg_result && ! empty( $matches[1] ) ) {
 			foreach ( $matches[1] as $attrs_str ) {
 				$attrs = shortcode_parse_atts( $attrs_str );
 				if ( ! empty( $attrs['url'] ) ) {
@@ -179,10 +179,10 @@ class Extractor {
 		$faq = array();
 
 		// Extract from [fp_faq] shortcodes
-		$pattern = '/\[fp_faq([^\]]+)\]/';
-		preg_match_all( $pattern, $post->post_content, $matches );
+		$pattern     = '/\[fp_faq([^\]]+)\]/';
+		$preg_result = preg_match_all( $pattern, $post->post_content, $matches );
 
-		if ( ! empty( $matches[1] ) ) {
+		if ( false !== $preg_result && ! empty( $matches[1] ) ) {
 			foreach ( $matches[1] as $attrs_str ) {
 				$attrs = shortcode_parse_atts( $attrs_str );
 				if ( ! empty( $attrs['q'] ) && ! empty( $attrs['a'] ) ) {
@@ -229,12 +229,16 @@ class Extractor {
 	 * @return bool
 	 */
 	private function is_internal_link( string $url ): bool {
-		$site_url = home_url( '/' );
+		$site_url    = home_url( '/' );
 		$parsed_site = parse_url( $site_url );
 		$parsed_url  = parse_url( $url );
 
 		if ( ! isset( $parsed_url['host'] ) ) {
 			return true; // Relative URL = internal
+		}
+
+		if ( ! is_array( $parsed_site ) || ! isset( $parsed_site['host'] ) ) {
+			return false;
 		}
 
 		return $parsed_url['host'] === $parsed_site['host'];
