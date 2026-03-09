@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.72] - 2026-03-08
+### Fixed
+- Bug sistematici, sicurezza e robustezza del codice
+
+## [0.9.0-pre.71] - 2025-12-02
+### Added
+- Nuove funzionalità AI nel pannello admin
+
+## [0.9.0-pre.70] - 2025-11-27
+### Added
+- Homepage Protection
+- Diagnostica Metabox
+
+### Fixed
+- MetaboxRenderer inizializzazione corretta
+- ImageExtractor: non interviene nel core WordPress
+- Rimosso metabox nativo WordPress "Riassunto"
+
 ## [0.9.0-pre.37] - 2025-01-27
 
 ### Fixed
