@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\GEO;
 
+use FP\SEO\Redirects\RedirectsOptions;
 use FP\SEO\Utils\PostTypes;
 
 /**
@@ -24,28 +25,21 @@ class HtmlSitemap {
 	private const CACHE_KEY = 'fp_seo_html_sitemap';
 
 	/**
-	 * Cache TTL in seconds (1 hour).
-	 */
-	private const CACHE_TTL = 3600;
-
-	/**
-	 * Max posts per section.
-	 */
-	private const MAX_PER_SECTION = 500;
-
-	/**
 	 * Generate HTML sitemap content.
 	 *
 	 * @return string HTML content.
 	 */
 	public function generate(): string {
+		$opts   = RedirectsOptions::get_html_sitemap();
+		$ttl    = (int) $opts['cache_ttl'];
+
 		$cached = get_transient( self::CACHE_KEY );
 		if ( false !== $cached && is_string( $cached ) ) {
 			return $cached;
 		}
 
 		$html = $this->build_html();
-		set_transient( self::CACHE_KEY, $html, self::CACHE_TTL );
+		set_transient( self::CACHE_KEY, $html, $ttl );
 
 		return $html;
 	}
@@ -147,6 +141,7 @@ class HtmlSitemap {
 		);
 
 		$post_types = $this->get_public_post_types();
+		$post_types = apply_filters( 'fp_seo_html_sitemap_post_types', $post_types );
 
 		foreach ( $post_types as $post_type ) {
 			$items = $this->get_items_for_post_type( $post_type );
@@ -163,7 +158,7 @@ class HtmlSitemap {
 			);
 		}
 
-		return $sections;
+		return apply_filters( 'fp_seo_html_sitemap_sections', $sections );
 	}
 
 	/**
@@ -198,11 +193,14 @@ class HtmlSitemap {
 	 * @return array<int, array{url: string, title: string, date?: string}>
 	 */
 	private function get_items_for_post_type( string $post_type ): array {
+		$opts = RedirectsOptions::get_html_sitemap();
+		$max  = (int) $opts['max_per_section'];
+
 		$query = new \WP_Query(
 			array(
 				'post_type'              => $post_type,
 				'post_status'            => 'publish',
-				'posts_per_page'         => self::MAX_PER_SECTION,
+				'posts_per_page'         => $max,
 				'orderby'                => 'modified',
 				'order'                  => 'DESC',
 				'no_found_rows'          => true,

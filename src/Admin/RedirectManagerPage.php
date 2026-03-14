@@ -11,7 +11,9 @@ declare(strict_types=1);
 
 namespace FP\SEO\Admin;
 
+use FP\SEO\GEO\HtmlSitemap;
 use FP\SEO\Redirects\RedirectRepository;
+use FP\SEO\Redirects\RedirectsOptions;
 use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Utils\OptionsHelper;
 use function add_submenu_page;
@@ -36,11 +38,12 @@ use function wp_unslash;
  */
 class RedirectManagerPage {
 
-	private const PAGE_SLUG   = 'fp-seo-redirects';
-	private const PAGE_PARENT = 'fp-seo-performance';
-	private const NONCE_ACTION = 'fp_seo_redirects';
-	private const AJAX_ACTION  = 'fp_seo_redirects';
-	private const BULK_ACTION  = 'fp_seo_redirects_bulk_import';
+	private const PAGE_SLUG      = 'fp-seo-redirects';
+	private const PAGE_PARENT    = 'fp-seo-performance';
+	private const NONCE_ACTION   = 'fp_seo_redirects';
+	private const AJAX_ACTION    = 'fp_seo_redirects';
+	private const BULK_ACTION    = 'fp_seo_redirects_bulk_import';
+	private const SETTINGS_ACTION = 'fp_seo_redirects_settings';
 
 	/**
 	 * Hook manager instance.
@@ -74,6 +77,7 @@ class RedirectManagerPage {
 		$this->hook_manager->add_action( 'admin_menu', array( $this, 'add_page' ) );
 		$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		$this->hook_manager->add_action( 'admin_post_' . self::BULK_ACTION, array( $this, 'handle_bulk_import' ) );
+		$this->hook_manager->add_action( 'admin_post_' . self::SETTINGS_ACTION, array( $this, 'handle_settings_save' ) );
 		$this->hook_manager->add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 	}
 
@@ -134,6 +138,46 @@ class RedirectManagerPage {
 			'page'     => self::PAGE_SLUG,
 			'imported' => $result['inserted'],
 			'skipped'  => $result['skipped'],
+		), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Handle settings form submission (redirects + sitemap options).
+	 */
+	public function handle_settings_save(): void {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
+		}
+
+		check_admin_referer( self::NONCE_ACTION . '_settings', 'fp_seo_redirects_settings_nonce' );
+
+		$redirects_enabled = isset( $_POST['redirects_enabled'] ) && '1' === $_POST['redirects_enabled'];
+		$redirect_priority = isset( $_POST['redirect_priority'] ) ? absint( $_POST['redirect_priority'] ) : 1;
+		$redirect_priority = $redirect_priority >= 1 && $redirect_priority <= 99 ? $redirect_priority : 1;
+
+		RedirectsOptions::save_redirects( array(
+			'enabled'  => $redirects_enabled,
+			'priority' => $redirect_priority,
+		) );
+
+		$sitemap_enabled     = isset( $_POST['html_sitemap_enabled'] ) && '1' === $_POST['html_sitemap_enabled'];
+		$sitemap_max_section = isset( $_POST['html_sitemap_max'] ) ? absint( $_POST['html_sitemap_max'] ) : 500;
+		$sitemap_max_section = $sitemap_max_section >= 10 && $sitemap_max_section <= 2000 ? $sitemap_max_section : 500;
+		$sitemap_cache_ttl   = isset( $_POST['html_sitemap_cache_ttl'] ) ? absint( $_POST['html_sitemap_cache_ttl'] ) : 3600;
+		$sitemap_cache_ttl   = $sitemap_cache_ttl >= 60 && $sitemap_cache_ttl <= 86400 ? $sitemap_cache_ttl : 3600;
+
+		RedirectsOptions::save_html_sitemap( array(
+			'enabled'         => $sitemap_enabled,
+			'max_per_section' => $sitemap_max_section,
+			'cache_ttl'       => $sitemap_cache_ttl,
+		) );
+
+		HtmlSitemap::flush_cache();
+
+		wp_safe_redirect( add_query_arg( array(
+			'page'    => self::PAGE_SLUG,
+			'saved'   => '1',
 		), admin_url( 'admin.php' ) ) );
 		exit;
 	}
@@ -262,10 +306,14 @@ class RedirectManagerPage {
 		$total       = $this->repository->count( array_filter( array( 'search' => $search, 'type' => $args['type'] ) ) );
 		$total_pages = $per_page > 0 ? (int) ceil( $total / $per_page ) : 1;
 
-		$sitemap_url = home_url( '/sitemap/' );
-		$imported    = isset( $_GET['imported'] ) ? absint( $_GET['imported'] ) : 0;
-		$skipped     = isset( $_GET['skipped'] ) ? absint( $_GET['skipped'] ) : 0;
-		$error       = isset( $_GET['error'] ) ? sanitize_key( $_GET['error'] ) : '';
+		$sitemap_url    = home_url( '/sitemap/' );
+		$imported       = isset( $_GET['imported'] ) ? absint( $_GET['imported'] ) : 0;
+		$skipped        = isset( $_GET['skipped'] ) ? absint( $_GET['skipped'] ) : 0;
+		$error          = isset( $_GET['error'] ) ? sanitize_key( $_GET['error'] ) : '';
+		$settings_saved = isset( $_GET['saved'] ) && '1' === $_GET['saved'];
+
+		$redirects_opts = RedirectsOptions::get_redirects();
+		$sitemap_opts   = RedirectsOptions::get_html_sitemap();
 
 		?>
 		<div class="wrap fp-seo-admin-page">
@@ -297,6 +345,62 @@ class RedirectManagerPage {
 					<?php esc_html_e( 'Please paste CSV content to import.', 'fp-seo-performance' ); ?>
 				</div>
 			<?php endif; ?>
+
+			<?php if ( $settings_saved ) : ?>
+				<div class="fp-seo-alert fp-seo-alert-success">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<?php esc_html_e( 'Settings saved.', 'fp-seo-performance' ); ?>
+				</div>
+			<?php endif; ?>
+
+			<div class="fp-seo-card">
+				<div class="fp-seo-card-header">
+					<div class="fp-seo-card-header-left">
+						<span class="dashicons dashicons-admin-generic"></span>
+						<h2><?php esc_html_e( 'Impostazioni redirect e sitemap', 'fp-seo-performance' ); ?></h2>
+					</div>
+				</div>
+				<div class="fp-seo-card-body">
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<?php wp_nonce_field( self::NONCE_ACTION . '_settings', 'fp_seo_redirects_settings_nonce' ); ?>
+						<input type="hidden" name="action" value="<?php echo esc_attr( self::SETTINGS_ACTION ); ?>">
+
+						<div class="fp-seo-fields-grid">
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="redirects_enabled" value="1" <?php checked( $redirects_opts['enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita redirect 301/302', 'fp-seo-performance' ); ?>
+								</label>
+								<span class="fp-seo-hint"><?php esc_html_e( 'Applica i redirect configurati al caricamento della pagina.', 'fp-seo-performance' ); ?></span>
+							</div>
+							<div class="fp-seo-field">
+								<label for="redirect_priority"><?php esc_html_e( 'Priorità hook redirect', 'fp-seo-performance' ); ?></label>
+								<input type="number" id="redirect_priority" name="redirect_priority" value="<?php echo esc_attr( (string) $redirects_opts['priority'] ); ?>" min="1" max="99" style="width:80px">
+								<span class="fp-seo-hint"><?php esc_html_e( '1 = prima di tutto, 99 = dopo altri plugin. Filtro: fp_seo_redirect_priority', 'fp-seo-performance' ); ?></span>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="html_sitemap_enabled" value="1" <?php checked( $sitemap_opts['enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita sitemap HTML', 'fp-seo-performance' ); ?>
+								</label>
+								<span class="fp-seo-hint"><?php esc_html_e( 'Serve la sitemap user-friendly su /sitemap/', 'fp-seo-performance' ); ?></span>
+							</div>
+							<div class="fp-seo-field">
+								<label for="html_sitemap_max"><?php esc_html_e( 'Max elementi per sezione sitemap', 'fp-seo-performance' ); ?></label>
+								<input type="number" id="html_sitemap_max" name="html_sitemap_max" value="<?php echo esc_attr( (string) $sitemap_opts['max_per_section'] ); ?>" min="10" max="2000" style="width:100px">
+							</div>
+							<div class="fp-seo-field">
+								<label for="html_sitemap_cache_ttl"><?php esc_html_e( 'Cache sitemap (secondi)', 'fp-seo-performance' ); ?></label>
+								<input type="number" id="html_sitemap_cache_ttl" name="html_sitemap_cache_ttl" value="<?php echo esc_attr( (string) $sitemap_opts['cache_ttl'] ); ?>" min="60" max="86400" style="width:100px">
+								<span class="fp-seo-hint"><?php esc_html_e( '60–86400. 3600 = 1 ora.', 'fp-seo-performance' ); ?></span>
+							</div>
+							<div class="fp-seo-field" style="align-self:flex-end">
+								<button type="submit" class="fp-seo-btn fp-seo-btn-primary"><?php esc_html_e( 'Salva impostazioni', 'fp-seo-performance' ); ?></button>
+							</div>
+						</div>
+					</form>
+				</div>
+			</div>
 
 			<div class="fp-seo-card">
 				<div class="fp-seo-card-header">

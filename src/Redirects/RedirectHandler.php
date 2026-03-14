@@ -11,6 +11,8 @@ declare(strict_types=1);
 
 namespace FP\SEO\Redirects;
 
+use FP\SEO\Utils\UrlNormalizer;
+
 /**
  * Handles redirect matching and execution.
  */
@@ -33,16 +35,21 @@ class RedirectHandler {
 	}
 
 	/**
-	 * Register template_redirect hook (priority 1 to run early).
+	 * Register template_redirect hook with configurable priority.
 	 */
 	public function register(): void {
-		add_action( 'template_redirect', array( $this, 'maybe_redirect' ), 1 );
+		$priority = RedirectsOptions::redirect_priority();
+		add_action( 'template_redirect', array( $this, 'maybe_redirect' ), $priority );
 	}
 
 	/**
 	 * Check current request and redirect if match found.
 	 */
 	public function maybe_redirect(): void {
+		if ( ! RedirectsOptions::redirects_enabled() ) {
+			return;
+		}
+
 		// Skip admin, cron, REST, AJAX
 		if ( is_admin() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || wp_doing_ajax() ) {
 			return;
@@ -54,13 +61,7 @@ class RedirectHandler {
 			return;
 		}
 
-		// Remove query string for lookup
-		$path = strtok( $request_uri, '?' );
-		$path = $path ?: '/';
-		if ( ! str_starts_with( $path, '/' ) ) {
-			$path = '/' . $path;
-		}
-		$path = rtrim( $path, '/' ) ?: '/';
+		$path = UrlNormalizer::normalize_path( strtok( $request_uri, '?' ) ?: '/' );
 
 		$redirect = $this->repository->find_by_source( $path );
 

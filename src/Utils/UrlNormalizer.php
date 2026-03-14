@@ -30,6 +30,25 @@ use const ENT_QUOTES;
  */
 class UrlNormalizer {
 
+	/**
+	 * Normalize URL path for redirect lookup/storage.
+	 * Format: leading slash, no trailing (except root = /).
+	 *
+	 * @param string $url URL or path (e.g. /old-page/, https://example.com/old-page).
+	 * @return string Normalized path (e.g. /old-page or /).
+	 */
+	public static function normalize_path( string $url ): string {
+		$url = trim( $url );
+		if ( str_starts_with( $url, 'http' ) ) {
+			$parsed = wp_parse_url( $url );
+			$path   = $parsed['path'] ?? '/';
+		} else {
+			$path = $url;
+		}
+		$path = '/' . trim( (string) $path, '/' );
+		return '' === trim( $path, '/' ) ? '/' : $path;
+	}
+
 		/**
 		 * Reserved encodings that should remain percent-encoded within query strings.
 		 *

@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Redirects;
 
+use FP\SEO\Utils\UrlNormalizer;
 use wpdb;
 
 /**
@@ -314,25 +315,16 @@ class RedirectRepository {
 	 * @return string
 	 */
 	private function normalize_path( string $uri ): string {
-		return $this->sanitize_url_path( $uri );
+		return UrlNormalizer::normalize_path( $uri );
 	}
 
 	/**
 	 * Sanitize URL path for storage and lookup.
-	 * Format: leading slash, no trailing (except root = /).
 	 *
 	 * @param string $url URL or path.
 	 * @return string
 	 */
 	private function sanitize_url_path( string $url ): string {
-		$url = trim( $url );
-		if ( str_starts_with( $url, 'http' ) ) {
-			$parsed = wp_parse_url( $url );
-			$path   = $parsed['path'] ?? '/';
-		} else {
-			$path = $url;
-		}
-		$path = '/' . trim( $path, '/' );
-		return '' === trim( $path, '/' ) ? '/' : $path;
+		return UrlNormalizer::normalize_path( $url );
 	}
 }

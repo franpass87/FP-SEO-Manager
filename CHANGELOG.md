@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.74] - 2026-03-14
+### Added
+- **RedirectsOptions** – Opzioni centralizzate per redirect e sitemap HTML in `fp_seo_performance`
+- **Card Impostazioni** nella pagina Redirect Manager: toggle redirect, toggle sitemap, priorità hook, max elementi per sezione, cache TTL
+- **Filter `fp_seo_redirect_priority`** – Priorità configurabile per hook `template_redirect`
+- **Filter `fp_seo_html_sitemap_post_types`** – Post types inclusi nella sitemap HTML
+- **Filter `fp_seo_html_sitemap_sections`** – Sezioni finali della sitemap HTML
+- **UrlNormalizer::normalize_path()** – Normalizzazione URL centralizzata per redirect (path con slash iniziale, senza trailing)
+
+### Changed
+- RedirectHandler rispetta toggle `redirects.enabled` e priorità da opzioni
+- SitemapRouter rispetta toggle `html_sitemap.enabled`
+- HtmlSitemap usa `max_per_section` e `cache_ttl` da opzioni
+- RedirectRepository usa UrlNormalizer per normalizzazione path
+
 ## [0.9.0-pre.73] - 2026-03-14
 ### Added
 - **Sitemap HTML user-friendly** – Pagina `/sitemap/` con elenco organizzato per post type (homepage, pagine, articoli)
