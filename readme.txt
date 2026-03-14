@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.74
+Stable tag: 0.9.0-pre.75
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,10 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.75 - 2026-03-14 =
+* Removed: FAQ form/save from SchemaMetaboxes (FAQ via Q&A Pairs only)
+* Deprecated: add_meta_box methods (Freshness, Geo, QA, InternalLinks, Social)
 
 = 0.9.0-pre.74 - 2026-03-14 =
 * Added: Settings card for Redirect Manager (toggle redirects, sitemap, priority, cache)

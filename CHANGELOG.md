@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.75] - 2026-03-14
+### Removed
+- **SchemaMetaboxes**: `render_faq_metabox`, `save_faq_schema`, hook save_post per FAQ — FAQ Schema gestito solo da Q&A Pairs (AIRenderer)
+- **SchemaMetaboxesScriptsManager**: script FAQ rimossi (form FAQ non più presente)
+
+### Deprecated
+- `FreshnessMetabox::add_meta_box()` — contenuto integrato in metabox principale
+- `GeoMetabox::add_meta_box()` — contenuto integrato in metabox principale
+- `QAMetabox::add_meta_box()` — contenuto integrato in metabox principale
+- `InternalLinkManager::add_links_metabox()` — contenuto integrato in metabox principale
+- `ImprovedSocialMediaManager::add_social_metabox()` — contenuto integrato in metabox principale
+
 ## [0.9.0-pre.74] - 2026-03-14
 ### Added
 - **RedirectsOptions** – Opzioni centralizzate per redirect e sitemap HTML in `fp_seo_performance`

@@ -143,20 +143,11 @@ class InternalLinkManager {
 
 	/**
 	 * Add internal links metabox to post editor.
+	 *
+	 * @deprecated Content is integrated into main SEO Performance metabox (InternalLinksRenderer).
 	 */
 	public function add_links_metabox(): void {
-		$post_types = get_post_types( array( 'public' => true ), 'names' );
-		
-		foreach ( $post_types as $post_type ) {
-			add_meta_box(
-				'fp_seo_internal_links',
-				__( 'Internal Link Suggestions', 'fp-seo-performance' ),
-				array( $this, 'render_links_metabox' ),
-				$post_type,
-				'side',
-				'default'
-			);
-		}
+		// No-op: content rendered via render_links_metabox() inside main metabox.
 	}
 
 	/**

@@ -78,21 +78,12 @@ class FreshnessMetabox {
 	}
 
 	/**
-	 * Add metabox
+	 * Add metabox.
+	 *
+	 * @deprecated Content is integrated into main SEO Performance metabox (AIRenderer).
 	 */
 	public function add_meta_box(): void {
-		$post_types = PostTypes::analyzable();
-
-		foreach ( $post_types as $post_type ) {
-			add_meta_box(
-				'fp-seo-freshness-metabox',
-				__( '📅 Freshness & Temporal Signals (FP SEO)', 'fp-seo-performance' ),
-				array( $this, 'render' ),
-				$post_type,
-				'side',
-				'default'
-			);
-		}
+		// No-op: content rendered via FreshnessMetabox::render() inside main metabox.
 	}
 
 	/**

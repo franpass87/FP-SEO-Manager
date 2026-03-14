@@ -326,21 +326,12 @@ class ImprovedSocialMediaManager {
 	}
 
 	/**
-	 * Add social media metabox to post editor.
+	 * Add social media metabox.
+	 *
+	 * @deprecated Content is integrated into main SEO Performance metabox (SocialRenderer).
 	 */
 	public function add_social_metabox(): void {
-		$post_types = get_post_types( array( 'public' => true ), 'names' );
-		
-		foreach ( $post_types as $post_type ) {
-			add_meta_box(
-				'fp_seo_social_media_improved',
-				__( 'Social Media Preview', 'fp-seo-performance' ),
-				array( $this, 'render_improved_social_metabox' ),
-				$post_type,
-				'side',
-				'high'
-			);
-		}
+		// No-op: content rendered via render_improved_social_metabox() inside main metabox.
 	}
 
 	/**

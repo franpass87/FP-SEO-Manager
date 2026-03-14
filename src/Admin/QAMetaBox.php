@@ -88,12 +88,12 @@ class QAMetabox {
 	}
 
 	/**
-	 * Add metabox (DEPRECATO - contenuto integrato in Metabox.php)
-	 * Mantenuto per compatibilità ma non utilizzato.
+	 * Add metabox.
+	 *
+	 * @deprecated Content is integrated into main SEO Performance metabox (AIRenderer).
 	 */
 	public function add_meta_box(): void {
-		// Metodo deprecato - il contenuto è ora integrato nella metabox principale SEO Performance
-		// Non registra più una metabox separata
+		// No-op: content rendered via QAMetabox::render() inside main metabox.
 	}
 
 	/**

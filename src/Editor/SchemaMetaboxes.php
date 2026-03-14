@@ -16,7 +16,8 @@ use FP\SEO\Editor\Styles\SchemaMetaboxesStylesManager;
 use function wp_unslash;
 
 /**
- * Handles FAQ and HowTo Schema metaboxes in the editor.
+ * Handles HowTo Schema metabox in the editor.
+ * FAQ Schema is auto-generated from Q&A Pairs (see AIRenderer).
  */
 class SchemaMetaboxes {
 	/**
@@ -42,9 +43,6 @@ class SchemaMetaboxes {
 		// By using priority 20, we ensure our hooks run after WordPress has finished saving the featured image
 		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
 		foreach ( $supported_types as $post_type ) {
-			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ) ) ) {
-				add_action( 'save_post_' . $post_type, array( $this, 'save_faq_schema' ), 20, 2 );
-			}
 			if ( ! has_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ) ) ) {
 				add_action( 'save_post_' . $post_type, array( $this, 'save_howto_schema' ), 20, 2 );
 			}
@@ -58,147 +56,6 @@ class SchemaMetaboxes {
 		
 		// Initialize scripts manager (will be used in render methods)
 		$this->scripts_manager = new SchemaMetaboxesScriptsManager();
-	}
-
-	/**
-	 * Render FAQ Schema metabox.
-	 * 
-	 * NOTE: This method is called by the main SEO Performance metabox (SchemaRenderer)
-	 * to render the FAQ section. The separate metabox has been removed.
-	 *
-	 * @param \WP_Post $post Post object.
-	 */
-	public function render_faq_metabox( \WP_Post $post ): void {
-		wp_nonce_field( 'fp_seo_faq_schema_nonce', 'fp_seo_faq_schema_nonce' );
-		
-		// Store post ID for JavaScript
-		$post_id = $post->ID;
-
-		// CRITICAL: Cache clearing disabled to prevent interference with featured image (_thumbnail_id)
-		// WordPress handles cache management automatically - no manual clearing needed
-		// Clearing cache can interfere with WordPress core operations including _thumbnail_id
-
-		// Use Q&A pairs as single source of truth (unified system)
-		$qa_pairs = get_post_meta( $post->ID, '_fp_seo_qa_pairs', true );
-		
-		// Fallback: query diretta al database se get_post_meta restituisce vuoto
-		if ( empty( $qa_pairs ) ) {
-			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post->ID, '_fp_seo_qa_pairs' ) );
-			if ( $db_value !== null ) {
-				$unserialized = maybe_unserialize( $db_value );
-				$qa_pairs = is_array( $unserialized ) ? $unserialized : array();
-			}
-		}
-		
-		if ( ! is_array( $qa_pairs ) ) {
-			$qa_pairs = array();
-		}
-		
-		// Convert Q&A pairs to FAQ format for display (extract only question and answer)
-		$faq_questions = array();
-		foreach ( $qa_pairs as $pair ) {
-			if ( ! empty( $pair['question'] ) && ! empty( $pair['answer'] ) ) {
-				$faq_questions[] = array(
-					'question' => $pair['question'],
-					'answer'   => $pair['answer'],
-				);
-			}
-		}
-
-	?>
-	<div class="fp-seo-schema-metabox">
-		<!-- Banner removed - now shown in main metabox section -->
-
-			<div id="fp-seo-faq-list" class="fp-seo-faq-list">
-				<?php
-				if ( ! empty( $faq_questions ) ) {
-					foreach ( $faq_questions as $index => $faq ) {
-						$this->render_faq_item( $index, $faq );
-					}
-				}
-				?>
-			</div>
-
-			<div style="display: flex; gap: 8px; margin-top: 12px;">
-				<button type="button" class="button button-secondary fp-seo-add-faq">
-					<span class="dashicons dashicons-plus-alt2"></span>
-					<?php esc_html_e( 'Aggiungi Domanda FAQ', 'fp-seo-performance' ); ?>
-				</button>
-				<button type="button" class="fp-seo-generate-faq-ai" id="fp-seo-generate-faq-ai">
-					<span>🤖</span>
-					<span><?php esc_html_e( 'Genera con AI', 'fp-seo-performance' ); ?></span>
-				</button>
-			</div>
-
-		</div>
-
-		<script type="text/html" id="fp-seo-faq-template">
-			<?php $this->render_faq_item( '__INDEX__', array( 'question' => '', 'answer' => '' ) ); ?>
-		</script>
-		
-		<script type="text/javascript">
-		<?php if ( null !== $this->scripts_manager ) { echo $this->scripts_manager->get_inline_js( $post->ID ); } ?>
-		</script>
-		<?php
-	}
-
-	/**
-	 * Render single FAQ item.
-	 *
-	 * @param int|string     $index FAQ index.
-	 * @param array<string, string> $faq   FAQ data.
-	 */
-	private function render_faq_item( $index, array $faq ): void {
-		$question = $faq['question'] ?? '';
-		$answer   = $faq['answer'] ?? '';
-		?>
-		<div class="fp-seo-faq-item" data-index="<?php echo esc_attr( (string) $index ); ?>">
-			<div class="fp-seo-faq-item-header">
-				<span class="fp-seo-faq-number">
-					<span class="dashicons dashicons-format-chat"></span>
-					<?php esc_html_e( 'Domanda', 'fp-seo-performance' ); ?> #<span class="faq-num"><?php echo esc_html( is_numeric( $index ) ? (string) ( $index + 1 ) : '1' ); ?></span>
-				</span>
-				<button type="button" class="fp-seo-remove-faq" title="<?php esc_attr_e( 'Rimuovi FAQ', 'fp-seo-performance' ); ?>">
-					<span class="dashicons dashicons-trash"></span>
-				</button>
-			</div>
-
-			<div class="fp-seo-faq-item-content">
-				<div class="fp-seo-form-group">
-					<label>
-						<strong><?php esc_html_e( 'Domanda', 'fp-seo-performance' ); ?></strong>
-						<span class="required">*</span>
-					</label>
-					<input 
-						type="text" 
-						name="fp_seo_faq[<?php echo esc_attr( (string) $index ); ?>][question]" 
-						value="<?php echo esc_attr( $question ); ?>" 
-						placeholder="<?php esc_attr_e( 'Es: Come funziona lo Schema Markup?', 'fp-seo-performance' ); ?>"
-						class="widefat"
-						required
-					>
-				</div>
-
-				<div class="fp-seo-form-group">
-					<label>
-						<strong><?php esc_html_e( 'Risposta', 'fp-seo-performance' ); ?></strong>
-						<span class="required">*</span>
-					</label>
-					<textarea 
-						name="fp_seo_faq[<?php echo esc_attr( (string) $index ); ?>][answer]" 
-						rows="4" 
-						placeholder="<?php esc_attr_e( 'Scrivi una risposta completa e dettagliata (50-300 parole)...', 'fp-seo-performance' ); ?>"
-						class="widefat"
-						required
-					><?php echo esc_textarea( $answer ); ?></textarea>
-					<p class="description">
-						<span class="fp-seo-char-count">0</span> caratteri
-					</p>
-				</div>
-			</div>
-		</div>
-		<?php
 	}
 
 	/**
@@ -392,91 +249,6 @@ class SchemaMetaboxes {
 			</div>
 		</div>
 		<?php
-	}
-
-	/**
-	 * Save FAQ Schema data.
-	 *
-	 * @param int      $post_id Post ID.
-	 * @param \WP_Post $post    Post object.
-	 */
-	public function save_faq_schema( int $post_id, \WP_Post $post ): void {
-// CRITICAL: Do NOT interfere if WordPress is handling a native operation
-		if ( \FP\SEO\Editor\Helpers\WordPressNativeProtection::is_wordpress_native_operation() ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FP SEO: SchemaMetaboxes::save_faq_schema BLOCKED - WordPress native operation detected' );
-			}
-			return;
-		}
-		
-		// CRITICAL: Check post type FIRST, before any processing
-		// This ensures we don't interfere with unsupported post types (attachments, Nectar Sliders, etc.)
-		$post_type = get_post_type( $post_id );
-		$supported_types = \FP\SEO\Utils\PostTypes::analyzable();
-		
-		// If not a supported post type, return immediately without any processing
-		if ( ! in_array( $post_type, $supported_types, true ) ) {
-			return; // Exit immediately - no interference with WordPress core saving
-		}
-		
-		// Security checks
-		if ( ! isset( $_POST['fp_seo_faq_schema_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['fp_seo_faq_schema_nonce'] ) ), 'fp_seo_faq_schema_nonce' ) ) {
-			return;
-		}
-
-		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
-			return;
-		}
-
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
-			return;
-		}
-
-		// Get and sanitize FAQ data
-		$faq_data = isset( $_POST['fp_seo_faq'] ) ? wp_unslash( $_POST['fp_seo_faq'] ) : array();
-		if ( ! is_array( $faq_data ) ) {
-			$faq_data = array();
-		}
-		$sanitized_faqs = array();
-
-		foreach ( $faq_data as $faq ) {
-			if ( ! is_array( $faq ) ) {
-				continue;
-			}
-
-			$question = sanitize_text_field( $faq['question'] ?? '' );
-			$answer   = wp_kses_post( $faq['answer'] ?? '' );
-
-			if ( ! empty( $question ) && ! empty( $answer ) ) {
-				$sanitized_faqs[] = array(
-					'question' => $question,
-					'answer'   => $answer,
-				);
-			}
-		}
-
-		// Convert to Q&A pairs format (unified system)
-		$qa_pairs = array();
-		foreach ( $sanitized_faqs as $faq ) {
-			$qa_pairs[] = array(
-				'question'       => $faq['question'],
-				'answer'         => $faq['answer'],
-				'confidence'     => 1.0, // Manual = high confidence
-				'question_type'  => 'manual',
-				'keywords'       => array(),
-			);
-		}
-		
-		// Save or delete meta (use _fp_seo_qa_pairs as single source of truth)
-		if ( ! empty( $qa_pairs ) ) {
-			update_post_meta( $post_id, '_fp_seo_qa_pairs', $qa_pairs );
-			
-			// Clear schema cache
-			$cache_key = 'fp_seo_schemas_' . $post_id . '_' . get_current_blog_id();
-			wp_cache_delete( $cache_key );
-		} else {
-			delete_post_meta( $post_id, '_fp_seo_qa_pairs' );
-		}
 	}
 
 	/**

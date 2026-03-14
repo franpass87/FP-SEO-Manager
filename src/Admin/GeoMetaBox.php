@@ -81,21 +81,12 @@ class GeoMetabox {
 	}
 
 	/**
-	 * Add metabox
+	 * Add metabox.
+	 *
+	 * @deprecated Content is integrated into main SEO Performance metabox (AIRenderer).
 	 */
 	public function add_meta_box(): void {
-		$post_types = $this->get_enabled_post_types();
-
-		foreach ( $post_types as $post_type ) {
-			add_meta_box(
-				'fp-seo-geo-metabox',
-				__( 'GEO (FP)', 'fp-seo-performance' ),
-				array( $this, 'render' ),
-				$post_type,
-				'normal',
-				'default'
-			);
-		}
+		// No-op: content rendered via GeoMetabox::render() inside main metabox.
 	}
 
 	/**
