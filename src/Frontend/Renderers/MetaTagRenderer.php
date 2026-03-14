@@ -13,6 +13,7 @@ namespace FP\SEO\Frontend\Renderers;
 
 use FP\SEO\Frontend\Contracts\RendererInterface;
 use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
+use FP\SEO\Redirects\RedirectsOptions;
 use FP\SEO\Utils\MetadataResolver;
 use WP_Post;
 use function esc_attr;
@@ -118,6 +119,10 @@ class MetaTagRenderer extends AbstractRenderer implements RendererInterface {
 			echo '<link rel="canonical" href="' . esc_url( $canonical ) . '">' . "\n";
 		}
 
+		foreach ( $this->build_hreflang_tags( $post, (string) $canonical ) as $hreflang ) {
+			echo '<link rel="alternate" hreflang="' . esc_attr( $hreflang['lang'] ) . '" href="' . esc_url( $hreflang['url'] ) . '">' . "\n";
+		}
+
 		if ( ! empty( $robots ) ) {
 			echo '<meta name="robots" content="' . esc_attr( $robots ) . '">' . "\n";
 		}
@@ -145,6 +150,92 @@ class MetaTagRenderer extends AbstractRenderer implements RendererInterface {
 		}
 
 		return substr( $description, 0, 155 );
+	}
+
+	/**
+	 * Build hreflang tags from supported multilingual plugins.
+	 *
+	 * @param WP_Post $post Current post.
+	 * @param string  $canonical Canonical URL fallback.
+	 * @return array<int,array{lang:string,url:string}>
+	 */
+	private function build_hreflang_tags( WP_Post $post, string $canonical ): array {
+		$options = RedirectsOptions::get_meta_rendering();
+		if ( empty( $options['hreflang_enabled'] ) ) {
+			return array();
+		}
+
+		$tags = array();
+
+		// Polylang support.
+		if ( function_exists( 'pll_get_post_translations' ) ) {
+			$translations = pll_get_post_translations( $post->ID );
+			if ( is_array( $translations ) ) {
+				foreach ( $translations as $lang => $post_id ) {
+					$url = get_permalink( (int) $post_id );
+					if ( is_string( $url ) && '' !== $url ) {
+						$tags[] = array(
+							'lang' => (string) $lang,
+							'url'  => $url,
+						);
+					}
+				}
+			}
+		}
+
+		// WPML support.
+		if ( empty( $tags ) && has_filter( 'wpml_active_languages' ) ) {
+			$languages = apply_filters( 'wpml_active_languages', null, array( 'skip_missing' => 0 ) );
+			if ( is_array( $languages ) ) {
+				foreach ( $languages as $lang_code => $lang_data ) {
+					$translated_id = apply_filters( 'wpml_object_id', $post->ID, $post->post_type, false, (string) $lang_code );
+					if ( ! $translated_id ) {
+						continue;
+					}
+					$url = get_permalink( (int) $translated_id );
+					if ( is_string( $url ) && '' !== $url ) {
+						$tags[] = array(
+							'lang' => (string) $lang_code,
+							'url'  => $url,
+						);
+					}
+				}
+			}
+		}
+
+		/**
+		 * Allow FP-Multilanguage or custom integrations to provide tags.
+		 *
+		 * @param array<int,array{lang:string,url:string}> $tags
+		 * @param WP_Post $post
+		 */
+		$tags = apply_filters( 'fp_seo_hreflang_tags', $tags, $post );
+
+		if ( ! empty( $options['include_x_default'] ) ) {
+			$tags[] = array(
+				'lang' => 'x-default',
+				'url'  => $canonical,
+			);
+		}
+
+		$unique = array();
+		$out    = array();
+		foreach ( $tags as $tag ) {
+			if ( ! is_array( $tag ) || empty( $tag['lang'] ) || empty( $tag['url'] ) ) {
+				continue;
+			}
+			$key = (string) $tag['lang'] . '|' . (string) $tag['url'];
+			if ( isset( $unique[ $key ] ) ) {
+				continue;
+			}
+			$unique[ $key ] = true;
+			$out[]          = array(
+				'lang' => strtolower( (string) $tag['lang'] ),
+				'url'  => (string) $tag['url'],
+			);
+		}
+
+		return $out;
 	}
 
 	/**

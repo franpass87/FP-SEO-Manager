@@ -29,17 +29,19 @@ class PerformanceDashboardRenderer {
 	 * @param array<string, mixed> $performance_data Performance metrics.
 	 * @param array<string, mixed> $db_stats Database statistics.
 	 * @param array<string, mixed> $asset_stats Asset optimization statistics.
+	 * @param array<string, mixed> $seo_kpis SEO KPI metrics.
 	 * @return void
 	 */
 	public function render(
 		array $health_data,
 		array $performance_data,
 		array $db_stats,
-		array $asset_stats
+		array $asset_stats,
+		array $seo_kpis = array()
 	): void {
 		$this->render_header();
 		$this->render_intro_banner();
-		$this->render_dashboard_grid( $health_data, $performance_data, $db_stats, $asset_stats );
+		$this->render_dashboard_grid( $health_data, $performance_data, $db_stats, $asset_stats, $seo_kpis );
 		$this->render_loading_overlay();
 		$this->render_footer();
 	}
@@ -88,22 +90,56 @@ class PerformanceDashboardRenderer {
 	 * @param array<string, mixed> $performance_data Performance metrics.
 	 * @param array<string, mixed> $db_stats Database statistics.
 	 * @param array<string, mixed> $asset_stats Asset optimization statistics.
+	 * @param array<string, mixed> $seo_kpis SEO KPI metrics.
 	 * @return void
 	 */
 	private function render_dashboard_grid(
 		array $health_data,
 		array $performance_data,
 		array $db_stats,
-		array $asset_stats
+		array $asset_stats,
+		array $seo_kpis = array()
 	): void {
 		?>
 		<div class="fp-seo-dashboard-grid">
 			<?php $this->render_health_overview( $health_data ); ?>
+			<?php $this->render_seo_kpis( $seo_kpis ); ?>
 			<?php $this->render_performance_metrics( $performance_data ); ?>
 			<?php $this->render_database_health( $db_stats ); ?>
 			<?php $this->render_asset_optimization( $asset_stats ); ?>
 			<?php $this->render_cache_status( $performance_data ); ?>
 			<?php $this->render_recommendations( $health_data ); ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render SEO KPI card.
+	 *
+	 * @param array<string,mixed> $seo_kpis KPI data.
+	 * @return void
+	 */
+	private function render_seo_kpis( array $seo_kpis ): void {
+		$not_found_24h = (int) ( $seo_kpis['not_found_24h'] ?? 0 );
+		$broken_total  = (int) ( $seo_kpis['broken_links_total'] ?? 0 );
+		$top_404       = isset( $seo_kpis['top_404'] ) && is_array( $seo_kpis['top_404'] ) ? $seo_kpis['top_404'] : array();
+		?>
+		<div class="fp-seo-card fp-seo-seo-kpis">
+			<h2><?php esc_html_e( 'SEO Executive KPI', 'fp-seo-performance' ); ?></h2>
+			<div class="metrics-grid">
+				<?php $this->render_metric_item( '🚨', __( '404 ultime 24h', 'fp-seo-performance' ), esc_attr( __( 'Totale hit 404 rilevati nelle ultime 24 ore.', 'fp-seo-performance' ) ), (string) $not_found_24h, $not_found_24h < 10 ); ?>
+				<?php $this->render_metric_item( '🔗', __( 'Broken links', 'fp-seo-performance' ), esc_attr( __( 'Link interni rotti nello scan cron più recente.', 'fp-seo-performance' ) ), (string) $broken_total, $broken_total < 5 ); ?>
+			</div>
+			<?php if ( ! empty( $top_404 ) ) : ?>
+				<ul class="recommendations-list" style="margin-top: 12px;">
+					<?php foreach ( $top_404 as $row ) : ?>
+						<li class="recommendation-item">
+							<span class="recommendation-icon">↪</span>
+							<span class="recommendation-text"><code><?php echo esc_html( (string) ( $row['path'] ?? '' ) ); ?></code> (<?php echo esc_html( (string) ( $row['hits'] ?? 0 ) ); ?>)</span>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

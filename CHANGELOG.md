@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.76] - 2026-03-14
+### Added
+- **XML Sitemap FP dedicata** – endpoint `/fp-sitemap.xml` con indice, chunk per post type, `lastmod`, cache TTL e toggle inclusione post type
+- **Meta rendering avanzato** – canonical override in metabox e output `hreflang` automatico (Polylang/WPML + filtro `fp_seo_hreflang_tags`)
+- **Robots + Breadcrumb** – robots manager via hook `robots_txt` e shortcode visuale `[fp_breadcrumb]` basato su `BreadcrumbSchemaGenerator`
+- **SEO Monitoring** – log 404 runtime + job cron per broken internal links, con vista operativa in Redirect Manager
+- **SEO Executive KPI** – nuove metriche (404 24h, broken links) nella Performance Dashboard
+- **Image SEO + Migration Tool** – nuovi check analyzer (filename qualità/peso immagini) e import one-shot da Yoast/RankMath/AIOSEO
+
+### Changed
+- `RedirectsOptions` estesa con sezioni `xml_sitemap`, `meta_rendering`, `robots`, `breadcrumb`
+- Redirect Manager aggiornato come hub operativo per technical SEO settings e monitoraggio
+
 ## [0.9.0-pre.75] - 2026-03-14
 ### Removed
 - **SchemaMetaboxes**: `render_faq_metabox`, `save_faq_schema`, hook save_post per FAQ — FAQ Schema gestito solo da Q&A Pairs (AIRenderer)

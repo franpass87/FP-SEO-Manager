@@ -60,6 +60,7 @@ class SerpSection extends AbstractSection {
 				<div style="display: grid; gap: 16px; margin-bottom: 20px;">
 					<?php $this->renderer->render_seo_title( $post ); ?>
 					<?php $this->renderer->render_meta_description( $post ); ?>
+					<?php $this->renderer->render_canonical_url( $post ); ?>
 					<?php $this->renderer->render_slug( $post ); ?>
 					<?php $this->renderer->render_excerpt( $post ); ?>
 					<div style="height: 1px; background: linear-gradient(90deg, transparent 0%, #e5e7eb 50%, transparent 100%); margin: 8px 0;"></div>

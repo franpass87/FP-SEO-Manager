@@ -95,6 +95,38 @@ class SerpFieldsRenderer extends FieldRenderer {
 	}
 
 	/**
+	 * Render Canonical URL override field.
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return void
+	 */
+	public function render_canonical_url( WP_Post $post ): void {
+		$value = MetaHelper::get_meta_string( $post->ID, '_fp_seo_canonical' );
+		?>
+		<div style="position: relative;">
+			<label for="fp-seo-canonical" style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px;">
+				<span style="display: flex; align-items: center; gap: 8px;">
+					<span style="font-size: 16px;">🔁</span>
+					<?php esc_html_e( 'Canonical URL Override', 'fp-seo-performance' ); ?>
+				</span>
+			</label>
+			<input
+				type="url"
+				id="fp-seo-canonical"
+				name="fp_seo_canonical"
+				value="<?php echo esc_attr( $value ); ?>"
+				placeholder="<?php esc_attr_e( 'https://example.com/url-canonica/', 'fp-seo-performance' ); ?>"
+				style="width: 100%; padding: 10px 14px; font-size: 13px; border: 2px solid #8b5cf6; border-radius: 8px; background: #fff;"
+			/>
+			<input type="hidden" name="fp_seo_canonical_sent" value="1" />
+			<p style="margin: 8px 0 0; font-size: 11px; color: #64748b; line-height: 1.5;">
+				<?php esc_html_e( 'Lascia vuoto per usare il permalink corrente. Usa questo campo solo per canonical cross-page o consolidamento duplicati.', 'fp-seo-performance' ); ?>
+			</p>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Render Slug field.
 	 *
 	 * @param WP_Post $post Post object.

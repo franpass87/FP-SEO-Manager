@@ -20,6 +20,8 @@ use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Redirects\RedirectRepository;
 use FP\SEO\Redirects\RedirectHandler;
 use FP\SEO\Redirects\SitemapRouter;
+use FP\SEO\Redirects\NotFoundMonitor;
+use FP\SEO\Redirects\XmlSitemapRouter;
 
 /**
  * Service provider for redirects and HTML sitemap.
@@ -59,6 +61,14 @@ class RedirectsAndSitemapServiceProvider extends AbstractServiceProvider {
 		$container->singleton( SitemapRouter::class, function() {
 			return new SitemapRouter();
 		} );
+
+		$container->singleton( XmlSitemapRouter::class, function() {
+			return new XmlSitemapRouter();
+		} );
+
+		$container->singleton( NotFoundMonitor::class, function() {
+			return new NotFoundMonitor();
+		} );
 	}
 
 	/**
@@ -70,6 +80,8 @@ class RedirectsAndSitemapServiceProvider extends AbstractServiceProvider {
 	public function boot( Container $container ): void {
 		$this->boot_service( $container, RedirectHandler::class, 'warning', 'Failed to register RedirectHandler' );
 		$this->boot_service( $container, SitemapRouter::class, 'warning', 'Failed to register SitemapRouter' );
+		$this->boot_service( $container, XmlSitemapRouter::class, 'warning', 'Failed to register XmlSitemapRouter' );
+		$this->boot_service( $container, NotFoundMonitor::class, 'warning', 'Failed to register NotFoundMonitor' );
 	}
 
 	/**

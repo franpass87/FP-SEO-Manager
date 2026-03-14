@@ -12,8 +12,10 @@ declare(strict_types=1);
 namespace FP\SEO\Admin;
 
 use FP\SEO\GEO\HtmlSitemap;
+use FP\SEO\Monitoring\SeoMonitorRepository;
 use FP\SEO\Redirects\RedirectRepository;
 use FP\SEO\Redirects\RedirectsOptions;
+use FP\SEO\Redirects\XmlSitemap;
 use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 use FP\SEO\Utils\OptionsHelper;
 use function add_submenu_page;
@@ -23,6 +25,8 @@ use function current_user_can;
 use function esc_attr;
 use function esc_html;
 use function esc_html__;
+use function esc_textarea;
+use function esc_js;
 use function esc_url;
 use function home_url;
 use function sanitize_text_field;
@@ -44,6 +48,7 @@ class RedirectManagerPage {
 	private const AJAX_ACTION    = 'fp_seo_redirects';
 	private const BULK_ACTION    = 'fp_seo_redirects_bulk_import';
 	private const SETTINGS_ACTION = 'fp_seo_redirects_settings';
+	private const IMPORT_ACTION   = 'fp_seo_import_external_meta';
 
 	/**
 	 * Hook manager instance.
@@ -78,6 +83,7 @@ class RedirectManagerPage {
 		$this->hook_manager->add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		$this->hook_manager->add_action( 'admin_post_' . self::BULK_ACTION, array( $this, 'handle_bulk_import' ) );
 		$this->hook_manager->add_action( 'admin_post_' . self::SETTINGS_ACTION, array( $this, 'handle_settings_save' ) );
+		$this->hook_manager->add_action( 'admin_post_' . self::IMPORT_ACTION, array( $this, 'handle_external_import' ) );
 		$this->hook_manager->add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_ajax' ) );
 	}
 
@@ -173,12 +179,144 @@ class RedirectManagerPage {
 			'cache_ttl'       => $sitemap_cache_ttl,
 		) );
 
+		$xml_enabled      = isset( $_POST['xml_sitemap_enabled'] ) && '1' === $_POST['xml_sitemap_enabled'];
+		$xml_max_urls     = isset( $_POST['xml_sitemap_max_urls'] ) ? absint( $_POST['xml_sitemap_max_urls'] ) : 1000;
+		$xml_max_urls     = $xml_max_urls >= 100 && $xml_max_urls <= 5000 ? $xml_max_urls : 1000;
+		$xml_cache_ttl    = isset( $_POST['xml_sitemap_cache_ttl'] ) ? absint( $_POST['xml_sitemap_cache_ttl'] ) : 3600;
+		$xml_cache_ttl    = $xml_cache_ttl >= 60 && $xml_cache_ttl <= 86400 ? $xml_cache_ttl : 3600;
+		$xml_post_types   = isset( $_POST['xml_sitemap_post_types'] ) && is_array( $_POST['xml_sitemap_post_types'] )
+			? array_map( 'sanitize_key', wp_unslash( $_POST['xml_sitemap_post_types'] ) )
+			: array( 'post', 'page' );
+
+		RedirectsOptions::save_xml_sitemap(
+			array(
+				'enabled'           => $xml_enabled,
+				'max_urls_per_file' => $xml_max_urls,
+				'cache_ttl'         => $xml_cache_ttl,
+				'post_types'        => $xml_post_types,
+			)
+		);
+
+		$hreflang_enabled  = isset( $_POST['hreflang_enabled'] ) && '1' === $_POST['hreflang_enabled'];
+		$hreflang_xdefault = isset( $_POST['hreflang_xdefault'] ) && '1' === $_POST['hreflang_xdefault'];
+		RedirectsOptions::save_meta_rendering(
+			array(
+				'hreflang_enabled'  => $hreflang_enabled,
+				'include_x_default' => $hreflang_xdefault,
+			)
+		);
+
+		$robots_enabled = isset( $_POST['robots_enabled'] ) && '1' === $_POST['robots_enabled'];
+		$robots_rules   = isset( $_POST['robots_extra_rules'] ) ? sanitize_textarea_field( wp_unslash( $_POST['robots_extra_rules'] ) ) : '';
+		RedirectsOptions::save_robots(
+			array(
+				'enabled'     => $robots_enabled,
+				'extra_rules' => $robots_rules,
+			)
+		);
+
+		$breadcrumb_enabled = isset( $_POST['breadcrumb_enabled'] ) && '1' === $_POST['breadcrumb_enabled'];
+		$breadcrumb_home    = isset( $_POST['breadcrumb_show_home'] ) && '1' === $_POST['breadcrumb_show_home'];
+		RedirectsOptions::save_breadcrumb(
+			array(
+				'enabled'   => $breadcrumb_enabled,
+				'show_home' => $breadcrumb_home,
+			)
+		);
+
 		HtmlSitemap::flush_cache();
+		XmlSitemap::flush_cache();
 
 		wp_safe_redirect( add_query_arg( array(
 			'page'    => self::PAGE_SLUG,
 			'saved'   => '1',
 		), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Handle one-shot import from Yoast/RankMath/AIOSEO.
+	 */
+	public function handle_external_import(): void {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to access this page.', 'fp-seo-performance' ) );
+		}
+
+		check_admin_referer( self::NONCE_ACTION . '_import', 'fp_seo_import_nonce' );
+		$source = isset( $_POST['import_source'] ) ? sanitize_key( wp_unslash( $_POST['import_source'] ) ) : '';
+
+		$map = array(
+			'yoast' => array(
+				'title'       => '_yoast_wpseo_title',
+				'description' => '_yoast_wpseo_metadesc',
+				'focus'       => '_yoast_wpseo_focuskw',
+			),
+			'rankmath' => array(
+				'title'       => 'rank_math_title',
+				'description' => 'rank_math_description',
+				'focus'       => 'rank_math_focus_keyword',
+			),
+			'aioseo' => array(
+				'title'       => '_aioseo_title',
+				'description' => '_aioseo_description',
+				'focus'       => '_aioseo_focus_keyphrase',
+			),
+		);
+
+		if ( ! isset( $map[ $source ] ) ) {
+			wp_safe_redirect( add_query_arg( array( 'page' => self::PAGE_SLUG, 'import_status' => 'invalid' ), admin_url( 'admin.php' ) ) );
+			exit;
+		}
+
+		$imported = 0;
+		$posts    = get_posts(
+			array(
+				'post_type'              => get_post_types( array( 'public' => true ), 'names' ),
+				'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
+				'posts_per_page'         => 200,
+				'suppress_filters'       => true,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+
+		foreach ( $posts as $post ) {
+			$post_id = (int) $post->ID;
+			$title   = (string) get_post_meta( $post_id, $map[ $source ]['title'], true );
+			$desc    = (string) get_post_meta( $post_id, $map[ $source ]['description'], true );
+			$focus   = (string) get_post_meta( $post_id, $map[ $source ]['focus'], true );
+
+			$updated = false;
+			if ( '' !== trim( $title ) && '' === (string) get_post_meta( $post_id, '_fp_seo_title', true ) ) {
+				update_post_meta( $post_id, '_fp_seo_title', sanitize_text_field( $title ) );
+				$updated = true;
+			}
+			if ( '' !== trim( $desc ) && '' === (string) get_post_meta( $post_id, '_fp_seo_meta_description', true ) ) {
+				update_post_meta( $post_id, '_fp_seo_meta_description', sanitize_textarea_field( $desc ) );
+				$updated = true;
+			}
+			if ( '' !== trim( $focus ) && '' === (string) get_post_meta( $post_id, '_fp_seo_focus_keyword', true ) ) {
+				update_post_meta( $post_id, '_fp_seo_focus_keyword', sanitize_text_field( $focus ) );
+				$updated = true;
+			}
+
+			if ( $updated ) {
+				++$imported;
+			}
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'          => self::PAGE_SLUG,
+					'import_status' => 'ok',
+					'import_source' => $source,
+					'imported'      => $imported,
+				),
+				admin_url( 'admin.php' )
+			)
+		);
 		exit;
 	}
 
@@ -306,14 +444,25 @@ class RedirectManagerPage {
 		$total       = $this->repository->count( array_filter( array( 'search' => $search, 'type' => $args['type'] ) ) );
 		$total_pages = $per_page > 0 ? (int) ceil( $total / $per_page ) : 1;
 
-		$sitemap_url    = home_url( '/sitemap/' );
-		$imported       = isset( $_GET['imported'] ) ? absint( $_GET['imported'] ) : 0;
-		$skipped        = isset( $_GET['skipped'] ) ? absint( $_GET['skipped'] ) : 0;
-		$error          = isset( $_GET['error'] ) ? sanitize_key( $_GET['error'] ) : '';
-		$settings_saved = isset( $_GET['saved'] ) && '1' === $_GET['saved'];
+		$sitemap_url     = home_url( '/sitemap/' );
+		$xml_sitemap_url = home_url( '/fp-sitemap.xml' );
+		$imported        = isset( $_GET['imported'] ) ? absint( $_GET['imported'] ) : 0;
+		$skipped         = isset( $_GET['skipped'] ) ? absint( $_GET['skipped'] ) : 0;
+		$error           = isset( $_GET['error'] ) ? sanitize_key( $_GET['error'] ) : '';
+		$settings_saved  = isset( $_GET['saved'] ) && '1' === $_GET['saved'];
+		$import_status   = isset( $_GET['import_status'] ) ? sanitize_key( $_GET['import_status'] ) : '';
+		$import_source   = isset( $_GET['import_source'] ) ? sanitize_key( $_GET['import_source'] ) : '';
+		$imported_count  = isset( $_GET['imported'] ) ? absint( $_GET['imported'] ) : 0;
 
-		$redirects_opts = RedirectsOptions::get_redirects();
-		$sitemap_opts   = RedirectsOptions::get_html_sitemap();
+		$redirects_opts   = RedirectsOptions::get_redirects();
+		$sitemap_opts     = RedirectsOptions::get_html_sitemap();
+		$xml_opts         = RedirectsOptions::get_xml_sitemap();
+		$meta_opts        = RedirectsOptions::get_meta_rendering();
+		$robots_opts      = RedirectsOptions::get_robots();
+		$breadcrumb_opts  = RedirectsOptions::get_breadcrumb();
+		$public_post_types = get_post_types( array( 'public' => true ), 'objects' );
+		$top_404          = SeoMonitorRepository::top_404( 10 );
+		$broken_links     = SeoMonitorRepository::get_broken_links( 10 );
 
 		?>
 		<div class="wrap fp-seo-admin-page">
@@ -350,6 +499,25 @@ class RedirectManagerPage {
 				<div class="fp-seo-alert fp-seo-alert-success">
 					<span class="dashicons dashicons-yes-alt"></span>
 					<?php esc_html_e( 'Settings saved.', 'fp-seo-performance' ); ?>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( 'ok' === $import_status ) : ?>
+				<div class="fp-seo-alert fp-seo-alert-success">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<?php
+					printf(
+						/* translators: 1: source plugin, 2: imported posts count */
+						esc_html__( 'Import %1$s completato: %2$d contenuti aggiornati.', 'fp-seo-performance' ),
+						esc_html( strtoupper( $import_source ) ),
+						$imported_count
+					);
+					?>
+				</div>
+			<?php elseif ( 'invalid' === $import_status ) : ?>
+				<div class="fp-seo-alert fp-seo-alert-warning">
+					<span class="dashicons dashicons-warning"></span>
+					<?php esc_html_e( 'Sorgente import non valida.', 'fp-seo-performance' ); ?>
 				</div>
 			<?php endif; ?>
 
@@ -394,6 +562,68 @@ class RedirectManagerPage {
 								<input type="number" id="html_sitemap_cache_ttl" name="html_sitemap_cache_ttl" value="<?php echo esc_attr( (string) $sitemap_opts['cache_ttl'] ); ?>" min="60" max="86400" style="width:100px">
 								<span class="fp-seo-hint"><?php esc_html_e( '60–86400. 3600 = 1 ora.', 'fp-seo-performance' ); ?></span>
 							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="xml_sitemap_enabled" value="1" <?php checked( $xml_opts['enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita XML sitemap SEO', 'fp-seo-performance' ); ?>
+								</label>
+								<span class="fp-seo-hint"><?php esc_html_e( 'Espone /fp-sitemap.xml per i motori di ricerca.', 'fp-seo-performance' ); ?></span>
+							</div>
+							<div class="fp-seo-field">
+								<label for="xml_sitemap_max_urls"><?php esc_html_e( 'URL max per file XML', 'fp-seo-performance' ); ?></label>
+								<input type="number" id="xml_sitemap_max_urls" name="xml_sitemap_max_urls" value="<?php echo esc_attr( (string) $xml_opts['max_urls_per_file'] ); ?>" min="100" max="5000" style="width:100px">
+							</div>
+							<div class="fp-seo-field">
+								<label for="xml_sitemap_cache_ttl"><?php esc_html_e( 'Cache XML sitemap (secondi)', 'fp-seo-performance' ); ?></label>
+								<input type="number" id="xml_sitemap_cache_ttl" name="xml_sitemap_cache_ttl" value="<?php echo esc_attr( (string) $xml_opts['cache_ttl'] ); ?>" min="60" max="86400" style="width:100px">
+							</div>
+							<div class="fp-seo-field" style="grid-column: 1 / -1;">
+								<label><?php esc_html_e( 'Post type inclusi nella XML sitemap', 'fp-seo-performance' ); ?></label>
+								<div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:6px;">
+									<?php foreach ( $public_post_types as $post_type_obj ) : ?>
+										<?php if ( 'attachment' === $post_type_obj->name ) { continue; } ?>
+										<label>
+											<input type="checkbox" name="xml_sitemap_post_types[]" value="<?php echo esc_attr( $post_type_obj->name ); ?>" <?php checked( in_array( $post_type_obj->name, $xml_opts['post_types'], true ) ); ?>>
+											<?php echo esc_html( $post_type_obj->labels->name ); ?>
+										</label>
+									<?php endforeach; ?>
+								</div>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="hreflang_enabled" value="1" <?php checked( $meta_opts['hreflang_enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita hreflang automatico', 'fp-seo-performance' ); ?>
+								</label>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="hreflang_xdefault" value="1" <?php checked( $meta_opts['include_x_default'] ); ?>>
+									<?php esc_html_e( 'Aggiungi x-default nelle alternate', 'fp-seo-performance' ); ?>
+								</label>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="robots_enabled" value="1" <?php checked( $robots_opts['enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita Robots Manager', 'fp-seo-performance' ); ?>
+								</label>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="breadcrumb_enabled" value="1" <?php checked( $breadcrumb_opts['enabled'] ); ?>>
+									<?php esc_html_e( 'Abilita breadcrumb shortcode [fp_breadcrumb]', 'fp-seo-performance' ); ?>
+								</label>
+							</div>
+							<div class="fp-seo-field">
+								<label>
+									<input type="checkbox" name="breadcrumb_show_home" value="1" <?php checked( $breadcrumb_opts['show_home'] ); ?>>
+									<?php esc_html_e( 'Mostra Home nel breadcrumb', 'fp-seo-performance' ); ?>
+								</label>
+							</div>
+							<div class="fp-seo-field" style="grid-column:1 / -1;">
+								<label for="robots_extra_rules"><?php esc_html_e( 'Regole robots.txt aggiuntive', 'fp-seo-performance' ); ?></label>
+								<textarea id="robots_extra_rules" name="robots_extra_rules" rows="4" class="large-text code" placeholder="User-agent: *&#10;Disallow: /wp-admin/"><?php echo esc_textarea( (string) $robots_opts['extra_rules'] ); ?></textarea>
+								<span class="fp-seo-hint"><?php esc_html_e( 'Sono accettate solo direttive standard (User-agent, Allow, Disallow, Crawl-delay, Host).', 'fp-seo-performance' ); ?></span>
+							</div>
 							<div class="fp-seo-field" style="align-self:flex-end">
 								<button type="submit" class="fp-seo-btn fp-seo-btn-primary"><?php esc_html_e( 'Salva impostazioni', 'fp-seo-performance' ); ?></button>
 							</div>
@@ -412,7 +642,76 @@ class RedirectManagerPage {
 				</div>
 				<div class="fp-seo-card-body">
 					<p class="description"><?php esc_html_e( 'User-friendly HTML sitemap available at', 'fp-seo-performance' ); ?> <code><?php echo esc_html( $sitemap_url ); ?></code></p>
+					<p class="description"><?php esc_html_e( 'XML sitemap index for Google/Bing:', 'fp-seo-performance' ); ?> <code><?php echo esc_html( $xml_sitemap_url ); ?></code></p>
 					<p class="description"><?php esc_html_e( 'After adding this plugin, go to Settings → Permalinks and click Save to refresh rewrite rules.', 'fp-seo-performance' ); ?></p>
+				</div>
+			</div>
+
+			<div class="fp-seo-card">
+				<div class="fp-seo-card-header">
+					<div class="fp-seo-card-header-left">
+						<span class="dashicons dashicons-chart-line"></span>
+						<h2><?php esc_html_e( 'Monitoraggio 404 e Broken Links', 'fp-seo-performance' ); ?></h2>
+					</div>
+				</div>
+				<div class="fp-seo-card-body">
+					<div class="fp-seo-fields-grid" style="grid-template-columns: 1fr 1fr;">
+						<div class="fp-seo-field">
+							<strong><?php esc_html_e( 'Top 404 recenti', 'fp-seo-performance' ); ?></strong>
+							<?php if ( empty( $top_404 ) ) : ?>
+								<p class="description"><?php esc_html_e( 'Nessun 404 registrato finora.', 'fp-seo-performance' ); ?></p>
+							<?php else : ?>
+								<ul style="margin: 8px 0 0; list-style: disc; padding-left: 18px;">
+									<?php foreach ( $top_404 as $row ) : ?>
+										<li>
+											<code><?php echo esc_html( (string) $row['path'] ); ?></code>
+											(<?php echo esc_html( (string) $row['hits'] ); ?> hit)
+											<a href="#" onclick="document.getElementById('fp_seo_source').value='<?php echo esc_js( (string) $row['path'] ); ?>'; return false;">
+												<?php esc_html_e( 'Crea redirect', 'fp-seo-performance' ); ?>
+											</a>
+										</li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+						</div>
+						<div class="fp-seo-field">
+							<strong><?php esc_html_e( 'Broken internal links', 'fp-seo-performance' ); ?></strong>
+							<?php if ( empty( $broken_links ) ) : ?>
+								<p class="description"><?php esc_html_e( 'Nessun link interno rotto nello scan più recente.', 'fp-seo-performance' ); ?></p>
+							<?php else : ?>
+								<ul style="margin: 8px 0 0; list-style: disc; padding-left: 18px;">
+									<?php foreach ( $broken_links as $row ) : ?>
+										<li>
+											<?php echo esc_html( (string) $row['source_post_title'] ); ?> →
+											<code><?php echo esc_html( (string) $row['broken_url'] ); ?></code>
+										</li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="fp-seo-card">
+				<div class="fp-seo-card-header">
+					<div class="fp-seo-card-header-left">
+						<span class="dashicons dashicons-migrate"></span>
+						<h2><?php esc_html_e( 'Import SEO da plugin terzi', 'fp-seo-performance' ); ?></h2>
+					</div>
+				</div>
+				<div class="fp-seo-card-body">
+					<p class="description"><?php esc_html_e( 'Import one-shot di title, meta description e focus keyword da Yoast, RankMath o AIOSEO.', 'fp-seo-performance' ); ?></p>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fp-seo-inline-form">
+						<?php wp_nonce_field( self::NONCE_ACTION . '_import', 'fp_seo_import_nonce' ); ?>
+						<input type="hidden" name="action" value="<?php echo esc_attr( self::IMPORT_ACTION ); ?>">
+						<select name="import_source">
+							<option value="yoast">Yoast SEO</option>
+							<option value="rankmath">Rank Math</option>
+							<option value="aioseo">AIOSEO</option>
+						</select>
+						<button type="submit" class="fp-seo-btn fp-seo-btn-secondary"><?php esc_html_e( 'Avvia import', 'fp-seo-performance' ); ?></button>
+					</form>
 				</div>
 			</div>
 

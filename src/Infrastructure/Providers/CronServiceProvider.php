@@ -16,6 +16,7 @@ use FP\SEO\Infrastructure\Container;
 use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Cron\Jobs\CleanupTransientsJob;
 use FP\SEO\Cron\Jobs\ClearOptimizationFlagJob;
+use FP\SEO\Cron\Jobs\BrokenLinksScanJob;
 use FP\SEO\Utils\LoggerHelper;
 use wpdb;
 
@@ -53,6 +54,7 @@ class CronServiceProvider extends AbstractServiceProvider {
 		} );
 
 		$container->singleton( ClearOptimizationFlagJob::class );
+		$container->singleton( BrokenLinksScanJob::class );
 	}
 
 	/**
@@ -68,6 +70,12 @@ class CronServiceProvider extends AbstractServiceProvider {
 			CleanupTransientsJob::class,
 			'warning',
 			'Failed to register CleanupTransientsJob'
+		);
+		$this->boot_service(
+			$container,
+			BrokenLinksScanJob::class,
+			'warning',
+			'Failed to register BrokenLinksScanJob'
 		);
 
 		// Register clear optimization flag job (hook only, not scheduled)

@@ -17,6 +17,7 @@ use function add_post_meta;
 use function clean_post_cache;
 use function current_user_can;
 use function delete_post_meta;
+use function esc_url_raw;
 use function get_post_meta;
 use function get_post_type;
 use function sanitize_text_field;
@@ -53,6 +54,11 @@ class MetaboxSaver {
 	 * Meta key for secondary keywords.
 	 */
 	private const META_SECONDARY_KEYWORDS = '_fp_seo_secondary_keywords';
+
+	/**
+	 * Meta key for canonical URL override.
+	 */
+	private const META_CANONICAL = '_fp_seo_canonical';
 
 	/**
 	 * Meta key for schema type.
@@ -235,6 +241,7 @@ class MetaboxSaver {
 		$this->save_slug( $post_id );
 		$this->save_excerpt( $post_id );
 		$this->save_keywords( $post_id );
+		$this->save_canonical( $post_id );
 		$this->save_schema_type( $post_id );
 		$this->save_exclude_flag( $post_id );
 		$this->save_qa_pairs( $post_id );
@@ -346,10 +353,11 @@ class MetaboxSaver {
 		$has_excerpt = isset( $_POST['fp_seo_excerpt'] );
 		$has_focus = isset( $_POST['fp_seo_focus_keyword'] );
 		$has_secondary = isset( $_POST['fp_seo_secondary_keywords'] );
+		$has_canonical = isset( $_POST['fp_seo_canonical'] ) || isset( $_POST['fp_seo_canonical_sent'] );
 		$has_schema_type = isset( $_POST['fp_seo_schema_type'] ) || isset( $_POST['fp_seo_schema_type_sent'] );
 		$has_qa_pairs = isset( $_POST['fp_seo_qa_pairs_data'] );
 		
-		$has_any = $has_title || $has_desc || $has_slug || $has_excerpt || $has_focus || $has_secondary || $has_schema_type || $has_qa_pairs;
+		$has_any = $has_title || $has_desc || $has_slug || $has_excerpt || $has_focus || $has_secondary || $has_canonical || $has_schema_type || $has_qa_pairs;
 		
 		if ( $has_any ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -360,6 +368,7 @@ class MetaboxSaver {
 					'has_excerpt' => $has_excerpt,
 					'has_focus' => $has_focus,
 					'has_secondary' => $has_secondary,
+					'has_canonical' => $has_canonical,
 				) );
 			}
 			return true;
@@ -599,6 +608,29 @@ class MetaboxSaver {
 				delete_post_meta( $post_id, self::META_SECONDARY_KEYWORDS );
 			}
 		}
+	}
+
+	/**
+	 * Save canonical URL override.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return void
+	 */
+	private function save_canonical( int $post_id ): void {
+		if ( ! isset( $_POST['fp_seo_canonical'] ) && ! isset( $_POST['fp_seo_canonical_sent'] ) ) {
+			return;
+		}
+
+		$canonical = isset( $_POST['fp_seo_canonical'] )
+			? trim( esc_url_raw( wp_unslash( (string) $_POST['fp_seo_canonical'] ) ) )
+			: '';
+
+		if ( '' !== $canonical ) {
+			update_post_meta( $post_id, self::META_CANONICAL, $canonical );
+			return;
+		}
+
+		delete_post_meta( $post_id, self::META_CANONICAL );
 	}
 
 	/**

@@ -18,6 +18,8 @@ use FP\SEO\Analysis\Checks\H1PresenceCheck;
 use FP\SEO\Analysis\Checks\HeadingsStructureCheck;
 use FP\SEO\Analysis\Checks\HowToSchemaCheck;
 use FP\SEO\Analysis\Checks\ImageAltCheck;
+use FP\SEO\Analysis\Checks\ImageFilenameCheck;
+use FP\SEO\Analysis\Checks\ImageWeightCheck;
 use FP\SEO\Analysis\Checks\InternalLinksCheck;
 use FP\SEO\Analysis\Checks\MetaDescriptionCheck;
 use FP\SEO\Analysis\Checks\OgCardsCheck;
@@ -229,6 +231,8 @@ class Analyzer {
 			new H1PresenceCheck(),
 			new HeadingsStructureCheck(),
 			new ImageAltCheck(),
+			new ImageFilenameCheck(),
+			new ImageWeightCheck(),
 			new CanonicalCheck(),
 			new RobotsIndexabilityCheck(),
 			new OgCardsCheck(),

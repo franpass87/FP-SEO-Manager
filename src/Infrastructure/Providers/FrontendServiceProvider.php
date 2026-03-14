@@ -23,7 +23,9 @@ use FP\SEO\Frontend\Renderers\MetaTagRenderer;
 use FP\SEO\Frontend\Renderers\SchemaRenderer;
 use FP\SEO\Frontend\Renderers\SocialRenderer;
 use FP\SEO\Frontend\Renderers\KeywordsRenderer;
+use FP\SEO\Frontend\Renderers\RobotsTxtRenderer;
 use FP\SEO\Frontend\Shortcodes\GeoShortcodes;
+use FP\SEO\Frontend\Shortcodes\BreadcrumbShortcode;
 use FP\SEO\Social\ImprovedSocialMediaManager;
 use FP\SEO\Links\InternalLinkManager;
 use FP\SEO\Keywords\MultipleKeywordsManager;
@@ -68,6 +70,11 @@ class FrontendServiceProvider extends AbstractServiceProvider {
 			return new GeoShortcodes( $hook_manager );
 		} );
 
+		$container->singleton( BreadcrumbShortcode::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			return new BreadcrumbShortcode( $hook_manager );
+		} );
+
 		// Register SchemaRenderer with dependencies
 		$container->singleton( SchemaRenderer::class, function( Container $container ) {
 			$hook_manager = $container->get( HookManagerInterface::class );
@@ -87,6 +94,11 @@ class FrontendServiceProvider extends AbstractServiceProvider {
 			$hook_manager = $container->get( HookManagerInterface::class );
 			$keywords_manager = $container->get( MultipleKeywordsManager::class );
 			return new KeywordsRenderer( $hook_manager, $keywords_manager );
+		} );
+
+		$container->singleton( RobotsTxtRenderer::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			return new RobotsTxtRenderer( $hook_manager );
 		} );
 
 		// Register other frontend services as singletons with HookManager dependency
@@ -133,6 +145,8 @@ class FrontendServiceProvider extends AbstractServiceProvider {
 		$this->boot_service( $container, SocialRenderer::class, 'warning', 'Failed to register SocialRenderer' );
 		$this->boot_service( $container, KeywordsRenderer::class, 'warning', 'Failed to register KeywordsRenderer' );
 		$this->boot_service( $container, GeoShortcodes::class, 'warning', 'Failed to register GeoShortcodes' );
+		$this->boot_service( $container, BreadcrumbShortcode::class, 'warning', 'Failed to register BreadcrumbShortcode' );
+		$this->boot_service( $container, RobotsTxtRenderer::class, 'warning', 'Failed to register RobotsTxtRenderer' );
 
 		// Boot other frontend services
 		$this->boot_services_simple(

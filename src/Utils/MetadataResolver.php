@@ -160,15 +160,18 @@ class MetadataResolver {
 		// clean_post_cache( $post_id );
 		// wp_cache_delete( $post_id, 'post_meta' );
 		
-		$canonical = get_post_meta( $post_id, '_fp_seo_meta_canonical', true );
+		$canonical = get_post_meta( $post_id, '_fp_seo_canonical', true );
 		
 		// Fallback: query diretta al database se get_post_meta restituisce vuoto
 		if ( '' === $canonical ) {
 			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_meta_canonical' ) );
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_canonical' ) );
 			if ( $db_value !== null ) {
 				$canonical = $db_value;
 			}
+		}
+		if ( '' === $canonical ) {
+			$canonical = get_post_meta( $post_id, '_fp_seo_meta_canonical', true );
 		}
 
 		if ( is_string( $canonical ) && '' !== $canonical ) {
@@ -194,15 +197,18 @@ class MetadataResolver {
 		// clean_post_cache( $post_id );
 		// wp_cache_delete( $post_id, 'post_meta' );
 		
-		$robots = get_post_meta( $post_id, '_fp_seo_meta_robots', true );
+		$robots = get_post_meta( $post_id, '_fp_seo_robots', true );
 		
 		// Fallback: query diretta al database se get_post_meta restituisce vuoto
 		if ( '' === $robots ) {
 			global $wpdb;
-			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_meta_robots' ) );
+			$db_value = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1", $post_id, '_fp_seo_robots' ) );
 			if ( $db_value !== null ) {
 				$robots = $db_value;
 			}
+		}
+		if ( '' === $robots ) {
+			$robots = get_post_meta( $post_id, '_fp_seo_meta_robots', true );
 		}
 
 		if ( is_string( $robots ) && '' !== $robots ) {

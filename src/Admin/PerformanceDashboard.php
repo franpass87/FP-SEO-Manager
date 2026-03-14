@@ -17,6 +17,7 @@ use FP\SEO\Admin\Styles\PerformanceDashboardStylesManager;
 use FP\SEO\Utils\AssetOptimizer;
 use FP\SEO\Utils\DatabaseOptimizer;
 use FP\SEO\Utils\HealthChecker;
+use FP\SEO\Monitoring\SeoMonitorRepository;
 use FP\SEO\Utils\PerformanceMonitor;
 use FP\SEO\Infrastructure\Contracts\HookManagerInterface;
 
@@ -130,9 +131,14 @@ class PerformanceDashboard {
 		$performance_data = $this->monitor->get_summary();
 		$db_stats = $this->db_optimizer->get_performance_stats();
 		$asset_stats = $this->asset_optimizer ? $this->asset_optimizer->get_optimization_stats() : array();
+		$seo_kpis = array(
+			'not_found_24h'      => SeoMonitorRepository::count_404_last_24h(),
+			'broken_links_total' => SeoMonitorRepository::broken_links_count(),
+			'top_404'            => SeoMonitorRepository::top_404( 5 ),
+		);
 
 		if ( $this->renderer ) {
-			$this->renderer->render( $health_data, $performance_data, $db_stats, $asset_stats );
+			$this->renderer->render( $health_data, $performance_data, $db_stats, $asset_stats, $seo_kpis );
 		}
 	}
 

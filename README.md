@@ -1,6 +1,6 @@
 # FP SEO Performance
 
-[![Version](https://img.shields.io/badge/version-0.9.0--pre.75-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
+[![Version](https://img.shields.io/badge/version-0.9.0--pre.76-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
 [![WordPress](https://img.shields.io/badge/wordpress-6.2+-green.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/php-8.0+-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/license-GPL--2.0+-red.svg)](LICENSE)
@@ -35,7 +35,15 @@
 
 ### 🗺️ **Sitemap & Redirects**
 - **HTML Sitemap** - User-friendly sitemap at `/sitemap/` organized by post type
+- **XML Sitemap FP** - Dedicated XML index at `/fp-sitemap.xml` with chunks by post type
 - **Redirect Manager** - 301/302 redirects with CRUD, bulk CSV import, hit tracking
+- **404 & Broken Links Monitor** - SEO monitoring with quick "create redirect" workflow
+
+### 🌍 **Technical SEO Rendering**
+- **Canonical Override per contenuto** - Campo metabox dedicato nel blocco SERP
+- **Hreflang automatico** - Supporto Polylang/WPML + fallback tramite filtro custom
+- **Robots Manager** - Regole robots.txt validate via hook `robots_txt`
+- **Visual Breadcrumb** - Shortcode `[fp_breadcrumb]` riusando dati Breadcrumb schema
 
 ### 🤖 **GEO (Generative Engine Optimization)**
 - **AI.txt Support** - Define AI crawling policies (`/.well-known/ai.txt`)

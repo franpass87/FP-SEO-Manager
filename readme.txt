@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.75
+Stable tag: 0.9.0-pre.76
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,14 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.76 - 2026-03-14 =
+* Added: XML sitemap FP dedicata (`/fp-sitemap.xml`) con chunk per post type, cache TTL e toggle admin
+* Added: Canonical override nel metabox + hreflang automatico (Polylang/WPML + filtro custom)
+* Added: Robots manager (hook `robots_txt`) e breadcrumb visuale shortcode `[fp_breadcrumb]`
+* Added: Monitoraggio 404/broken links con integrazione rapida al Redirect Manager
+* Added: KPI SEO executive nella Performance Dashboard
+* Added: Import one-shot meta SEO da Yoast/RankMath/AIOSEO + nuovi check Image SEO (filename/peso)
 
 = 0.9.0-pre.75 - 2026-03-14 =
 * Removed: FAQ form/save from SchemaMetaboxes (FAQ via Q&A Pairs only)
