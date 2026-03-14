@@ -797,6 +797,112 @@
 }
 
 /* ==========================================================================
+   Redirect Manager / Page Header
+   ========================================================================== */
+
+.fp-seo-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fp-seo-space-6);
+  padding: var(--fp-seo-space-6);
+  margin-bottom: var(--fp-seo-space-6);
+  background: linear-gradient(135deg, var(--fp-seo-primary) 0%, var(--fp-seo-primary-dark) 100%);
+  border-radius: var(--fp-seo-radius-lg);
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-page-header-content h1 {
+  margin: 0 0 var(--fp-seo-space-2);
+  color: inherit;
+  font-size: var(--fp-seo-font-size-2xl);
+}
+
+.fp-seo-page-header-content p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: var(--fp-seo-font-size-sm);
+}
+
+.fp-seo-page-header-badge {
+  flex-shrink: 0;
+  padding: var(--fp-seo-space-2) var(--fp-seo-space-4);
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--fp-seo-radius-full);
+  font-size: var(--fp-seo-font-size-sm);
+  font-weight: 600;
+}
+
+.fp-seo-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--fp-seo-space-4);
+}
+
+.fp-seo-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--fp-seo-space-3);
+}
+
+.fp-seo-card-header-left h2 {
+  margin: 0;
+  font-size: var(--fp-seo-font-size-lg);
+}
+
+.fp-seo-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--fp-seo-space-4);
+  align-items: start;
+}
+
+.fp-seo-field label {
+  display: block;
+  margin-bottom: var(--fp-seo-space-1);
+  font-weight: 500;
+  font-size: var(--fp-seo-font-size-sm);
+}
+
+.fp-seo-hint {
+  display: block;
+  margin-top: var(--fp-seo-space-1);
+  font-size: var(--fp-seo-font-size-xs);
+  color: var(--fp-seo-gray-500);
+}
+
+.fp-seo-inline-form {
+  display: flex;
+  align-items: center;
+  gap: var(--fp-seo-space-3);
+  flex-wrap: wrap;
+}
+
+.fp-seo-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--fp-seo-radius-full);
+  font-size: var(--fp-seo-font-size-xs);
+  font-weight: 500;
+}
+
+.fp-seo-status-pill.is-active {
+  background: var(--fp-seo-success);
+  color: var(--fp-seo-white);
+}
+
+.fp-seo-status-pill.is-inactive {
+  background: var(--fp-seo-gray-300);
+  color: var(--fp-seo-gray-600);
+}
+
+.fp-seo-pagination {
+  margin-top: var(--fp-seo-space-4);
+}
+
+/* ==========================================================================
    Print Styles
    ========================================================================== */
 

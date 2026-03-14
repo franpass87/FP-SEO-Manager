@@ -22,6 +22,8 @@ use FP\SEO\Admin\Menu;
 use FP\SEO\Admin\SettingsPage;
 use FP\SEO\Admin\BulkAuditPage;
 use FP\SEO\Admin\PerformanceDashboard;
+use FP\SEO\Admin\RedirectManagerPage;
+use FP\SEO\Redirects\RedirectRepository;
 
 /**
  * Admin Pages service provider.
@@ -39,6 +41,7 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 	public function get_dependencies(): array {
 		return array(
 			\FP\SEO\Infrastructure\Providers\FrontendServiceProvider::class,
+			\FP\SEO\Infrastructure\Providers\RedirectsAndSitemapServiceProvider::class,
 		);
 	}
 
@@ -69,6 +72,13 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 		} );
 
 		// Performance Dashboard is registered by PerformanceServiceProvider with dependencies
+
+		// Redirect Manager Page
+		$container->singleton( RedirectManagerPage::class, function( Container $container ) {
+			$hook_manager = $container->get( HookManagerInterface::class );
+			$repository   = $container->get( RedirectRepository::class );
+			return new RedirectManagerPage( $hook_manager, $repository );
+		} );
 	}
 
 	/**
@@ -109,6 +119,13 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 			PerformanceDashboard::class,
 			'warning',
 			'Failed to register PerformanceDashboard'
+		);
+
+		$this->boot_service(
+			$container,
+			RedirectManagerPage::class,
+			'warning',
+			'Failed to register RedirectManagerPage'
 		);
 
 		// Register Schema admin menu (Advanced Schema Manager is registered by FrontendServiceProvider)

@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.11
+Stable tag: 0.9.0-pre.73
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,11 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.73 - 2026-03-14 =
+* Added: HTML Sitemap user-friendly at /sitemap/
+* Added: Redirect Manager (301/302) with bulk CSV import
+* Added: New admin menu "Redirect Manager" under SEO Performance
 
 = 0.9.0-pre.11 - 2025-01-27 =
 * **SECURITY & QUALITY UPDATE**

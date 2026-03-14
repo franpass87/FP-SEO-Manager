@@ -17,6 +17,7 @@ use FP\SEO\Infrastructure\AbstractServiceProvider;
 use FP\SEO\Infrastructure\Container;
 use FP\SEO\Infrastructure\Traits\ServiceBooterTrait;
 use FP\SEO\Data\Migrations\MigrationManager;
+use FP\SEO\Data\Migrations\CreateRedirectsTable;
 use FP\SEO\Data\Migrations\CreateScoreHistoryTable;
 use FP\SEO\Infrastructure\Contracts\LoggerInterface;
 use wpdb;
@@ -78,6 +79,7 @@ class DataServiceProvider extends AbstractServiceProvider {
 		// Note: During activation, we run migrations directly since container may not be fully initialized
 		$migrations = array(
 			new CreateScoreHistoryTable( $wpdb ),
+			new CreateRedirectsTable( $wpdb ),
 		);
 
 		$current_version = get_option( 'fp_seo_migration_version', '0.0.0' );

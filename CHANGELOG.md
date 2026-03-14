@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.9.0-pre.72] - 2026-03-08
-### Fixed
-- Bug sistematici, sicurezza e robustezza del codice
+## [0.9.0-pre.73] - 2026-03-14
+### Added
+- **Sitemap HTML user-friendly** – Pagina `/sitemap/` con elenco organizzato per post type (homepage, pagine, articoli)
+- **Redirect Manager** – Gestione 301/302 con tabella dedicata, CRUD completo, toggle attivo/inattivo
+- **Import redirect di massa** – Import CSV (source, target, type) per aggiungere molti redirect in una volta
+- **Integrazione SEO Manager** – Nuova voce menu "Redirect Manager" sotto SEO Performance
+
+### Changed
+- Migration CreateRedirectsTable (v1.1.0) per tabella `wp_fp_seo_redirects`
+- Redirect Handler su `template_redirect` priorità 1 per applicare redirect prima del caricamento pagina
+- Cache sitemap HTML invalidata automaticamente su save_post
 
 ## [0.9.0-pre.71] - 2025-12-02
 ### Added

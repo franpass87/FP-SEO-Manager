@@ -17,6 +17,7 @@ use FP\SEO\Infrastructure\Providers\PerformanceServiceProvider;
 use FP\SEO\Infrastructure\Providers\AnalysisServiceProvider;
 use FP\SEO\Infrastructure\Providers\AIServiceProvider;
 use FP\SEO\Infrastructure\Providers\GEOServiceProvider;
+use FP\SEO\Infrastructure\Providers\RedirectsAndSitemapServiceProvider;
 use FP\SEO\Infrastructure\Providers\IntegrationServiceProvider;
 use FP\SEO\Infrastructure\Providers\FrontendServiceProvider;
 use FP\SEO\Infrastructure\Providers\Admin\AdminAssetsServiceProvider;
@@ -184,6 +185,9 @@ class Plugin {
 
 			// GEO services (conditional - only if enabled)
 			new GEOServiceProvider(),
+
+			// Redirects and HTML Sitemap (always loaded)
+			new RedirectsAndSitemapServiceProvider(),
 
 			// Integration services (GSC, Indexing - conditional)
 			new IntegrationServiceProvider(),
