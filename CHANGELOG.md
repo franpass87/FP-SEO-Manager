@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.0-pre.77] - 2025-03-19
 ### Fixed
 - Redirect Manager admin: `h1.screen-reader-text` primo nel `.wrap` + titolo banner in `h2` (compat notice JS `.wrap h1`); CSS per `.fp-seo-page-header-title` e `.notice` figlie dirette del `.wrap`.
+- Rimosso `check-seo-manager.php` (file diagnostico aggiunto per errore nel commit della stessa versione).
 
 ## [0.9.0-pre.76] - 2026-03-14
 ### Added
