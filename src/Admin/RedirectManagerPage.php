@@ -466,9 +466,11 @@ class RedirectManagerPage {
 
 		?>
 		<div class="wrap fp-seo-admin-page">
+			<?php /* h1 primo nel .wrap: compat notice JS (.wrap h1).after */ ?>
+			<h1 class="screen-reader-text"><?php esc_html_e( 'Redirect Manager', 'fp-seo-performance' ); ?></h1>
 			<div class="fp-seo-page-header">
 				<div class="fp-seo-page-header-content">
-					<h1><span class="dashicons dashicons-external"></span> <?php esc_html_e( 'Redirect Manager', 'fp-seo-performance' ); ?></h1>
+					<h2 class="fp-seo-page-header-title" aria-hidden="true"><span class="dashicons dashicons-external"></span> <?php esc_html_e( 'Redirect Manager', 'fp-seo-performance' ); ?></h2>
 					<p><?php esc_html_e( 'Manage 301 and 302 redirects. Redirects are applied before any page loads.', 'fp-seo-performance' ); ?></p>
 				</div>
 				<span class="fp-seo-page-header-badge"><?php echo esc_html( (string) $total ); ?> <?php esc_html_e( 'redirects', 'fp-seo-performance' ); ?></span>

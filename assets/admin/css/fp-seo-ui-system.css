@@ -812,10 +812,19 @@
   color: var(--fp-seo-white);
 }
 
-.fp-seo-page-header-content h1 {
+.fp-seo-page-header-content .fp-seo-page-header-title {
   margin: 0 0 var(--fp-seo-space-2);
   color: inherit;
   font-size: var(--fp-seo-font-size-2xl);
+}
+
+.wrap.fp-seo-admin-page > .notice,
+.wrap.fp-seo-admin-page > div.updated,
+.wrap.fp-seo-admin-page > div.error {
+  float: none;
+  clear: both;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .fp-seo-page-header-content p {
