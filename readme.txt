@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.81
+Stable tag: 0.9.0-pre.82
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,9 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.82 - 2026-03-22 =
+* Fixed: error_log condizionati a WP_DEBUG (ConversationalVariants, EmbeddingsGenerator, Metabox)
 
 = 0.9.0-pre.81 - 2026-03-22 =
 * Fixed: console.log/warn/error condizionati a WP_DEBUG in admin JS (metabox, Q&A, AI fields, SERP preview, social scripts)

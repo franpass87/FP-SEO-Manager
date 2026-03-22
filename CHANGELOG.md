@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.82] - 2026-03-22
+### Fixed
+- Tutti gli `error_log` condizionati a `WP_DEBUG` (ConversationalVariants, EmbeddingsGenerator, Metabox render/analysis) per evitare output in produzione
+
 ## [0.9.0-pre.81] - 2026-03-22
 ### Fixed
 - Console.log/warn/error condizionati a WP_DEBUG (fpSeoPerformanceMetabox.debug, fpSeoAiFields.debug, fpSeoAiGenerator.debug, window.fpSeoDebug) in QAMetaBoxScriptsManager, SocialScriptsManager, metabox-ai-fields.js, editor-metabox-legacy.js, fp-seo-ui-system.js, serp-preview.js, ai-generator.js

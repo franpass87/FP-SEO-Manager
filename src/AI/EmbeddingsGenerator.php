@@ -159,9 +159,10 @@ class EmbeddingsGenerator {
 			);
 
 	} catch ( \Throwable $e ) {
-		error_log( 'FP SEO EmbeddingsGenerator error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
-
-			return array(
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+			error_log( 'FP SEO EmbeddingsGenerator error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
+		}
+		return array(
 				'error'   => 'API Error',
 				'message' => $e->getMessage(),
 			);

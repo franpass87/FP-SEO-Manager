@@ -152,7 +152,9 @@ class ConversationalVariants {
 			return trim( $variant );
 
 	} catch ( \Throwable $e ) {
-		error_log( 'FP SEO ConversationalVariants error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+			error_log( 'FP SEO ConversationalVariants error for post ' . ( $post->ID ?? 0 ) . ': ' . $e->getMessage() );
+		}
 		return $this->generate_rule_based_variant( $post, $type );
 	}
 	}

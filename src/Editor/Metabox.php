@@ -2367,13 +2367,17 @@ class Metabox {
 
 		if ( $enabled && ! $excluded ) {
 			try {
-				error_log( 'FP SEO DEBUG: Running analysis for post_id=' . $current_post->ID );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'FP SEO DEBUG: Running analysis for post_id=' . $current_post->ID );
+				}
 				$analysis = $this->run_analysis_for_post( $current_post );
 				
-				// ALWAYS log analysis results
+				// Log analysis results (only when WP_DEBUG)
 				$checks_count = isset( $analysis['checks'] ) && is_array( $analysis['checks'] ) ? count( $analysis['checks'] ) : 0;
-				error_log( 'FP SEO DEBUG: Analysis completed - checks_count=' . $checks_count . ', analysis_keys=' . implode( ',', array_keys( $analysis ) ) );
-				if ( $checks_count > 0 ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'FP SEO DEBUG: Analysis completed - checks_count=' . $checks_count . ', analysis_keys=' . implode( ',', array_keys( $analysis ) ) );
+				}
+				if ( $checks_count > 0 && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					$first_check = reset( $analysis['checks'] );
 					error_log( 'FP SEO DEBUG: First check keys=' . ( is_array( $first_check ) ? implode( ',', array_keys( $first_check ) ) : gettype( $first_check ) ) );
 				}
@@ -2400,8 +2404,9 @@ class Metabox {
 					);
 				}
 			} catch ( \Exception $e ) {
-				// ALWAYS log error
-				error_log( 'FP SEO DEBUG: Exception in analysis - error=' . $e->getMessage() . ', file=' . $e->getFile() . ', line=' . $e->getLine() );
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+					error_log( 'FP SEO DEBUG: Exception in analysis - error=' . $e->getMessage() . ', file=' . $e->getFile() . ', line=' . $e->getLine() );
+				}
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 					$this->logger->error( 'FP SEO: Error running analysis', array(
 						'post_id' => $current_post->ID,
@@ -2439,9 +2444,10 @@ class Metabox {
 				);
 			}
 		} else {
-			// ALWAYS log why analysis was not run
 			$reason = ! $enabled ? 'analyzer_disabled' : ( $excluded ? 'post_excluded' : 'unknown' );
-			error_log( 'FP SEO DEBUG: Analysis NOT run - reason=' . $reason . ', enabled=' . ( $enabled ? 'yes' : 'no' ) . ', excluded=' . ( $excluded ? 'yes' : 'no' ) );
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+				error_log( 'FP SEO DEBUG: Analysis NOT run - reason=' . $reason . ', enabled=' . ( $enabled ? 'yes' : 'no' ) . ', excluded=' . ( $excluded ? 'yes' : 'no' ) );
+			}
 			
 			// Debug: log why analysis was not run
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -2474,7 +2480,9 @@ class Metabox {
 			$analysis['checks'] = array();
 		}
 		
-		error_log( 'FP SEO DEBUG: Metabox::render() - Passing analysis to renderer - checks_count=' . count( $analysis['checks'] ) );
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+			error_log( 'FP SEO DEBUG: Metabox::render() - Passing analysis to renderer - checks_count=' . count( $analysis['checks'] ) );
+		}
 
 		// Use renderer to output HTML con gestione errori robusta
 		// Pass current_post instead of modifying the original $post parameter
