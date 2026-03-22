@@ -119,7 +119,7 @@ class InlineScriptsManager {
 						}
 					}
 					
-					console.log('FP SEO: Fixed homepage title from "Bozza automatica" to "' + expectedTitle + '"');
+					if (window.fpSeoPerformanceMetabox && window.fpSeoPerformanceMetabox.debug) console.log('FP SEO: Fixed homepage title from "Bozza automatica" to "' + expectedTitle + '"');
 				}
 			}
 		})();

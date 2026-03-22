@@ -87,6 +87,7 @@ class SocialScriptsManager {
 		}
 		?>
 		<script>
+		window.fpSeoDebug = <?php echo ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'true' : 'false'; ?>;
 		// CRITICAL: Wait for wp.media to be fully initialized AND WordPress core to be ready
 		// This prevents interference with WordPress core media functionality
 		(function($) {
@@ -113,7 +114,7 @@ class SocialScriptsManager {
 							setTimeout(check, 100);
 						} else {
 							// wp.media not fully available, but proceed anyway
-							console.warn('FP SEO: wp.media not fully initialized after waiting, proceeding anyway');
+							if (window.fpSeoDebug) console.warn('FP SEO: wp.media not fully initialized after waiting, proceeding anyway');
 							setTimeout(callback, 500);
 						}
 					}
@@ -138,7 +139,7 @@ class SocialScriptsManager {
 							<?php $this->render_preview_all(); ?>
 						} catch (error) {
 							// Log error but don't block execution
-							console.error('FP SEO: Error initializing social scripts:', error);
+							if (window.fpSeoDebug) console.error('FP SEO: Error initializing social scripts:', error);
 						}
 					}); // End document.ready
 				}); // End waitForWpMediaReady callback

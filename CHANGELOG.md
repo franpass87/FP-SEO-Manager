@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.81] - 2026-03-22
+### Fixed
+- Console.log/warn/error condizionati a WP_DEBUG (fpSeoPerformanceMetabox.debug, fpSeoAiFields.debug, fpSeoAiGenerator.debug, window.fpSeoDebug) in QAMetaBoxScriptsManager, SocialScriptsManager, metabox-ai-fields.js, editor-metabox-legacy.js, fp-seo-ui-system.js, serp-preview.js, ai-generator.js
+
 ## [0.9.0-pre.80] - 2026-03-22
 ### Fixed
 - LocalizationDataService: rimosso `new OpenAiClient()` (costruttore richiede Logger e Options); usa `OptionsHelper::get_option()` per verifica API key

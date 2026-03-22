@@ -124,7 +124,7 @@
 				this.showError(response.data?.message || 'Errore durante la generazione del contenuto.');
 			}
 		} catch (error) {
-			console.error('AI Generation Error:', error);
+			if (typeof fpSeoAiGenerator !== 'undefined' && fpSeoAiGenerator && fpSeoAiGenerator.debug) console.error('AI Generation Error:', error);
 			
 			// Try to extract error message from response
 			let errorMessage = 'Errore di connessione. Riprova più tardi.';
@@ -281,7 +281,7 @@
 				await navigator.clipboard.writeText(text);
 				this.showSuccessMessage('Contenuti copiati negli appunti!');
 			} catch (error) {
-				console.error('Copy error:', error);
+				if (typeof fpSeoAiGenerator !== 'undefined' && fpSeoAiGenerator && fpSeoAiGenerator.debug) console.error('Copy error:', error);
 				this.showError('Impossibile copiare negli appunti.');
 			}
 		}

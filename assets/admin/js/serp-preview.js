@@ -78,7 +78,7 @@ class SerpPreview {
 				setTimeout(tryCreate, 100 * attempts);
 			} else {
 				// Final fallback: try to create at the end of metabox
-				console.warn('FP SEO: SERP Preview section not found, creating at end of metabox');
+				if ((typeof fpSeoPerformanceMetabox !== 'undefined' && fpSeoPerformanceMetabox && fpSeoPerformanceMetabox.debug) || (typeof window.fpSeoDebug !== 'undefined' && window.fpSeoDebug)) console.warn('FP SEO: SERP Preview section not found, creating at end of metabox');
 				const metabox = document.querySelector('.fp-seo-performance-metabox');
 				if (metabox) {
 					const container = document.createElement('div');

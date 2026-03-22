@@ -882,6 +882,7 @@ class Metabox {
 				'excluded' => $excluded,
 			'aiEnabled' => $ai_enabled,
 			'apiKeyPresent' => $api_key_present,
+			'debug'    => defined( 'WP_DEBUG' ) && WP_DEBUG,
 				'initial'  => $analysis,
 				'labels'   => array(
 					'score'      => __( 'SEO Score', 'fp-seo-performance' ),
@@ -964,7 +965,7 @@ class Metabox {
 										}
 									}
 									
-									console.log('FP SEO: Fixed homepage title from "Bozza automatica" to "' + expectedTitle + '"');
+									if (window.fpSeoPerformanceMetabox && window.fpSeoPerformanceMetabox.debug) console.log('FP SEO: Fixed homepage title from "Bozza automatica" to "' + expectedTitle + '"');
 								}
 							}
 						})();

@@ -79,6 +79,7 @@ class QAMetaBoxScriptsManager {
 		}
 		?>
 		<script>
+		window.fpSeoDebug = window.fpSeoDebug || <?php echo ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'true' : 'false'; ?>;
 		jQuery(document).ready(function($) {
 			<?php $this->render_generate_qa_handler(); ?>
 			<?php $this->render_update_qa_list_function(); ?>
@@ -96,39 +97,39 @@ class QAMetaBoxScriptsManager {
 				if (!hiddenValue || hiddenValue === '[]' || hiddenPairs.length === 0) {
 					if (domPairs.length > 0) {
 						updateQAHiddenField(domPairs);
-						console.log('[FP-SEO] Initialized hidden field with', domPairs.length, 'Q&A pairs from DOM');
+						if (window.fpSeoDebug) console.log('[FP-SEO] Initialized hidden field with', domPairs.length, 'Q&A pairs from DOM');
 					}
 				} else if (domPairs.length > 0) {
 					// If both have data, DOM is source of truth (it reflects current UI state)
 					// But only update if they differ to avoid unnecessary updates
 					if (JSON.stringify(domPairs) !== JSON.stringify(hiddenPairs)) {
 						updateQAHiddenField(domPairs);
-						console.log('[FP-SEO] Synced hidden field with DOM (DOM had different data)');
+						if (window.fpSeoDebug) console.log('[FP-SEO] Synced hidden field with DOM (DOM had different data)');
 					}
 				}
 			}
 			
 		// Function to sync Q&A pairs to hidden field before form submission
 		function syncQAPairsToHiddenField() {
-			console.log('[FP-SEO] syncQAPairsToHiddenField called');
-			
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField called');
+
 			const $hiddenField = $('#fp-seo-qa-pairs-data');
 			const $form = $('#post');
-			
+
 			if (!$hiddenField.length) {
-				console.error('[FP-SEO] syncQAPairsToHiddenField - Hidden field not found!');
+				if (window.fpSeoDebug) console.error('[FP-SEO] syncQAPairsToHiddenField - Hidden field not found!');
 				return;
 			}
-			
+
 			if (!$form.length) {
-				console.error('[FP-SEO] syncQAPairsToHiddenField - Form not found!');
+				if (window.fpSeoDebug) console.error('[FP-SEO] syncQAPairsToHiddenField - Form not found!');
 				return;
 			}
 			
 			// CRITICAL: Always read from DOM first, as hidden field might be stale
 			// DOM is the source of truth for current UI state
 			let allPairs = getAllQAPairsFromDOM();
-			console.log('[FP-SEO] syncQAPairsToHiddenField - DOM pairs:', allPairs ? allPairs.length : 0);
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField - DOM pairs:', allPairs ? allPairs.length : 0);
 			
 			// If DOM extraction failed or returned empty, check hidden field as fallback
 			// But only if we're not explicitly trying to clear it (i.e., DOM shows empty list)
@@ -138,7 +139,7 @@ class QAMetaBoxScriptsManager {
 				const pairElements = document.querySelectorAll('#fp-seo-qa-list .fp-seo-qa-pair');
 				if (pairElements.length > 0) {
 					// DOM has pairs but extraction failed - keep hidden field value
-					console.warn('[FP-SEO] syncQAPairsToHiddenField - DOM has', pairElements.length, 'pairs but extraction failed, keeping hidden field value');
+					if (window.fpSeoDebug) console.warn('[FP-SEO] syncQAPairsToHiddenField - DOM has', pairElements.length, 'pairs but extraction failed, keeping hidden field value');
 					allPairs = hiddenPairs;
 				} else {
 					// DOM is truly empty - use empty array to clear saved Q&A
@@ -150,12 +151,12 @@ class QAMetaBoxScriptsManager {
 			// Use empty array if no pairs found
 			const pairsToSave = allPairs || [];
 			updateQAHiddenField(pairsToSave);
-			console.log('[FP-SEO] syncQAPairsToHiddenField - Updated hidden field with', pairsToSave.length, 'Q&A pairs');
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField - Updated hidden field with', pairsToSave.length, 'Q&A pairs');
 			
 			// Ensure field is inside form
 			if (!$form[0].contains($hiddenField[0])) {
 				$form.append($hiddenField);
-				console.log('[FP-SEO] Moved hidden field into form');
+				if (window.fpSeoDebug) console.log('[FP-SEO] Moved hidden field into form');
 			}
 			
 			// Trigger change event to ensure WordPress recognizes the field change
@@ -177,9 +178,9 @@ class QAMetaBoxScriptsManager {
 			$form[0].appendChild(cloneInput);
 			
 			const finalValue = $hiddenField.val();
-			console.log('[FP-SEO] syncQAPairsToHiddenField - Final hidden field value length:', finalValue ? finalValue.length : 0);
-			console.log('[FP-SEO] syncQAPairsToHiddenField - Final hidden field value (first 500 chars):', finalValue ? finalValue.substring(0, 500) : 'empty');
-			console.log('[FP-SEO] syncQAPairsToHiddenField - Added clone to form with value length:', qaData.length);
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField - Final hidden field value length:', finalValue ? finalValue.length : 0);
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField - Final hidden field value (first 500 chars):', finalValue ? finalValue.substring(0, 500) : 'empty');
+			if (window.fpSeoDebug) console.log('[FP-SEO] syncQAPairsToHiddenField - Added clone to form with value length:', qaData.length);
 		}
 		
 		// CRITICAL: Sync Q&A pairs continuously to ensure hidden field is always up-to-date
@@ -192,7 +193,7 @@ class QAMetaBoxScriptsManager {
 				
 				// Only sync if DOM and hidden field differ
 				if (JSON.stringify(domPairs) !== JSON.stringify(hiddenPairs)) {
-					console.log('[FP-SEO] Auto-sync detected difference, updating hidden field');
+					if (window.fpSeoDebug) console.log('[FP-SEO] Auto-sync detected difference, updating hidden field');
 					updateQAHiddenField(domPairs);
 				}
 			}
@@ -204,13 +205,13 @@ class QAMetaBoxScriptsManager {
 		if ($form.length) {
 			// 1. Form submit event (standard form submission)
 			$form.on('submit', function(e) {
-				console.log('[FP-SEO] Form submit handler triggered');
+				if (window.fpSeoDebug) console.log('[FP-SEO] Form submit handler triggered');
 				syncQAPairsToHiddenField();
 				// Force field to be included by ensuring it's in the form
 				const $hiddenField = $('#fp-seo-qa-pairs-data');
 				if ($hiddenField.length && !$form[0].contains($hiddenField[0])) {
 					$form.append($hiddenField);
-					console.log('[FP-SEO] Moved hidden field into form');
+					if (window.fpSeoDebug) console.log('[FP-SEO] Moved hidden field into form');
 				}
 			});
 			
@@ -219,7 +220,7 @@ class QAMetaBoxScriptsManager {
 				const originalAutosave = wp.autosave.server.triggerSave;
 				if (originalAutosave) {
 					wp.autosave.server.triggerSave = function() {
-						console.log('[FP-SEO] WordPress autosave intercepted');
+						if (window.fpSeoDebug) console.log('[FP-SEO] WordPress autosave intercepted');
 						syncQAPairsToHiddenField();
 						return originalAutosave.apply(this, arguments);
 					};
@@ -228,14 +229,14 @@ class QAMetaBoxScriptsManager {
 			
 			// 3. Intercept all button clicks (mousedown for earliest interception)
 			$(document).on('mousedown', '#save-post, #publish, button[name="save"], input[name="publish"], #save-action input', function(e) {
-				console.log('[FP-SEO] Save/Publish button mousedown - syncing Q&A');
+				if (window.fpSeoDebug) console.log('[FP-SEO] Save/Publish button mousedown - syncing Q&A');
 				syncQAPairsToHiddenField();
 				// Ensure field is in form
 				const $hiddenField = $('#fp-seo-qa-pairs-data');
 				const $form = $('#post');
 				if ($hiddenField.length && $form.length && !$form[0].contains($hiddenField[0])) {
 					$form.append($hiddenField.clone().attr('id', 'fp-seo-qa-pairs-data-clone'));
-					console.log('[FP-SEO] Added hidden field clone to form');
+					if (window.fpSeoDebug) console.log('[FP-SEO] Added hidden field clone to form');
 				}
 			});
 			
@@ -245,7 +246,7 @@ class QAMetaBoxScriptsManager {
 				if (target && (target.id === 'save-post' || target.id === 'publish' || 
 				    target.name === 'save' || target.name === 'publish' ||
 				    (target.tagName === 'INPUT' && target.type === 'submit'))) {
-					console.log('[FP-SEO] Save/Publish button clicked (capture) - syncing Q&A');
+					if (window.fpSeoDebug) console.log('[FP-SEO] Save/Publish button clicked (capture) - syncing Q&A');
 					
 					// CRITICAL: Sync FIRST synchronously, then create clone
 					// Don't use setTimeout - sync immediately
@@ -271,8 +272,8 @@ class QAMetaBoxScriptsManager {
 						cloneInput.value = qaData; // Set value directly
 						$form[0].appendChild(cloneInput);
 						
-						console.log('[FP-SEO] Added Q&A data clone to form with value length:', qaData.length);
-						console.log('[FP-SEO] Clone value (first 200 chars):', qaData.substring(0, 200));
+						if (window.fpSeoDebug) console.log('[FP-SEO] Added Q&A data clone to form with value length:', qaData.length);
+						if (window.fpSeoDebug) console.log('[FP-SEO] Clone value (first 200 chars):', qaData.substring(0, 200));
 						
 						// Also ensure original field is in form
 						if (!$form[0].contains($hiddenField[0])) {
@@ -314,14 +315,14 @@ class QAMetaBoxScriptsManager {
 									// Check if already present
 									if (!data.has('fp_seo_qa_pairs_data')) {
 										data.append('fp_seo_qa_pairs_data', qaData);
-										console.log('[FP-SEO] Added Q&A data to FormData, length:', qaData.length);
+										if (window.fpSeoDebug) console.log('[FP-SEO] Added Q&A data to FormData, length:', qaData.length);
 									}
 								} else if (typeof data === 'string') {
 									// Add to URL-encoded string if not already present
 									if (!data.includes('fp_seo_qa_pairs_data=')) {
 										const separator = data.includes('&') ? '&' : '';
 										data = data + separator + 'fp_seo_qa_pairs_data=' + encodeURIComponent(qaData);
-										console.log('[FP-SEO] Added Q&A data to URL-encoded string, length:', qaData.length);
+										if (window.fpSeoDebug) console.log('[FP-SEO] Added Q&A data to URL-encoded string, length:', qaData.length);
 									}
 								}
 							}
@@ -356,13 +357,13 @@ class QAMetaBoxScriptsManager {
 							if (options.body instanceof FormData) {
 								if (!options.body.has('fp_seo_qa_pairs_data')) {
 									options.body.append('fp_seo_qa_pairs_data', qaData);
-									console.log('[FP-SEO] Added Q&A data to fetch FormData');
+									if (window.fpSeoDebug) console.log('[FP-SEO] Added Q&A data to fetch FormData');
 								}
 							} else if (typeof options.body === 'string') {
 								if (!options.body.includes('fp_seo_qa_pairs_data=')) {
 									const separator = options.body.includes('&') ? '&' : '';
 									options.body += separator + 'fp_seo_qa_pairs_data=' + encodeURIComponent(qaData);
-									console.log('[FP-SEO] Added Q&A data to fetch body string');
+									if (window.fpSeoDebug) console.log('[FP-SEO] Added Q&A data to fetch body string');
 								}
 							}
 						}
@@ -391,14 +392,14 @@ class QAMetaBoxScriptsManager {
 		?>
 		// Generate Q&A with AI
 		$('#fp-seo-generate-qa-btn').on('click', function() {
-			console.log('[FP-SEO] Q&A Generate button clicked');
+			if (window.fpSeoDebug) console.log('[FP-SEO] Q&A Generate button clicked');
 			const $btn = $(this);
 			const postId = $btn.data('post-id');
 			const originalText = $btn.html();
 
-			console.log('[FP-SEO] Q&A Generate - postId:', postId);
+			if (window.fpSeoDebug) console.log('[FP-SEO] Q&A Generate - postId:', postId);
 			if (!postId) {
-				console.error('[FP-SEO] Q&A Generate - No post ID found');
+				if (window.fpSeoDebug) console.error('[FP-SEO] Q&A Generate - No post ID found');
 				alert('Errore: Post ID non trovato.');
 				return;
 			}
@@ -406,7 +407,7 @@ class QAMetaBoxScriptsManager {
 			$btn.prop('disabled', true).html('⏳ Generazione in corso...');
 
 			const nonce = '<?php echo esc_js( wp_create_nonce( 'fp_seo_ai_first' ) ); ?>';
-			console.log('[FP-SEO] Q&A Generate - Sending AJAX request', {
+			if (window.fpSeoDebug) console.log('[FP-SEO] Q&A Generate - Sending AJAX request', {
 				action: 'fp_seo_generate_qa',
 				post_id: postId,
 				nonce: nonce ? nonce.substring(0, 10) + '...' : 'MISSING'
@@ -424,7 +425,7 @@ class QAMetaBoxScriptsManager {
 					nonce: nonce
 				},
 				success: function(response) {
-					console.log('[FP-SEO] Q&A Generate - Success response:', response);
+					if (window.fpSeoDebug) console.log('[FP-SEO] Q&A Generate - Success response:', response);
 					if (response.success && response.data && response.data.qa_pairs) {
 						$btn.prop('disabled', false).html('✅ ' + response.data.message);
 						
@@ -436,13 +437,13 @@ class QAMetaBoxScriptsManager {
 							$btn.html(originalText);
 						}, 2000);
 					} else {
-						console.warn('[FP-SEO] Q&A Generate - Success but no pairs:', response);
+						if (window.fpSeoDebug) console.warn('[FP-SEO] Q&A Generate - Success but no pairs:', response);
 						$btn.prop('disabled', false).html(originalText);
 						alert('Errore: ' + (response.data?.message || 'Generazione fallita'));
 					}
 				},
 				error: function(xhr, status, error) {
-					console.error('[FP-SEO] Q&A Generation Error:', {
+					if (window.fpSeoDebug) console.error('[FP-SEO] Q&A Generation Error:', {
 						status: status,
 						error: error,
 						responseText: xhr.responseText,
@@ -470,7 +471,7 @@ class QAMetaBoxScriptsManager {
 			const $hiddenField = $('#fp-seo-qa-pairs-data');
 			if ($hiddenField.length) {
 				$hiddenField.val(JSON.stringify(qaPairs || []));
-				console.log('[FP-SEO] Updated hidden field with', qaPairs ? qaPairs.length : 0, 'Q&A pairs');
+				if (window.fpSeoDebug) console.log('[FP-SEO] Updated hidden field with', qaPairs ? qaPairs.length : 0, 'Q&A pairs');
 			}
 		}
 		
@@ -484,7 +485,7 @@ class QAMetaBoxScriptsManager {
 						return parsed;
 					}
 				} catch (e) {
-					console.error('[FP-SEO] Error parsing hidden field JSON:', e);
+					if (window.fpSeoDebug) console.error('[FP-SEO] Error parsing hidden field JSON:', e);
 				}
 			}
 			return [];
@@ -495,12 +496,12 @@ class QAMetaBoxScriptsManager {
 			const pairs = [];
 			const qaList = document.querySelector('#fp-seo-qa-list');
 			if (!qaList) {
-				console.log('[FP-SEO] getAllQAPairsFromDOM - qaList not found');
+				if (window.fpSeoDebug) console.log('[FP-SEO] getAllQAPairsFromDOM - qaList not found');
 				return pairs;
 			}
 			
 			const pairElements = qaList.querySelectorAll('.fp-seo-qa-pair');
-			console.log('[FP-SEO] getAllQAPairsFromDOM - Found', pairElements.length, 'pair elements');
+			if (window.fpSeoDebug) console.log('[FP-SEO] getAllQAPairsFromDOM - Found', pairElements.length, 'pair elements');
 			
 			pairElements.forEach(function(pairEl, index) {
 				// Use DOM selectors to extract Q&A - more reliable than regex
@@ -586,9 +587,9 @@ class QAMetaBoxScriptsManager {
 						question_type: typeMatch ? typeMatch[1] : 'manual',
 						keywords: []
 					});
-					console.log('[FP-SEO] getAllQAPairsFromDOM - Extracted pair', index, ':', question.substring(0, 50));
+					if (window.fpSeoDebug) console.log('[FP-SEO] getAllQAPairsFromDOM - Extracted pair', index, ':', question.substring(0, 50));
 				} else {
-					console.warn('[FP-SEO] getAllQAPairsFromDOM - Could not extract Q&A from pair', index, {
+					if (window.fpSeoDebug) console.warn('[FP-SEO] getAllQAPairsFromDOM - Could not extract Q&A from pair', index, {
 						question: question ? question.substring(0, 30) : 'MISSING',
 						answer: answer ? answer.substring(0, 30) : 'MISSING',
 						html: pairEl.innerHTML.substring(0, 200)
@@ -596,7 +597,7 @@ class QAMetaBoxScriptsManager {
 				}
 			});
 			
-			console.log('[FP-SEO] getAllQAPairsFromDOM - Returning', pairs.length, 'pairs');
+			if (window.fpSeoDebug) console.log('[FP-SEO] getAllQAPairsFromDOM - Returning', pairs.length, 'pairs');
 			return pairs;
 		}
 		
@@ -604,7 +605,7 @@ class QAMetaBoxScriptsManager {
 		function updateQAList(qaPairs) {
 			const $list = $('#fp-seo-qa-list');
 			
-			console.log('[FP-SEO] updateQAList called with', qaPairs ? qaPairs.length : 0, 'pairs');
+			if (window.fpSeoDebug) console.log('[FP-SEO] updateQAList called with', qaPairs ? qaPairs.length : 0, 'pairs');
 			
 			// Update hidden field
 			updateQAHiddenField(qaPairs);
@@ -636,7 +637,7 @@ class QAMetaBoxScriptsManager {
 			});
 			
 			const totalCount = qaPairs.length;
-			console.log('[FP-SEO] updateQAList - Total count:', totalCount);
+			if (window.fpSeoDebug) console.log('[FP-SEO] updateQAList - Total count:', totalCount);
 			
 			html += '<p style="text-align: center; font-size: 13px; color: #64748b;">';
 			html += '<?php echo esc_html__( 'Totale: ', 'fp-seo-performance' ); ?>' + totalCount + ' <?php echo esc_html__( 'Q&A pairs | Endpoint: ', 'fp-seo-performance' ); ?>';
@@ -682,7 +683,7 @@ class QAMetaBoxScriptsManager {
 					// This ensures the deleted Q&A is not saved when the form is submitted
 					const allPairs = getAllQAPairsFromDOM();
 					updateQAHiddenField(allPairs);
-					console.log('[FP-SEO] Delete handler - Updated hidden field with', allPairs ? allPairs.length : 0, 'Q&A pairs after deletion');
+					if (window.fpSeoDebug) console.log('[FP-SEO] Delete handler - Updated hidden field with', allPairs ? allPairs.length : 0, 'Q&A pairs after deletion');
 				});
 			}
 		});
@@ -716,7 +717,7 @@ class QAMetaBoxScriptsManager {
 						existingPairs = [];
 					}
 				} catch (e) {
-					console.error('[FP-SEO] Error parsing existing Q&A pairs:', e);
+					if (window.fpSeoDebug) console.error('[FP-SEO] Error parsing existing Q&A pairs:', e);
 					existingPairs = [];
 				}
 			}

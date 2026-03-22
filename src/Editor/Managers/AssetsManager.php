@@ -195,6 +195,7 @@ class AssetsManager {
 			'excluded' => $excluded,
 			'aiEnabled' => $ai_enabled,
 			'apiKeyPresent' => $api_key_present,
+			'debug'    => defined( 'WP_DEBUG' ) && WP_DEBUG,
 			'initial'  => $analysis,
 			'labels'   => array(
 				'score'      => __( 'SEO Score', 'fp-seo-performance' ),
@@ -228,6 +229,7 @@ class AssetsManager {
 				'nonce'   => wp_create_nonce( 'fp_seo_ai_generate' ),
 				'postId'  => (int) $post->ID,
 				'enabled' => $ai_enabled && $api_key_present,
+				'debug'   => defined( 'WP_DEBUG' ) && WP_DEBUG,
 			)
 		);
 
@@ -240,6 +242,7 @@ class AssetsManager {
 				'nonce'   => wp_create_nonce( 'fp_seo_ai_generate' ),
 				'postId'  => (int) $post->ID,
 				'enabled' => $ai_enabled && $api_key_present,
+				'debug'   => defined( 'WP_DEBUG' ) && WP_DEBUG,
 			)
 		);
 	}

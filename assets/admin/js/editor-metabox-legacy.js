@@ -9,31 +9,32 @@
 	'use strict';
 
 	if (!$ || !window || !document) {
-		console.error('FP SEO: jQuery or window not available');
+		if (window.fpSeoPerformanceMetabox && window.fpSeoPerformanceMetabox.debug) console.error('FP SEO: jQuery or window not available');
 		return;
 	}
 
 	// Attende il caricamento del DOM
 	$(document).ready(function() {
-		console.log('FP SEO: Editor metabox initializing...');
-		
+		var dbg = window.fpSeoPerformanceMetabox && window.fpSeoPerformanceMetabox.debug;
+		if (dbg) console.log('FP SEO: Editor metabox initializing...');
+
 		const config = window.fpSeoPerformanceMetabox;
 
 		if (!config) {
-			console.error('FP SEO: Config not found! window.fpSeoPerformanceMetabox is undefined');
-			console.log('Available:', Object.keys(window).filter(k => k.includes('fp')));
+			if (dbg) console.error('FP SEO: Config not found! window.fpSeoPerformanceMetabox is undefined');
+			if (dbg) console.log('Available:', Object.keys(window).filter(k => k.includes('fp')));
 			return;
 		}
 
-		console.log('FP SEO: Config loaded', config);
+		if (dbg) console.log('FP SEO: Config loaded', config);
 
 		const $container = $('[data-fp-seo-metabox]');
 		if (!$container.length) {
-			console.error('FP SEO: Metabox container not found');
+			if (dbg) console.error('FP SEO: Metabox container not found');
 			return;
 		}
 
-		console.log('FP SEO: Container found', $container);
+		if (dbg) console.log('FP SEO: Container found', $container);
 
 		const elements = {
 			container: $container[0],
@@ -56,7 +57,7 @@
 			return;
 		}
 
-		console.log('FP SEO: Binding events to editor...');
+		if (dbg) console.log('FP SEO: Binding events to editor...');
 
 		// Collega eventi Classic Editor
 		bindClassicEditor();
@@ -64,7 +65,7 @@
 		// Collega eventi Gutenberg
 		bindGutenberg();
 
-		console.log('FP SEO: Events bound successfully');
+		if (dbg) console.log('FP SEO: Events bound successfully');
 
 		/**
 		 * Collega eventi Classic Editor
@@ -75,7 +76,7 @@
 			fields.forEach(function(id) {
 				const field = document.getElementById(id);
 				if (field) {
-					console.log('FP SEO: Binding', id);
+					if (dbg) console.log('FP SEO: Binding', id);
 					$(field).on('input keyup change', scheduleAnalysis);
 				}
 			});
@@ -90,7 +91,7 @@
 		 */
 		function bindGutenberg() {
 			if (!window.wp || !window.wp.data) {
-				console.log('FP SEO: Gutenberg not detected, using Classic mode');
+				if (dbg) console.log('FP SEO: Gutenberg not detected, using Classic mode');
 				return;
 			}
 
@@ -99,7 +100,7 @@
 				return;
 			}
 
-			console.log('FP SEO: Gutenberg detected, subscribing to changes');
+			if (dbg) console.log('FP SEO: Gutenberg detected, subscribing to changes');
 			window.wp.data.subscribe(scheduleAnalysis);
 		}
 
@@ -107,7 +108,7 @@
 		 * Programma analisi con debounce
 		 */
 		function scheduleAnalysis() {
-			console.log('FP SEO: scheduleAnalysis triggered');
+			if (dbg) console.log('FP SEO: scheduleAnalysis triggered');
 			
 			if (!config.enabled || config.excluded) {
 				return;
@@ -120,7 +121,7 @@
 			setMessage(config.labels.loading || 'Analyzing...');
 
 			debounceTimer = setTimeout(function() {
-				console.log('FP SEO: Performing analysis...');
+				if (dbg) console.log('FP SEO: Performing analysis...');
 				performAnalysis();
 			}, 500);
 		}
@@ -131,7 +132,7 @@
 		function performAnalysis() {
 			const payload = gatherPayload();
 
-			console.log('FP SEO: Sending AJAX request...', payload);
+			if (dbg) console.log('FP SEO: Sending AJAX request...', payload);
 
 			$.ajax({
 				url: config.ajaxUrl,
@@ -148,13 +149,13 @@
 					secondaryKeywords: payload.secondaryKeywords
 				},
 				success: function(response, textStatus, jqXHR) {
-					console.log('FP SEO: AJAX success', response);
+					if (dbg) console.log('FP SEO: AJAX success', response);
 					
 					if (response.success && response.data) {
 						updateScore(response.data);
 						setMessage('');
 					} else {
-						console.error('FP SEO: AJAX error', response);
+						if (dbg) console.error('FP SEO: AJAX error', response);
 						
 						// Check for nonce expiration via response code
 						if (response.data && response.data.code === 'rest_cookie_invalid_nonce') {
@@ -165,7 +166,7 @@
 					}
 				},
 				error: function(xhr, status, error) {
-					console.error('FP SEO: AJAX failed', status, error, xhr);
+					if (dbg) console.error('FP SEO: AJAX failed', status, error, xhr);
 					
 					// Handle different error types
 					if (status === 'timeout') {
@@ -228,7 +229,7 @@
 		$(elements.scoreValue).text(score);
 		$(elements.scoreWrapper).attr('data-status', status);
 
-		console.log('FP SEO: Score updated to', score, 'status:', status);
+		if (dbg) console.log('FP SEO: Score updated to', score, 'status:', status);
 
 		// Aggiorna anche i check dell'analisi
 		if (data.checks && Array.isArray(data.checks)) {
@@ -242,15 +243,15 @@
 	function updateAnalysisChecks(checks) {
 		const $analysisList = $('[data-fp-seo-analysis]');
 		if (!$analysisList.length) {
-			console.warn('FP SEO: Analysis list not found');
+			if (dbg) console.warn('FP SEO: Analysis list not found');
 			return;
 		}
 
-		console.log('FP SEO: Updating analysis checks', checks.length, 'items');
+		if (dbg) console.log('FP SEO: Updating analysis checks', checks.length, 'items');
 
 		// Validazione input: checks deve essere un array
 		if (!Array.isArray(checks)) {
-			console.error('FP SEO: checks is not an array', typeof checks);
+			if (dbg) console.error('FP SEO: checks is not an array', typeof checks);
 			return;
 		}
 
@@ -258,7 +259,7 @@
 		if (checks.length === 0) {
 			const $parent = $analysisList.parent();
 			if (!$parent.length) {
-				console.warn('FP SEO: Parent element not found');
+				if (dbg) console.warn('FP SEO: Parent element not found');
 				return;
 			}
 			
@@ -337,7 +338,7 @@
 		// Aggiorna l'HTML
 		$analysisList.html(html);
 
-		console.log('FP SEO: Analysis UI updated with', checks.length, 'checks');
+		if (dbg) console.log('FP SEO: Analysis UI updated with', checks.length, 'checks');
 	}
 
 	/**
@@ -346,7 +347,7 @@
 	function updateSummaryBadges(counts) {
 		const $summary = $('.fp-seo-performance-summary');
 		if (!$summary.length) {
-			console.warn('FP SEO: Summary badges not found');
+			if (dbg) console.warn('FP SEO: Summary badges not found');
 			return;
 		}
 
@@ -393,7 +394,7 @@
 			$(elements.message).text(text).toggle(!!text);
 		}
 
-		console.log('FP SEO: Initialization complete!');
+		if (dbg) console.log('FP SEO: Initialization complete!');
 	});
 
 })(jQuery, window, document);

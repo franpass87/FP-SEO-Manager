@@ -168,7 +168,7 @@
                 const $preview = $button.data('preview-target');
                 
                 if (typeof wp === 'undefined' || !wp.media) {
-                    console.error('FP SEO: wp.media is not available');
+                    if ((typeof fpSeoPerformanceMetabox !== 'undefined' && fpSeoPerformanceMetabox && fpSeoPerformanceMetabox.debug) || (typeof window.fpSeoDebug !== 'undefined' && window.fpSeoDebug)) console.error('FP SEO: wp.media is not available');
                     return;
                 }
                 

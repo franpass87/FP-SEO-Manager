@@ -11,6 +11,8 @@
 (function($) {
 	'use strict';
 
+	var fpSeoDbg = (typeof fpSeoPerformanceMetabox !== 'undefined' && fpSeoPerformanceMetabox && fpSeoPerformanceMetabox.debug) || (typeof fpSeoAiFields !== 'undefined' && fpSeoAiFields && fpSeoAiFields.debug);
+
 	// Wait for DOM and jQuery to be ready
 	var initAttempts = 0;
 	var maxAttempts = 50; // Max 5 seconds (50 * 100ms)
@@ -24,7 +26,7 @@
 				setTimeout(initAiFieldGenerator, 100);
 				return;
 			}
-			console.error('FP SEO: jQuery not available after', initAttempts, 'attempts');
+			if (fpSeoDbg) console.error('FP SEO: jQuery not available after', initAttempts, 'attempts');
 			return;
 		}
 		
@@ -37,7 +39,7 @@
 			var ajaxUrl = typeof fpSeoPerformanceMetabox !== 'undefined' ? fpSeoPerformanceMetabox.ajaxUrl : (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
 			
 			if (!ajaxUrl) {
-				console.error('FP SEO: ajaxurl not available');
+				if (fpSeoDbg) console.error('FP SEO: ajaxurl not available');
 				return;
 			}
 
@@ -115,15 +117,15 @@
 				const $buttons = $('.fp-seo-ai-generate-field-btn');
 				if ($buttons.length === 0) {
 					if (initAttempts < maxAttempts) {
-						console.warn('FP SEO: AI buttons not found, retrying... (attempt', initAttempts, ')');
+						if (fpSeoDbg) console.warn('FP SEO: AI buttons not found, retrying... (attempt', initAttempts, ')');
 						setTimeout(initAiFieldGenerator, 200);
 						return;
 					}
-					console.error('FP SEO: AI buttons not found after', initAttempts, 'attempts');
+					if (fpSeoDbg) console.error('FP SEO: AI buttons not found after', initAttempts, 'attempts');
 					return;
 				}
 				
-				console.log('FP SEO: Found', $buttons.length, 'AI buttons');
+				if (fpSeoDbg) console.log('FP SEO: Found', $buttons.length, 'AI buttons');
 		
 				// Remove any existing handlers to prevent duplicates
 				$(document).off('click', '.fp-seo-ai-generate-field-btn');
@@ -133,7 +135,7 @@
 					e.preventDefault();
 					e.stopPropagation();
 					
-					console.log('FP SEO: AI button clicked', this);
+					if (fpSeoDbg) console.log('FP SEO: AI button clicked', this);
 			
 					const $btn = $(this);
 					const field = $btn.data('field');
@@ -141,12 +143,12 @@
 					const postId = $btn.data('post-id');
 					const nonce = $btn.data('nonce');
 					
-					console.log('FP SEO: Button data', { field, targetId, postId, nonce: nonce ? 'present' : 'missing' });
+					if (fpSeoDbg) console.log('FP SEO: Button data', { field, targetId, postId, nonce: nonce ? 'present' : 'missing' });
 					
 					// Validation
 					if (!field || !targetId || !postId || !nonce) {
 						alert('Configurazione non valida. Verifica che il plugin sia configurato correttamente.');
-						console.error('FP SEO: Invalid button configuration', { field, targetId, postId, nonce: !!nonce });
+						if (fpSeoDbg) console.error('FP SEO: Invalid button configuration', { field, targetId, postId, nonce: !!nonce });
 						return;
 					}
 
@@ -234,7 +236,7 @@
 							}
 						},
 						error: function(xhr, status, error) {
-							console.error('AI Field Generation Error:', error);
+							if (fpSeoDbg) console.error('AI Field Generation Error:', error);
 							
 							let errorMessage = 'Errore di connessione. Riprova più tardi.';
 							
@@ -271,13 +273,13 @@
 					document.head.appendChild(style);
 				}
 				
-				console.log('FP SEO: AI Field Generator initialized successfully');
-				console.log('FP SEO: AJAX URL =', ajaxUrl);
+				if (fpSeoDbg) console.log('FP SEO: AI Field Generator initialized successfully');
+				if (fpSeoDbg) console.log('FP SEO: AJAX URL =', ajaxUrl);
 				
 				// Test if buttons are clickable
 				$('.fp-seo-ai-generate-field-btn').each(function() {
 					const $btn = $(this);
-					console.log('FP SEO: Button found', {
+					if (fpSeoDbg) console.log('FP SEO: Button found', {
 						field: $btn.data('field'),
 						targetId: $btn.data('target-id'),
 						visible: $btn.is(':visible'),
@@ -308,7 +310,7 @@
 			if (typeof jQuery !== 'undefined') {
 				jQuery(document).ready(initAiFieldGenerator);
 			} else {
-				console.error('FP SEO: jQuery not loaded after 5 seconds');
+				if (fpSeoDbg) console.error('FP SEO: jQuery not loaded after 5 seconds');
 			}
 		}, 5000);
 	} else {
@@ -316,14 +318,14 @@
 		jQuery(document).ready(initAiFieldGenerator);
 	}
 	
-	// Debug log
-	console.log('FP SEO: AI Field Generator script loaded');
+	if (fpSeoDbg) console.log('FP SEO: AI Field Generator script loaded');
 })(typeof jQuery !== 'undefined' ? jQuery : null);
 
 // Ensure SEO fields are always included in POST, even if empty
 // This fixes the issue where empty fields are not sent in the form submission
 // Register this handler separately to ensure it's always executed
 (function($) {
+	var fpSeoDbg2 = (typeof fpSeoPerformanceMetabox !== 'undefined' && fpSeoPerformanceMetabox && fpSeoPerformanceMetabox.debug) || (typeof fpSeoAiFields !== 'undefined' && fpSeoAiFields && fpSeoAiFields.debug);
 	if (typeof $ === 'undefined') {
 		// Wait for jQuery
 		var checkJQuery = setInterval(function() {
@@ -352,7 +354,7 @@
 			var $form = $('#post');
 			
 			if (!$form.length) {
-				console.error('FP SEO: Form #post not found');
+				if (fpSeoDbg2) console.error('FP SEO: Form #post not found');
 				return;
 			}
 			
@@ -596,7 +598,7 @@
 					}));
 				}
 				
-				console.log('FP SEO: Fields ensured in form', {
+				if (fpSeoDbg2) console.log('FP SEO: Fields ensured in form', {
 					title: titleValue ? titleValue.substring(0, 30) + '...' : '(empty)',
 					description: descValue ? descValue.substring(0, 30) + '...' : '(empty)',
 					focusKeyword: focusKeywordValue ? focusKeywordValue.substring(0, 30) + '...' : '(empty)',
@@ -616,7 +618,7 @@
 			// IMPORTANT: Use 'submit' event with early binding to ensure we run before Salient handlers
 			// We use jQuery's event system which respects the order of registration
 			$form.on('submit', function(e) {
-				console.log('FP SEO: Form submit intercepted - ensuring all fields are present');
+				if (fpSeoDbg2) console.log('FP SEO: Form submit intercepted - ensuring all fields are present');
 				
 				// CRITICAL: Always ensure fields are present, even if metabox wasn't interacted with
 				// This prevents SEO fields from being lost when saving from other metaboxes
@@ -645,7 +647,7 @@
 				var secondaryKeywordsValue = $secondaryKeywordsField.length ? ($secondaryKeywordsField.val() || '') : '';
 				
 				// Log what we're about to submit
-				console.log('FP SEO: About to submit form with values:', {
+				if (fpSeoDbg2) console.log('FP SEO: About to submit form with values:', {
 					title: titleValue,
 					desc: descValue,
 					focusKeyword: focusKeywordValue,
@@ -723,7 +725,7 @@
 				}
 				
 				// Final verification
-				console.log('FP SEO: Final verification before submit:', {
+				if (fpSeoDbg2) console.log('FP SEO: Final verification before submit:', {
 					hiddenTitleExists: $form.find('#fp-seo-title-hidden-backup').length > 0,
 					hiddenTitleValue: $form.find('#fp-seo-title-hidden-backup').val(),
 					hiddenDescExists: $form.find('#fp-seo-meta-description-hidden-backup').length > 0,
@@ -842,7 +844,7 @@
 					value: '1'
 				}));
 				
-				console.log('FP SEO: Fields verified before submit', {
+				if (fpSeoDbg2) console.log('FP SEO: Fields verified before submit', {
 					title: titleValue ? titleValue.substring(0, 30) + '...' : '(empty)',
 					description: descValue ? descValue.substring(0, 30) + '...' : '(empty)',
 					hiddenTitleExists: $form.find('#fp-seo-title-hidden-backup').length > 0,
@@ -856,14 +858,14 @@
 			// Also ensure fields when clicking publish/save buttons (before submit)
 			// Use multiple events to catch all cases
 			$(document).on('mousedown', '#publish, #save-post, #save-post-ajax, input[name="save"], input[name="publish"]', function() {
-				console.log('FP SEO: Button clicked, ensuring fields');
+				if (fpSeoDbg2) console.log('FP SEO: Button clicked, ensuring fields');
 				// Run immediately on mousedown (before click/submit)
 				ensureFieldsInForm();
 			});
 			
 			// Also intercept click events
 			$(document).on('click', '#publish, #save-post, #save-post-ajax, input[name="save"], input[name="publish"]', function(e) {
-				console.log('FP SEO: Button click intercepted');
+				if (fpSeoDbg2) console.log('FP SEO: Button click intercepted');
 				// Small delay to ensure fields are set before form serialization
 				setTimeout(function() {
 					ensureFieldsInForm();
@@ -878,7 +880,7 @@
 			
 			// GUTENBERG SUPPORT: Intercetta il salvataggio di Gutenberg
 			if (typeof wp !== 'undefined' && wp.data && wp.data.subscribe) {
-				console.log('FP SEO: Gutenberg detected, registering save interceptor');
+				if (fpSeoDbg2) console.log('FP SEO: Gutenberg detected, registering save interceptor');
 				
 				// Intercetta il salvataggio di Gutenberg
 				var unsubscribe = wp.data.subscribe(function() {
@@ -890,7 +892,7 @@
 					
 					// Quando inizia il salvataggio, assicura che i campi siano nel form
 					if (isSaving && !isAutosaving) {
-						console.log('FP SEO: Gutenberg save detected, ensuring fields');
+						if (fpSeoDbg2) console.log('FP SEO: Gutenberg save detected, ensuring fields');
 						ensureFieldsInForm();
 						
 						// Aggiungi i campi SEO ai meta fields di Gutenberg
@@ -912,7 +914,7 @@
 								meta: newMeta
 							});
 							
-							console.log('FP SEO: Gutenberg meta fields updated', {
+							if (fpSeoDbg2) console.log('FP SEO: Gutenberg meta fields updated', {
 								title: titleValue ? titleValue.substring(0, 30) + '...' : '(empty)',
 								description: descValue ? descValue.substring(0, 30) + '...' : '(empty)'
 							});
@@ -926,7 +928,7 @@
 				}
 			}
 			
-			console.log('FP SEO: Form submit handler registered', {
+			if (fpSeoDbg2) console.log('FP SEO: Form submit handler registered', {
 				titleFieldFound: $titleField.length > 0,
 				descFieldFound: $descField.length > 0,
 				formFound: $form.length > 0,
