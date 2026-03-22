@@ -144,9 +144,9 @@ class ConversationalVariants {
 
 		try {
 			$variant = $this->openai_client->generate_content( $prompt, array(
-			'model'       => 'gpt-4o-mini',
+			'model'       => 'gpt-5.4-nano',
 			'temperature' => 0.5,
-			'max_tokens'  => $this->get_max_tokens_for_type( $type ), // Use standard max_tokens parameter
+			'max_tokens'  => $this->get_max_tokens_for_type( $type ),
 		) );
 
 			return trim( $variant );

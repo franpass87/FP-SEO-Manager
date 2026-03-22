@@ -2,7 +2,7 @@
 /**
  * Q&A Pairs Extractor for AI Engines
  *
- * Automatically extracts question-answer pairs from content using GPT-5 Nano.
+ * Automatically extracts question-answer pairs from content using GPT-5.4 Nano.
  * Optimized for AI search engines (Gemini, Claude, OpenAI, Perplexity).
  *
  * @package FP\SEO
@@ -108,7 +108,7 @@ class QAPairExtractor {
 	}
 
 	/**
-	 * Extract Q&A pairs using OpenAI GPT-4o Mini
+	 * Extract Q&A pairs using OpenAI GPT-5.4 Nano
 	 *
 	 * @param \WP_Post $post Post object.
 	 * @return array<int, array<string, mixed>> Extracted Q&A pairs.
@@ -130,14 +130,14 @@ class QAPairExtractor {
 
 		try {
 			$response = $this->openai_client->generate_content( $prompt, array(
-				'model'       => 'gpt-4o-mini',
+				'model'       => 'gpt-5.4-nano',
 				'max_tokens'  => 4000,
 				'temperature' => 0.7,
 			) );
 
 			if ( empty( $response ) ) {
 				if ( $debug ) {
-					error_log( '[FP-SEO] QAPairExtractor::extract_with_ai - GPT-4o Mini returned empty response for post_id: ' . $post->ID );
+					error_log( '[FP-SEO] QAPairExtractor::extract_with_ai - GPT-5.4 Nano returned empty response for post_id: ' . $post->ID );
 				}
 				return array();
 			}

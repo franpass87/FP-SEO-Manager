@@ -20,7 +20,7 @@ Get up and running with FP SEO Manager in 5 minutes.
 1. Get OpenAI API key: https://platform.openai.com/api-keys
 2. Go to **FP SEO Performance → Settings → AI**
 3. Paste API key
-4. Verify model: **GPT-5 Nano** (recommended)
+4. Verify model: **GPT-5.4 Nano** (recommended, March 2026)
 5. Click **Save Changes**
 
 ### Step 3: Generate Your First SEO Content (2 minutes)
@@ -39,7 +39,7 @@ Get up and running with FP SEO Manager in 5 minutes.
 
 ### AI Content Generation
 - **One-click generation** of SEO title, meta description, slug
-- **GPT-5 Nano** - Fast and cost-effective (~$0.001/post)
+- **GPT-5.4 Nano** - Fast and cost-effective (~$0.001/post)
 - **Smart context** - Analyzes categories, tags, content
 - **Character limits** - Auto-enforced (60/155 chars)
 

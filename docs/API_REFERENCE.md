@@ -197,7 +197,7 @@ Filter AI model selection.
 apply_filters( 'fp_seo_ai_model', string $model, int $post_id );
 ```
 
-**Return**: Model name (e.g., 'gpt-5-nano')
+**Return**: Model name (e.g., 'gpt-5.4-nano')
 
 ---
 
@@ -421,7 +421,7 @@ $api_key = \FP\SEO\Utils\Options::get_option( 'ai.openai_api_key' );
 \FP\SEO\Utils\Options::update( [
     'ai' => [
         'openai_api_key' => 'sk-...',
-        'openai_model' => 'gpt-5-nano'
+        'openai_model' => 'gpt-5.4-nano'
     ]
 ] );
 ```

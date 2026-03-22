@@ -1,28 +1,28 @@
 # FP SEO Performance
 
-[![Version](https://img.shields.io/badge/version-0.9.0--pre.77-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
+[![Version](https://img.shields.io/badge/version-0.9.0--pre.78-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
 [![WordPress](https://img.shields.io/badge/wordpress-6.2+-green.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/php-8.0+-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/license-GPL--2.0+-red.svg)](LICENSE)
-[![AI Powered](https://img.shields.io/badge/AI-GPT--5%20Nano-orange.svg)](https://openai.com/)
+[![AI Powered](https://img.shields.io/badge/AI-GPT--5.4-orange.svg)](https://openai.com/)
 [![Security](https://img.shields.io/badge/security-audited-success.svg)](QA-REPORT-PROFONDO-2025.md)
 [![Quality](https://img.shields.io/badge/quality-★★★★★-brightgreen.svg)](QA-REPORT-PROFONDO-2025.md)
 
-**FP SEO Performance** is a comprehensive WordPress plugin that provides **AI-powered SEO content generation with GPT-5 Nano**, on-page SEO analysis, Generative Engine Optimization (GEO), Google Search Console integration, and advanced SEO tools for content creators and SEO professionals.
+**FP SEO Performance** is a comprehensive WordPress plugin that provides **AI-powered SEO content generation with GPT-5.4** (March 2026), on-page SEO analysis, Generative Engine Optimization (GEO), Google Search Console integration, and advanced SEO tools for content creators and SEO professionals.
 
 ---
 
 ## 🚀 Features
 
 ### 🤖 **AI-Powered Content Generation** ⚡ NEW!
-- **GPT-5 Nano Integration** - Lightning-fast, cost-effective AI generation
+- **GPT-5.4 Nano Integration** - Lightning-fast, cost-effective AI generation (March 2026)
 - **One-Click SEO Generation** - Generate SEO title, meta description, slug, and focus keyword instantly
 - **Smart Context Analysis** - AI analyzes categories, tags, post type, and excerpt for better results
 - **Focus Keyword Targeting** - Optional keyword input for precise optimization
 - **Character Limit Enforcement** - Strict validation (60 chars title, 155 chars meta)
 - **Real-time Counters** - Color-coded character counters (🟢🟠🔴)
-- **Multi-Model Support** - GPT-5 Nano/Mini/Pro, GPT-4o (legacy), GPT-3.5 Turbo
-- **Cost Effective** - ~$0.001 per generation with GPT-5 Nano
+- **Multi-Model Support** - GPT-5.4 Nano/Mini/Pro, GPT-5 (legacy), GPT-4o (legacy), GPT-3.5 Turbo
+- **Cost Effective** - ~$0.001 per generation with GPT-5.4 Nano
 - **Apply with One Click** - Auto-populate title and slug
 - **Copy to Clipboard** - Easy manual application
 
@@ -167,7 +167,7 @@ composer install
 2. **Configure Plugin**:
    - Go to **FP SEO Performance → Settings → AI**
    - Paste your API key in "API Key OpenAI" field
-   - Verify model: **GPT-5 Nano ⚡** (recommended - already selected)
+   - Verify model: **GPT-5.4 Nano ⚡** (recommended - already selected)
    - Ensure all checkboxes are enabled ✓
    - Click **Save Changes**
    - You should see "✓ API Key configurata correttamente" (green)
@@ -422,7 +422,7 @@ See [LICENSE](LICENSE) for more information.
 ## 🗺️ Roadmap
 
 ### v0.9.0 (Current - Pre-Release)
-- ✅ AI-powered content generation with GPT-5 Nano
+- ✅ AI-powered content generation with GPT-5.4 Nano
 - ✅ Comprehensive GEO optimization
 - ✅ Google Search Console integration
 - ✅ Instant indexing API

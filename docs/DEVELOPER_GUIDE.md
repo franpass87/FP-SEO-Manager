@@ -793,7 +793,7 @@ Logger::debug( 'Debug info', [ 'data' => $value ] );
 - Verify OpenAI API key is valid
 - Check API rate limits
 - Review error logs for API errors
-- Verify model name is correct (gpt-5-nano, etc.)
+- Verify model name is correct (gpt-5.4-nano, etc.)
 
 #### Metabox Not Showing
 - Verify post type is supported

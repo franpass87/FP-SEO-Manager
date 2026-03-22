@@ -7,17 +7,17 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.76
+Stable tag: 0.9.0-pre.78
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 == Description ==
 
-**FP SEO Performance** is the ultimate WordPress SEO plugin with **AI-powered content generation using GPT-5 Nano**. Generate SEO-optimized titles, meta descriptions, and slugs with one click!
+**FP SEO Performance** is the ultimate WordPress SEO plugin with **AI-powered content generation using GPT-5.4** (March 2026). Generate SEO-optimized titles, meta descriptions, and slugs with one click!
 
 = 🤖 AI-Powered Features (NEW!) =
 
-* **GPT-5 Nano Integration** - Lightning-fast AI content generation (50% cheaper than GPT-4!)
+* **GPT-5.4 Nano Integration** - Lightning-fast AI content generation (March 2026 lineup)
 * **One-Click Generation** - Generate SEO title, meta description, slug, and focus keyword instantly
 * **Smart Context Analysis** - AI analyzes your categories, tags, and content for perfect results
 * **Focus Keyword Targeting** - Optional keyword input for precise optimization
@@ -57,10 +57,10 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 7. Review and apply the generated content!
 
 = Which AI model should I use? =
-**GPT-5 Nano** is the default and recommended. It's the fastest, most cost-effective (~$0.001/post), and provides excellent quality. Use GPT-5 or GPT-5 Pro only for premium content.
+**GPT-5.4 Nano** is the default and recommended (March 2026). It's the fastest, most cost-effective (~$0.001/post), and provides excellent quality. Use GPT-5.4 or GPT-5.4 Pro only for premium content.
 
 = How much does AI generation cost? =
-With GPT-5 Nano: ~$0.0005-0.002 per post. For 1000 posts, it's only $0.50-$2.00 total. Very affordable!
+With GPT-5.4 Nano: ~$0.0005-0.002 per post. For 1000 posts, it's only $0.50-$2.00 total. Very affordable!
 
 = Does the AI respect character limits? =
 Yes! The system has double validation: the AI is instructed to stay within limits (60 chars for title, 155 for meta), and there's a PHP-level safety check that truncates if needed.
@@ -89,6 +89,11 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.78 - 2026-03-22 =
+* Changed: AI providers aggiornati a marzo 2026 - GPT-5.4 Nano/Mini/Pro come default
+* Changed: Default modello da gpt-5-nano a gpt-5.4-nano
+* Added: Retrocompatibilità con modelli GPT-5 legacy
 
 = 0.9.0-pre.76 - 2026-03-14 =
 * Added: XML sitemap FP dedicata (`/fp-sitemap.xml`) con chunk per post type, cache TTL e toggle admin
@@ -131,7 +136,7 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 * Added: Advanced context analysis (categories, tags, post type, excerpt)
 * Added: Test Suite admin page (51 automated tests)
 * Added: Complete documentation (AI guides, test checklists)
-* Changed: Default AI model to GPT-5 Nano (50% cost reduction)
+* Changed: Default AI model to GPT-5.4 Nano (March 2026 lineup)
 * Changed: Enhanced character validation (60/155 strict limits)
 * Fixed: WordPress loading for junction/symlink setups
 * Fixed: AJAX compatibility issues
@@ -157,7 +162,7 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 SECURITY & QUALITY UPDATE! Fixed potential SQL injection, infinite loop risks, and improved logging. No breaking changes - safe to update immediately.
 
 = 0.9.0-pre =
-MAJOR UPDATE! AI-powered content generation with GPT-5 Nano is here! Get an OpenAI API key and generate SEO-optimized content with one click. Includes comprehensive test suite and enhanced documentation.
+AI-powered content generation with GPT-5.4 (March 2026)! Get an OpenAI API key and generate SEO-optimized content with one click. Includes comprehensive test suite and enhanced documentation.
 
 = 0.4.0 =
 Major feature release with GEO optimization and Google Search Console integration.

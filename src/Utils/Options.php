@@ -188,7 +188,7 @@ class Options {
 			),
 			'ai'          => array(
 				'openai_api_key'        => '',
-				'openai_model'          => 'gpt-5-nano',
+				'openai_model'          => 'gpt-5.4-nano',
 				'enable_auto_generation' => true,
 				'focus_on_keywords'     => true,
 				'optimize_for_ctr'      => true,
@@ -422,7 +422,7 @@ class Options {
 		}
 		$sanitized['ai']['openai_model']             = self::sanitize_choice(
 			$ai['openai_model'] ?? $defaults['ai']['openai_model'],
-			array( 'gpt-5-nano', 'gpt-5-mini', 'gpt-5', 'gpt-5-pro', 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo' ),
+			array( 'gpt-5.4-nano', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-pro', 'gpt-5-nano', 'gpt-5-mini', 'gpt-5', 'gpt-5-pro', 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo' ),
 			$defaults['ai']['openai_model']
 		);
 		$sanitized['ai']['enable_auto_generation']   = self::to_bool( $ai['enable_auto_generation'] ?? $defaults['ai']['enable_auto_generation'] );

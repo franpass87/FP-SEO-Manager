@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.78] - 2026-03-22
+### Changed
+- **AI Providers aggiornati a marzo 2026** – lineup GPT-5.4 (Nano, Mini, Pro) come default; GPT-5 e GPT-4 in Legacy
+- Default modello da `gpt-5-nano` a `gpt-5.4-nano`
+- QAPairExtractor, HowToGenerator, ConversationalVariants usano `gpt-5.4-nano` per task dedicati
+- OpenAiClient: supporto `max_completion_tokens` per modelli gpt-5.4-nano, gpt-5.4-mini
+
+### Added
+- Nuovi modelli in AiTabRenderer: gpt-5.4-nano, gpt-5.4-mini, gpt-5.4, gpt-5.4-pro
+- Retrocompatibilità con modelli GPT-5 legacy (gpt-5-nano, gpt-5-mini, gpt-5, gpt-5-pro)
+
 ## [0.9.0-pre.77] - 2025-03-19
 ### Fixed
 - Redirect Manager admin: `h1.screen-reader-text` primo nel `.wrap` + titolo banner in `h2` (compat notice JS `.wrap h1`); CSS per `.fp-seo-page-header-title` e `.notice` figlie dirette del `.wrap`.

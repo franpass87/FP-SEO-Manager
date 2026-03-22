@@ -154,7 +154,7 @@ class QAMetabox {
 						🤖 <?php esc_html_e( 'Genera Q&A Automaticamente con AI', 'fp-seo-performance' ); ?>
 					</button>
 					<p class="description" style="margin-top: 10px;">
-						<?php esc_html_e( 'Usa GPT-4o Mini per estrarre automaticamente 8-12 coppie domanda-risposta dal contenuto.', 'fp-seo-performance' ); ?>
+						<?php esc_html_e( 'Usa GPT-5.4 Nano per estrarre automaticamente 8-12 coppie domanda-risposta dal contenuto.', 'fp-seo-performance' ); ?>
 					</p>
 				<?php else : ?>
 					<p class="description">

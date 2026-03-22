@@ -222,11 +222,11 @@ class OpenAiClient {
 		try {
 			$model = $this->get_model();
 			if ( empty( $model ) ) {
-				$model = 'gpt-5-nano'; // Default fallback
+				$model = 'gpt-5.4-nano'; // Default fallback (March 2026)
 			}
 		} catch ( \Throwable $e ) {
 			$this->logger->error( 'Error getting model', array( 'error' => $e->getMessage() ) );
-			$model = 'gpt-5-nano'; // Default fallback
+			$model = 'gpt-5.4-nano'; // Default fallback (March 2026)
 		}
 
 		// Build API request parameters with correct parameter names
@@ -244,12 +244,13 @@ class OpenAiClient {
 			),
 		);
 
-		// GPT-5 Nano requires max_completion_tokens, other models use max_tokens
+		// GPT-5.4/GPT-5 nano/mini use max_completion_tokens, other models use max_tokens
 		$model_lower = strtolower( $model );
-		if ( strpos( $model_lower, 'gpt-5-nano' ) !== false ) {
-			$api_params['max_completion_tokens'] = 4096; // GPT-5 Nano requires this parameter (massimo sicuro)
+		$uses_max_completion = preg_match( '/gpt-5(?:\.4)?-(?:nano|mini)|gpt-5-nano/', $model_lower );
+		if ( $uses_max_completion ) {
+			$api_params['max_completion_tokens'] = 4096;
 		} else {
-			$api_params['max_tokens'] = 4096; // Standard models use max_tokens
+			$api_params['max_tokens'] = 4096;
 			$api_params['temperature'] = 0.7;
 		}
 
@@ -599,7 +600,7 @@ Rispondi SOLO con JSON puro.',
 	 * @return string
 	 */
 	private function get_model(): string {
-		return $this->options->get_option( 'ai.openai_model', 'gpt-5-nano' );
+		return $this->options->get_option( 'ai.openai_model', 'gpt-5.4-nano' );
 	}
 
 	/**
@@ -650,22 +651,20 @@ Rispondi SOLO con JSON puro.',
 			),
 		);
 
-		// GPT-5 Nano requires max_completion_tokens, other models use max_tokens
+		// GPT-5.4/GPT-5 nano/mini use max_completion_tokens, other models use max_tokens
 		$model = strtolower( $options['model'] );
-		if ( strpos( $model, 'gpt-5-nano' ) !== false ) {
-			// If max_completion_tokens is explicitly provided, use it; otherwise use max_tokens
+		$uses_max_completion = preg_match( '/gpt-5(?:\.4)?-(?:nano|mini)|gpt-5-nano/', $model );
+		if ( $uses_max_completion ) {
 			if ( isset( $options['max_completion_tokens'] ) ) {
 				$api_params['max_completion_tokens'] = $options['max_completion_tokens'];
 			} else {
 				$api_params['max_completion_tokens'] = $max_tokens_value;
 			}
-			// GPT-5 Nano only supports temperature=1 (default), so don't set it if it's not 1
 			if ( isset( $options['temperature'] ) && $options['temperature'] == 1.0 ) {
 				$api_params['temperature'] = 1.0;
 			}
-			// Otherwise, omit temperature to use default (1)
 		} else {
-			$api_params['max_tokens'] = $max_tokens_value; // Standard models use max_tokens
+			$api_params['max_tokens'] = $max_tokens_value;
 			if ( isset( $options['temperature'] ) ) {
 				$api_params['temperature'] = $options['temperature'];
 			}

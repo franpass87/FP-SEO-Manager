@@ -75,9 +75,9 @@ class HowToGenerator {
 
 		$prompt = $this->build_prompt( $post->post_title, $content );
 		$response = $this->openai_client->generate_content( $prompt, array(
-			'model'       => 'gpt-4o-mini',
+			'model'       => 'gpt-5.4-nano',
 			'temperature' => 0.3,
-			'max_tokens'  => 2000, // Use standard max_tokens parameter
+			'max_tokens'  => 2000,
 		) );
 
 		$steps = $this->parse_response( $response );

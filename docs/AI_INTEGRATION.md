@@ -27,7 +27,7 @@ Con un solo click, l'AI può generare:
 1. Nel pannello WordPress, vai su **FP SEO Performance** > **Settings**
 2. Clicca sul tab **AI**
 3. Incolla la tua API Key nel campo **API Key OpenAI**
-4. Scegli il modello AI (default: **GPT-5 Nano ⚡** - il più veloce ed economico)
+4. Scegli il modello AI (default: **GPT-5.4 Nano ⚡** - il più veloce ed economico, March 2026)
 5. Configura le preferenze di generazione:
    - ✓ Abilita generazione automatica SEO
    - ✓ Priorità alle keyword nel contenuto
@@ -38,10 +38,11 @@ Con un solo click, l'AI può generare:
 
 | Modello | Descrizione | Velocità | Qualità | Costo | Consigliato |
 |---------|-------------|----------|---------|-------|-------------|
-| **GPT-5 Nano** ⚡ | Velocissimo ed efficiente | ⚡⚡⚡⚡⚡ | ⭐⭐⭐⭐ | $ | ✅ **Default** |
-| **GPT-5 Mini** | Ottimizzato bilanciato | ⚡⚡⚡⚡ | ⭐⭐⭐⭐⭐ | $$ | Per progetti standard |
-| **GPT-5** | Qualità massima | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | $$$ | Per contenuti premium |
-| **GPT-5 Pro** | Enterprise level | ⚡⚡ | ⭐⭐⭐⭐⭐ | $$$$ | Per grandi volumi |
+| **GPT-5.4 Nano** ⚡ | Velocissimo ed efficiente (Mar 2026) | ⚡⚡⚡⚡⚡ | ⭐⭐⭐⭐ | $ | ✅ **Default** |
+| **GPT-5.4 Mini** | Ottimizzato bilanciato | ⚡⚡⚡⚡ | ⭐⭐⭐⭐⭐ | $$ | Per progetti standard |
+| **GPT-5.4** | Qualità massima | ⚡⚡⚡ | ⭐⭐⭐⭐⭐ | $$$ | Per contenuti premium |
+| **GPT-5.4 Pro** | Enterprise level | ⚡⚡ | ⭐⭐⭐⭐⭐ | $$$$ | Per grandi volumi |
+| GPT-5 Nano/Mini (Legacy) | Precedente generazione | ⚡⚡⚡⚡ | ⭐⭐⭐⭐ | $ | Legacy |
 | GPT-4o Mini | Legacy ottimizzato | ⚡⚡⚡ | ⭐⭐⭐ | $ | Legacy |
 | GPT-4o | Legacy potente | ⚡⚡ | ⭐⭐⭐⭐ | $$$ | Legacy |
 | GPT-3.5 Turbo | Obsoleto | ⚡⚡⚡⚡ | ⭐⭐ | $ | Non consigliato |
@@ -99,10 +100,10 @@ Copia tutti i suggerimenti negli appunti per usarli manualmente.
 ### Costi OpenAI
 
 - I costi dipendono dal modello scelto
-- **GPT-5 Nano**: ~$0.10 per 1M token (input) / $0.40 per 1M token (output) ⚡
-- GPT-5 Mini: ~$0.15 per 1M token (input) / $0.60 per 1M token (output)
-- GPT-5: ~$2.50 per 1M token (input) / $10.00 per 1M token (output)
-- Un post medio con GPT-5 Nano costa circa **$0.0005-0.002** (meno di 1 centesimo!)
+- **GPT-5.4 Nano**: ~$0.20 per 1M token (input) / $1.25 per 1M token (output) ⚡ (Mar 2026)
+- GPT-5.4 Mini: ~$0.75 per 1M token (input) / $4.50 per 1M token (output)
+- GPT-5.4: ~$2.50 per 1M token (input) / $15.00 per 1M token (output)
+- Un post medio con GPT-5.4 Nano costa circa **$0.0005-0.002** (meno di 1 centesimo!)
 - [Pricing ufficiale OpenAI](https://openai.com/pricing)
 
 ### Limitazioni
@@ -150,7 +151,7 @@ Per problemi o domande:
 - ✨ Aggiunta integrazione OpenAI
 - ✨ Generazione automatica titolo SEO, meta description, slug
 - ✨ Nuovo tab AI nelle impostazioni
-- ✨ Supporto per GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo
+- ✨ Supporto per GPT-5.4 series (Mar 2026), GPT-5, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo
 
 ---
 

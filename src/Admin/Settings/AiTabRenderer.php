@@ -88,14 +88,14 @@ class AiTabRenderer extends SettingsTabRenderer {
 						<?php foreach ( $this->get_model_choices() as $model => $label ) : ?>
 							<option 
 								value="<?php echo esc_attr( $model ); ?>" 
-								<?php selected( $ai_settings['openai_model'] ?? 'gpt-4o-mini', $model ); ?>
+								<?php selected( $ai_settings['openai_model'] ?? 'gpt-5.4-nano', $model ); ?>
 							>
 								<?php echo esc_html( $label ); ?>
 							</option>
 						<?php endforeach; ?>
 					</select>
 					<p class="description">
-						<?php esc_html_e( 'Scegli il modello AI da utilizzare. GPT-5 Nano è consigliato per il miglior rapporto velocità/qualità/costo.', 'fp-seo-performance' ); ?>
+						<?php esc_html_e( 'Scegli il modello AI da utilizzare. GPT-5.4 Nano è consigliato per il miglior rapporto velocità/qualità/costo.', 'fp-seo-performance' ); ?>
 					</p>
 				</td>
 			</tr>
@@ -177,17 +177,22 @@ class AiTabRenderer extends SettingsTabRenderer {
 	}
 
 	/**
-	 * Get available AI model choices.
+	 * Get available AI model choices (March 2026 lineup).
 	 *
 	 * @return array<string, string>
 	 */
 	private function get_model_choices(): array {
 		return array(
-			// GPT-5 Models (Latest & Most Advanced)
-			'gpt-5-nano'   => __( 'GPT-5 Nano ⚡ (Consigliato - Veloce ed Economico)', 'fp-seo-performance' ),
-			'gpt-5-mini'   => __( 'GPT-5 Mini (Ottimizzato)', 'fp-seo-performance' ),
-			'gpt-5'        => __( 'GPT-5 (Qualità Massima)', 'fp-seo-performance' ),
-			'gpt-5-pro'    => __( 'GPT-5 Pro (Enterprise)', 'fp-seo-performance' ),
+			// GPT-5.4 Models (March 2026 - Latest)
+			'gpt-5.4-nano' => __( 'GPT-5.4 Nano ⚡ (Consigliato - Veloce ed Economico)', 'fp-seo-performance' ),
+			'gpt-5.4-mini' => __( 'GPT-5.4 Mini (Ottimizzato)', 'fp-seo-performance' ),
+			'gpt-5.4'      => __( 'GPT-5.4 (Qualità Massima)', 'fp-seo-performance' ),
+			'gpt-5.4-pro'  => __( 'GPT-5.4 Pro (Enterprise)', 'fp-seo-performance' ),
+			// GPT-5 Models (Legacy - backward compatibility)
+			'gpt-5-nano'   => __( 'GPT-5 Nano (Legacy)', 'fp-seo-performance' ),
+			'gpt-5-mini'   => __( 'GPT-5 Mini (Legacy)', 'fp-seo-performance' ),
+			'gpt-5'        => __( 'GPT-5 (Legacy)', 'fp-seo-performance' ),
+			'gpt-5-pro'    => __( 'GPT-5 Pro (Legacy)', 'fp-seo-performance' ),
 			// GPT-4 Models (Legacy)
 			'gpt-4o-mini'  => __( 'GPT-4o Mini (Legacy)', 'fp-seo-performance' ),
 			'gpt-4o'       => __( 'GPT-4o (Legacy)', 'fp-seo-performance' ),

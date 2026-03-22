@@ -53,7 +53,7 @@ class AiFirstTabRenderer extends SettingsTabRenderer {
 							<?php esc_html_e( 'Enable automatic Q&A pairs extraction', 'fp-seo-performance' ); ?>
 						</label>
 						<p class="description">
-							<?php esc_html_e( 'Estrae automaticamente coppie domanda-risposta dal contenuto usando GPT-5 Nano. Richiede OpenAI API key.', 'fp-seo-performance' ); ?>
+							<?php esc_html_e( 'Estrae automaticamente coppie domanda-risposta dal contenuto usando GPT-5.4 Nano. Richiede OpenAI API key.', 'fp-seo-performance' ); ?>
 						</p>
 					</td>
 				</tr>

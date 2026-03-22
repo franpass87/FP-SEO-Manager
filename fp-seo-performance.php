@@ -2,8 +2,8 @@
 /**
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
- * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.77
+ * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5.4 (March 2026), on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
+ * Version: 0.9.0-pre.78
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -17,6 +17,11 @@
  */
 
 declare(strict_types=1);
+
+if ( defined( 'FP_SEO_RUNTIME_BOOTSTRAPPED' ) ) {
+	return;
+}
+define( 'FP_SEO_RUNTIME_BOOTSTRAPPED', true );
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -32,7 +37,7 @@ require_once __DIR__ . '/src/Utils/Version.php';
 
 // Define plugin version constant
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-	define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.77' ) );
+	define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.78' ) );
 }
 
 // Load Kernel for bootstrap

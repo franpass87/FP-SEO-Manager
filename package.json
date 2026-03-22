@@ -1,7 +1,7 @@
 {
   "name": "fp-seo-performance",
   "version": "0.9.0-pre",
-  "description": "AI-powered SEO content generation with GPT-5 Nano, on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.",
+  "description": "AI-powered SEO content generation with GPT-5.4 (March 2026), on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.",
   "author": "Francesco Passeri <info@francescopasseri.com> (https://francescopasseri.com)",
   "license": "GPL-2.0-or-later",
   "homepage": "https://francescopasseri.com",

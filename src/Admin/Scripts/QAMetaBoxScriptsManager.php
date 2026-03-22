@@ -413,11 +413,11 @@ class QAMetaBoxScriptsManager {
 			});
 
 			// Call AJAX endpoint to generate Q&A
-			// GPT-4o Mini is faster, so we set a reasonable timeout (60 seconds)
+			// GPT-5.4 Nano is fast, so we set a reasonable timeout (60 seconds)
 			$.ajax({
 				url: ajaxurl,
 				method: 'POST',
-				timeout: 60000, // 60 seconds should be enough for GPT-4o Mini
+				timeout: 60000, // 60 seconds should be enough for GPT-5.4 Nano
 				data: {
 					action: 'fp_seo_generate_qa',
 					post_id: postId,
