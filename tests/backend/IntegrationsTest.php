@@ -11,6 +11,8 @@ namespace FP\SEO\Tests\Backend;
 
 use Brain\Monkey;
 use FP\SEO\Admin\GscSettings;
+use FP\SEO\Infrastructure\Contracts\LoggerInterface;
+use FP\SEO\Infrastructure\Contracts\OptionsInterface;
 use FP\SEO\Integrations\OpenAiClient;
 use PHPUnit\Framework\TestCase;
 use function Brain\Monkey\Functions\expect;
@@ -51,12 +53,26 @@ final class IntegrationsTest extends TestCase {
 	// ============================================
 
 	/**
+	 * Create OpenAiClient with mocked dependencies.
+	 *
+	 * @param bool $configured Whether API key is configured.
+	 * @return OpenAiClient
+	 */
+	private function create_openai_client( bool $configured = false ): OpenAiClient {
+		$options = $this->createMock( OptionsInterface::class );
+		$options->method( 'get_option' )->willReturn( $configured ? 'sk-test123' : '' );
+		$options->method( 'get' )->willReturn( array() );
+
+		$logger = $this->createMock( LoggerInterface::class );
+
+		return new OpenAiClient( $logger, $options );
+	}
+
+	/**
 	 * Test OpenAI client is configured check.
 	 */
 	public function test_openai_client_is_configured(): void {
-		when( 'get_option' )->justReturn( 'sk-test123' );
-
-		$client = new OpenAiClient();
+		$client = $this->create_openai_client( true );
 
 		self::assertTrue( $client->is_configured() );
 	}
@@ -65,9 +81,7 @@ final class IntegrationsTest extends TestCase {
 	 * Test OpenAI client is not configured.
 	 */
 	public function test_openai_client_is_not_configured(): void {
-		when( 'get_option' )->justReturn( '' );
-
-		$client = new OpenAiClient();
+		$client = $this->create_openai_client( false );
 
 		self::assertFalse( $client->is_configured() );
 	}
@@ -76,9 +90,7 @@ final class IntegrationsTest extends TestCase {
 	 * Test OpenAI client connection test.
 	 */
 	public function test_openai_client_connection_test(): void {
-		when( 'get_option' )->justReturn( 'sk-test123' );
-
-		$client = new OpenAiClient();
+		$client = $this->create_openai_client( true );
 
 		// Mock HTTP request
 		expect( 'wp_remote_post' )
@@ -98,9 +110,7 @@ final class IntegrationsTest extends TestCase {
 	 * Test OpenAI client content generation.
 	 */
 	public function test_openai_client_content_generation(): void {
-		when( 'get_option' )->justReturn( 'sk-test123' );
-
-		$client = new OpenAiClient();
+		$client = $this->create_openai_client( true );
 
 		// Mock HTTP request
 		expect( 'wp_remote_post' )
@@ -128,9 +138,7 @@ final class IntegrationsTest extends TestCase {
 	 * Test OpenAI client error handling.
 	 */
 	public function test_openai_client_error_handling(): void {
-		when( 'get_option' )->justReturn( 'sk-test123' );
-
-		$client = new OpenAiClient();
+		$client = $this->create_openai_client( true );
 
 		// Mock HTTP request with error
 		expect( 'wp_remote_post' )

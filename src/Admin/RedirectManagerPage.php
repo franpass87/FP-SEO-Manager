@@ -109,7 +109,9 @@ class RedirectManagerPage {
 	 * @param string $hook Current admin page hook.
 	 */
 	public function enqueue_assets( string $hook ): void {
-		if ( 'fp-seo-performance_page_' . self::PAGE_SLUG !== $hook ) {
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : '';
+		$is_our_page = ( strpos( $hook, self::PAGE_SLUG ) !== false ) || ( $page === self::PAGE_SLUG );
+		if ( ! $is_our_page ) {
 			return;
 		}
 

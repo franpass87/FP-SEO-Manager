@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace FP\SEO\Redirects;
 
+use FP\SEO\Data\Migrations\CreateRedirectsTable;
 use FP\SEO\Utils\UrlNormalizer;
 use wpdb;
 
@@ -30,6 +31,25 @@ class RedirectRepository {
 	 * @var wpdb
 	 */
 	private wpdb $wpdb;
+	/**
+	 * Cached table existence status for current request.
+	 *
+	 * @var bool|null
+	 */
+	private ?bool $redirects_table_exists = null;
+
+	/**
+	 * Ensure missing-table warning is logged once per request.
+	 *
+	 * @var bool
+	 */
+	private bool $missing_table_logged = false;
+	/**
+	 * Guard to avoid repeated migration attempts per request.
+	 *
+	 * @var bool
+	 */
+	private bool $migration_attempted = false;
 
 	/**
 	 * Constructor.
@@ -57,6 +77,9 @@ class RedirectRepository {
 	 */
 	public function find_by_source( string $request_uri ): ?array {
 		$table = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return null;
+		}
 
 		// Normalize: remove query string for lookup
 		$path = $this->normalize_path( $request_uri );
@@ -105,6 +128,9 @@ class RedirectRepository {
 	 */
 	public function get_all( array $args = array() ): array {
 		$table   = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return array();
+		}
 		$where   = array( '1=1' );
 		$values  = array();
 
@@ -149,6 +175,9 @@ class RedirectRepository {
 	 */
 	public function count( array $args = array() ): int {
 		$table  = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return 0;
+		}
 		$where  = array( '1=1' );
 		$values = array();
 
@@ -183,6 +212,9 @@ class RedirectRepository {
 	 */
 	public function create( array $data ) {
 		$table = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return false;
+		}
 		$now   = current_time( 'mysql' );
 
 		$insert = array(
@@ -209,6 +241,9 @@ class RedirectRepository {
 	 */
 	public function update( int $id, array $data ): bool {
 		$table = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return false;
+		}
 		$data['updated_at'] = current_time( 'mysql' );
 
 		if ( isset( $data['source_url'] ) ) {
@@ -241,6 +276,9 @@ class RedirectRepository {
 	 */
 	public function increment_hits( int $id ): bool {
 		$table = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return false;
+		}
 		return $this->wpdb->query(
 			$this->wpdb->prepare(
 				"UPDATE {$table} SET hits = hits + 1, updated_at = %s WHERE id = %d",
@@ -258,6 +296,9 @@ class RedirectRepository {
 	 */
 	public function delete( int $id ): bool {
 		$table = $this->get_table();
+		if ( ! $this->redirects_table_exists( $table ) ) {
+			return false;
+		}
 		return $this->wpdb->delete( $table, array( 'id' => $id ) ) !== false;
 	}
 
@@ -326,5 +367,43 @@ class RedirectRepository {
 	 */
 	private function sanitize_url_path( string $url ): string {
 		return UrlNormalizer::normalize_path( $url );
+	}
+
+	/**
+	 * Check redirects table existence with per-request cache.
+	 *
+	 * @param string $table Fully-qualified table name.
+	 * @return bool
+	 */
+	private function redirects_table_exists( string $table ): bool {
+		if ( null !== $this->redirects_table_exists ) {
+			return $this->redirects_table_exists;
+		}
+
+		$this->redirects_table_exists = $this->wpdb->get_var(
+			$this->wpdb->prepare(
+				'SHOW TABLES LIKE %s',
+				$table
+			)
+		) === $table;
+
+		if ( ! $this->redirects_table_exists && ! $this->migration_attempted ) {
+			$this->migration_attempted = true;
+			try {
+				$migration = new CreateRedirectsTable( $this->wpdb );
+				$this->redirects_table_exists = $migration->up();
+			} catch ( \Throwable $e ) {
+				$this->redirects_table_exists = false;
+			}
+		}
+
+		if ( ! $this->redirects_table_exists && ! $this->missing_table_logged ) {
+			$this->missing_table_logged = true;
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+				error_log( 'FP SEO RedirectRepository: redirects table missing, redirect checks skipped.' );
+			}
+		}
+
+		return $this->redirects_table_exists;
 	}
 }

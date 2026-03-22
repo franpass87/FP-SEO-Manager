@@ -38,6 +38,10 @@ class Kernel {
 	 * @var bool
 	 */
 	private bool $booted = false;
+	/**
+	 * Toggle for noisy bootstrap/autoloader debug logs.
+	 */
+	private const VERBOSE_BOOT_DEBUG_FLAG = 'FP_SEO_VERBOSE_BOOT_DEBUG';
 
 	/**
 	 * Constructor.
@@ -162,7 +166,7 @@ class Kernel {
 	 * @return void
 	 */
 	public function register_autoloader(): void {
-		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
+		$debug = defined( self::VERBOSE_BOOT_DEBUG_FLAG ) && constant( self::VERBOSE_BOOT_DEBUG_FLAG ) === true;
 
 		// Register OpenAI autoloader FIRST to prevent double inclusion in junction environments
 		$this->register_openai_autoloader();

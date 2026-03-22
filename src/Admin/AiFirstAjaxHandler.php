@@ -29,6 +29,12 @@ use FP\SEO\Infrastructure\Container;
  */
 class AiFirstAjaxHandler {
 	use AjaxValidationTrait;
+	/**
+	 * Ensure AJAX hooks are registered only once per request.
+	 *
+	 * @var bool
+	 */
+	private bool $hooks_registered = false;
 
 	/**
 	 * Hook manager instance.
@@ -68,6 +74,10 @@ class AiFirstAjaxHandler {
 	 * Register AJAX hooks
 	 */
 	public function register(): void {
+		if ( $this->hooks_registered ) {
+			return;
+		}
+
 		$debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
 		if ( $debug ) {
 			error_log( '[FP-SEO] AiFirstAjaxHandler::register - Entry point' );
@@ -123,6 +133,7 @@ class AiFirstAjaxHandler {
 		if ( $debug ) {
 			error_log( '[FP-SEO] AiFirstAjaxHandler::register - All hooks registered' );
 		}
+		$this->hooks_registered = true;
 	}
 
 	/**

@@ -61,7 +61,8 @@ class LazyServiceLoader {
 	public function get_openai_client(): ?OpenAiClient {
 		if ( $this->openai_client === null ) {
 			try {
-				$this->openai_client = new OpenAiClient();
+				$container = \FP\SEO\Infrastructure\Plugin::instance()->get_container();
+				$this->openai_client = $container->get( OpenAiClient::class );
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && $this->logger ) {
 					$this->logger->debug( 'LazyServiceLoader: OpenAI client loaded' );
 				}

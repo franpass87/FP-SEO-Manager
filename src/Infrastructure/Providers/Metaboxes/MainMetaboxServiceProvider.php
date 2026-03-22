@@ -167,6 +167,12 @@ class MainMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 	 * @return void
 	 */
 	protected function boot_admin( Container $container ): void {
+		// Avoid loading the heavy editor metabox stack on unrelated admin pages.
+		// This provider should boot only in post editor or related AJAX contexts.
+		if ( ! $this->is_metabox_context() ) {
+			return;
+		}
+
 		// CRITICAL: Wrap in try-catch to prevent fatal errors from breaking WordPress
 		try {
 			// Use parent implementation
@@ -207,6 +213,47 @@ class MainMetaboxServiceProvider extends AbstractMetaboxServiceProvider {
 			}
 			// Don't re-throw - allow WordPress to continue
 		}
+	}
+
+	/**
+	 * Check whether current request needs metabox services.
+	 *
+	 * @return bool
+	 */
+	private function is_metabox_context(): bool {
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			$action = isset( $_REQUEST['action'] ) ? sanitize_key( (string) wp_unslash( $_REQUEST['action'] ) ) : '';
+			$allowed_ajax_actions = array(
+				'fp_seo_performance_analyze',
+				'fp_seo_performance_save_fields',
+				'fp_seo_generate_qa',
+				'fp_seo_generate_faq',
+				'fp_seo_generate_howto',
+				'fp_seo_generate_variants',
+				'fp_seo_generate_entities',
+				'fp_seo_generate_embeddings',
+				'fp_seo_optimize_images',
+				'fp_seo_clear_ai_cache',
+				'fp_seo_batch_generate_qa',
+			);
+
+			return in_array( $action, $allowed_ajax_actions, true );
+		}
+
+		$php_self = isset( $_SERVER['PHP_SELF'] ) ? (string) $_SERVER['PHP_SELF'] : '';
+		$php_file = $php_self !== '' ? basename( $php_self ) : '';
+		if ( in_array( $php_file, array( 'post.php', 'post-new.php' ), true ) ) {
+			return true;
+		}
+
+		if ( function_exists( 'get_current_screen' ) ) {
+			$screen = get_current_screen();
+			if ( $screen && isset( $screen->base ) && $screen->base === 'post' ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 

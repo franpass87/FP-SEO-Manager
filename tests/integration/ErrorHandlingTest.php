@@ -41,13 +41,20 @@ class ErrorHandlingTest extends TestCase {
 	 * Test that API errors are handled gracefully.
 	 */
 	public function test_api_error_handling(): void {
-		$client = new \FP\SEO\Integrations\OpenAiClient();
-		
-		// Test with invalid API key
+		$options = $this->createMock( \FP\SEO\Infrastructure\Contracts\OptionsInterface::class );
+		$options->method( 'get_option' )->willReturn( '' );
+		$options->method( 'get' )->willReturn( array() );
+
+		$logger = $this->createMock( \FP\SEO\Infrastructure\Contracts\LoggerInterface::class );
+
+		$client = new \FP\SEO\Integrations\OpenAiClient( $logger, $options );
+
+		// Test with invalid API key (empty) — expect error response
 		$result = $client->generate_seo_suggestions( 0, '', '', '' );
-		
+
 		$this->assertIsArray( $result );
 		$this->assertArrayHasKey( 'success', $result );
+		$this->assertFalse( $result['success'] );
 	}
 
 	/**

@@ -60,6 +60,18 @@ class Plugin {
 	 * @var ServiceProviderRegistry
 	 */
 	private ServiceProviderRegistry $registry;
+	/**
+	 * Prevent duplicate hook registration in same request.
+	 *
+	 * @var bool
+	 */
+	private bool $initialized = false;
+	/**
+	 * Guard against re-entrant boot calls.
+	 *
+	 * @var bool
+	 */
+	private bool $booting = false;
 
 	/**
 	 * Sets up the container and registry.
@@ -106,11 +118,22 @@ class Plugin {
 	 * @return void
 	 */
 	public function init(): void {
+		static $init_once_per_request = false;
+		if ( $init_once_per_request ) {
+			return;
+		}
+
+		if ( $this->initialized ) {
+			return;
+		}
+
 		register_activation_hook( FP_SEO_PERFORMANCE_FILE, array( $this, 'activate' ) );
 		register_deactivation_hook( FP_SEO_PERFORMANCE_FILE, array( $this, 'deactivate' ) );
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 		add_action( 'plugins_loaded', array( $this, 'boot' ) );
+		$this->initialized = true;
+		$init_once_per_request = true;
 	}
 
 	/**
@@ -135,9 +158,24 @@ class Plugin {
 	 * @return void
 	 */
 	public function boot(): void {
-		// Register all service providers with automatic dependency resolution
-		// The registry will resolve dependencies and register providers in the correct order
-		$this->registry->register_with_dependencies( array(
+		static $boot_once_per_request = false;
+		if ( $boot_once_per_request ) {
+			return;
+		}
+
+		if ( $this->booting || $this->registry->is_booted() ) {
+			return;
+		}
+
+		$boot_once_per_request = true;
+		$this->booting = true;
+		// If another plugin incorrectly triggers plugins_loaded again,
+		// avoid registering the same providers repeatedly.
+		remove_action( 'plugins_loaded', array( $this, 'boot' ) );
+		try {
+			// Register all service providers with automatic dependency resolution
+			// The registry will resolve dependencies and register providers in the correct order
+			$this->registry->register_with_dependencies( array(
 			// Core services (foundational: Cache, Logger, Health)
 			new CoreServiceProvider(),
 
@@ -206,10 +244,13 @@ class Plugin {
 
 			// Cron services (scheduled tasks)
 			new CronServiceProvider(),
-		) );
+			) );
 
-		// Boot all providers
-		$this->registry->boot();
+			// Boot all providers
+			$this->registry->boot();
+		} finally {
+			$this->booting = false;
+		}
 	}
 
 	/**

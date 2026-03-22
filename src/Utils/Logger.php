@@ -36,7 +36,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function emergency( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::emergency() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::emergency() via dependency injection' );
 		self::log( self::EMERGENCY, $message, $context );
 	}
 
@@ -48,7 +48,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function alert( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::alert() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::alert() via dependency injection' );
 		self::log( self::ALERT, $message, $context );
 	}
 
@@ -60,7 +60,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function critical( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::critical() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::critical() via dependency injection' );
 		self::log( self::CRITICAL, $message, $context );
 	}
 
@@ -72,7 +72,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function error( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::error() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::error() via dependency injection' );
 		self::log( self::ERROR, $message, $context );
 	}
 
@@ -84,7 +84,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function warning( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::warning() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::warning() via dependency injection' );
 		self::log( self::WARNING, $message, $context );
 	}
 
@@ -96,7 +96,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function notice( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::notice() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::notice() via dependency injection' );
 		self::log( self::NOTICE, $message, $context );
 	}
 
@@ -108,7 +108,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function info( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::info() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::info() via dependency injection' );
 		self::log( self::INFO, $message, $context );
 	}
 
@@ -120,7 +120,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context.
 	 */
 	public static function debug( string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::debug() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::debug() via dependency injection' );
 		self::log( self::DEBUG, $message, $context );
 	}
 
@@ -133,7 +133,7 @@ class Logger {
 	 * @param array<string, mixed> $context Additional context data.
 	 */
 	public static function log( string $level, string $message, array $context = array() ): void {
-		_deprecated_function( __METHOD__, '0.9.0', 'LoggerInterface::log() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'LoggerInterface::log() via dependency injection' );
 		// Only log if WP_DEBUG is enabled.
 		if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
 			return;
@@ -210,5 +210,20 @@ class Logger {
 		}
 
 		return strtr( $message, $replacements );
+	}
+
+	/**
+	 * Emits deprecated notices only when explicitly enabled.
+	 *
+	 * This keeps production/staging logs clean while maintaining opt-in
+	 * diagnostics for migration work.
+	 */
+	private static function trigger_deprecation_notice( string $method, string $replacement ): void {
+		$emit_notice = defined( 'FP_SEO_STRICT_DEPRECATIONS' ) && FP_SEO_STRICT_DEPRECATIONS;
+		if ( ! $emit_notice ) {
+			return;
+		}
+
+		_deprecated_function( $method, '0.9.0', $replacement );
 	}
 }

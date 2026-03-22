@@ -11,6 +11,9 @@
    ========================================================================== */
 
 :root {
+  /* Design system FP - gradiente banner unificato */
+  --fpdms-gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
   /* Colors - Modern Palette (Unified with Metabox) */
   --fp-seo-primary: #2563eb;
   --fp-seo-primary-dark: #1d4ed8;
@@ -805,17 +808,19 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--fp-seo-space-6);
-  padding: var(--fp-seo-space-6);
+  padding: 28px 32px;
   margin-bottom: var(--fp-seo-space-6);
-  background: linear-gradient(135deg, var(--fp-seo-primary) 0%, var(--fp-seo-primary-dark) 100%);
-  border-radius: var(--fp-seo-radius-lg);
+  background: var(--fpdms-gradient-primary);
+  border-radius: 16px;
   color: var(--fp-seo-white);
 }
 
 .fp-seo-page-header-content .fp-seo-page-header-title {
   margin: 0 0 var(--fp-seo-space-2);
-  color: inherit;
-  font-size: var(--fp-seo-font-size-2xl);
+  color: white !important;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  font-size: 26px;
+  font-weight: 700;
 }
 
 .wrap.fp-seo-admin-page > .notice,
@@ -829,7 +834,7 @@
 
 .fp-seo-page-header-content p {
   margin: 0;
-  opacity: 0.9;
+  color: rgba(255,255,255,0.88) !important;
   font-size: var(--fp-seo-font-size-sm);
 }
 

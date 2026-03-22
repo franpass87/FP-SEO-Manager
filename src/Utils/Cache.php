@@ -38,7 +38,7 @@ class Cache {
 	 * @return mixed Cached value or default.
 	 */
 	public static function get( string $key, mixed $default = null ): mixed {
-		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::get() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'CacheInterface::get() via dependency injection' );
 		$found = false;
 		$value = wp_cache_get( $key, self::CACHE_GROUP, false, $found );
 
@@ -60,7 +60,7 @@ class Cache {
 	 * @return bool True on success, false on failure.
 	 */
 	public static function set( string $key, mixed $value, int $expiration = self::DEFAULT_EXPIRATION ): bool {
-		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::set() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'CacheInterface::set() via dependency injection' );
 		return wp_cache_set( $key, $value, self::CACHE_GROUP, $expiration );
 	}
 
@@ -73,7 +73,7 @@ class Cache {
 	 * @return bool True on success, false on failure.
 	 */
 	public static function delete( string $key ): bool {
-		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::delete() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'CacheInterface::delete() via dependency injection' );
 		return wp_cache_delete( $key, self::CACHE_GROUP );
 	}
 
@@ -84,7 +84,7 @@ class Cache {
 	 * @return bool True on success.
 	 */
 	public static function flush(): bool {
-		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::flush() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'CacheInterface::flush() via dependency injection' );
 		// WordPress doesn't support group-specific flush, so we use a versioning strategy.
 		$version = (int) self::get( '_cache_version', 0 );
 		return self::set( '_cache_version', $version + 1, DAY_IN_SECONDS );
@@ -101,7 +101,7 @@ class Cache {
 	 * @return mixed Cached or freshly generated value.
 	 */
 	public static function remember( string $key, callable $callback, int $expiration = self::DEFAULT_EXPIRATION ): mixed {
-		_deprecated_function( __METHOD__, '0.9.0', 'CacheInterface::remember() via dependency injection' );
+		self::trigger_deprecation_notice( __METHOD__, 'CacheInterface::remember() via dependency injection' );
 		// Check if caching is enabled
 		if ( ! PerformanceConfig::is_feature_enabled( 'cache' ) ) {
 			return $callback();
@@ -215,5 +215,20 @@ class Cache {
 	 */
 	private static function prefix_key( string $key ): string {
 		return 'fp_seo_' . $key;
+	}
+
+	/**
+	 * Emits deprecated notices only when explicitly enabled.
+	 *
+	 * Legacy static APIs are still widely used in production; this keeps logs readable
+	 * while preserving opt-in visibility during local debugging.
+	 */
+	private static function trigger_deprecation_notice( string $method, string $replacement ): void {
+		$emit_notice = defined( 'FP_SEO_STRICT_DEPRECATIONS' ) && FP_SEO_STRICT_DEPRECATIONS;
+		if ( ! $emit_notice ) {
+			return;
+		}
+
+		_deprecated_function( $method, '0.9.0', $replacement );
 	}
 }

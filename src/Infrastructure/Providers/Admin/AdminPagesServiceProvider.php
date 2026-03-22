@@ -44,6 +44,7 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 		return array(
 			\FP\SEO\Infrastructure\Providers\FrontendServiceProvider::class,
 			\FP\SEO\Infrastructure\Providers\RedirectsAndSitemapServiceProvider::class,
+			\FP\SEO\Infrastructure\Providers\AIServiceProvider::class,
 		);
 	}
 

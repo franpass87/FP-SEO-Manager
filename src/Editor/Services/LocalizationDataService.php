@@ -13,8 +13,7 @@ namespace FP\SEO\Editor\Services;
 
 use FP\SEO\Analysis\Result;
 use FP\SEO\Editor\Metabox;
-use FP\SEO\Integrations\OpenAiClient;
-use FP\SEO\Utils\Options;
+use FP\SEO\Utils\OptionsHelper;
 use WP_Post;
 use function admin_url;
 use function wp_create_nonce;
@@ -35,20 +34,9 @@ class LocalizationDataService {
 	 */
 	public function prepare_data( WP_Post $post, array $analysis, bool $enabled, bool $excluded ): array {
 		// Get AI configuration
-		$ai_enabled = Options::get_option( 'ai.enable_auto_generation', true );
-		$api_key    = Options::get_option( 'ai.openai_api_key', '' );
-		
-		// Also check via OpenAiClient to ensure consistency
-		$is_configured = false;
-		try {
-			$openai_client = new OpenAiClient();
-			$is_configured = $openai_client->is_configured();
-		} catch ( \Throwable $e ) {
-			// OpenAiClient unavailable — fall back to api_key check only
-		}
-		
-		// Use the more reliable check from OpenAiClient
-		$api_key_present = $is_configured || ! empty( $api_key );
+		$ai_enabled      = OptionsHelper::get_option( 'ai.enable_auto_generation', true );
+		$api_key         = OptionsHelper::get_option( 'ai.openai_api_key', '' );
+		$api_key_present = ! empty( $api_key );
 
 		return array(
 			'postId'   => (int) $post->ID,

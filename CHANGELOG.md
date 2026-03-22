@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.80] - 2026-03-22
+### Fixed
+- LocalizationDataService: rimosso `new OpenAiClient()` (costruttore richiede Logger e Options); usa `OptionsHelper::get_option()` per verifica API key
+- LazyServiceLoader: `get_openai_client()` risolve OpenAiClient dal container invece di istanziarlo senza dipendenze
+- AdminPagesServiceProvider: aggiunta dipendenza `AIServiceProvider` per garantire ordine di boot e disponibilità di OpenAiClient
+- IntegrationsTest, ErrorHandlingTest: OpenAiClient istanziato con mock Logger e Options per compatibilità costruttore
+
 ## [0.9.0-pre.79] - 2026-03-22
 ### Added
 - **Aggiorna SEO con AI** – nuova pagina admin per aggiornamento bulk one-click (Pagine e Articoli separati)

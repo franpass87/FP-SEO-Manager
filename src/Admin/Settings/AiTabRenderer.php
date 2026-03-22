@@ -114,6 +114,23 @@ class AiTabRenderer extends SettingsTabRenderer {
 					<p class="description">
 						<?php esc_html_e( 'Descrivi in 1-2 frasi di cosa parla il sito (es. "Ristorante tipico toscano a Firenze. Specialità: ribollita, bistecca alla fiorentina."). Migliora i risultati della generazione AI e dell\'aggiornamento bulk SEO.', 'fp-seo-performance' ); ?>
 					</p>
+					<?php
+					$context_prompt = __(
+						"Scrivi una descrizione di 1-2 frasi (max 200 caratteri) che riassume di cosa parla questo sito web. La descrizione servirà a un'AI per generare titoli SEO e meta description coerenti con il tema.\n\nInformazioni sul sito (sostituisci con i tuoi dati):\n- Nome/URL: [INSERISCI QUI]\n- Categoria/nicchia: [es. ristorante, e-commerce abbigliamento, blog tech]\n- Target: [es. turisti, famiglie, B2B]\n\nRispondi SOLO con la descrizione, senza virgolette o testo aggiuntivo. Esempio: Ristorante tipico toscano a Firenze. Specialità ribollita e bistecca alla fiorentina. Target turisti e famiglie.",
+						'fp-seo-performance'
+					);
+					?>
+					<details style="margin-top: 12px;">
+						<summary style="cursor: pointer; color: #2271b1; font-weight: 500;">
+							<?php esc_html_e( '📋 Prompt da copiare in ChatGPT/Claude per generare il contesto', 'fp-seo-performance' ); ?>
+						</summary>
+						<div style="margin-top: 8px; padding: 12px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; position: relative;">
+							<button type="button" class="button button-small" style="position: absolute; top: 8px; right: 8px;" onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent); this.textContent='<?php echo esc_js( __( 'Copiato!', 'fp-seo-performance' ) ); ?>'; setTimeout(function(){this.textContent='<?php echo esc_js( __( 'Copia', 'fp-seo-performance' ) ); ?>';}.bind(this), 1500);">
+								<?php esc_html_e( 'Copia', 'fp-seo-performance' ); ?>
+							</button>
+							<span><?php echo esc_html( $context_prompt ); ?></span>
+						</div>
+					</details>
 				</td>
 			</tr>
 

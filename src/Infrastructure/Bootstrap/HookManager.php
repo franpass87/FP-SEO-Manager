@@ -39,6 +39,10 @@ class HookManager implements HookManagerInterface {
 	public const HOOK_PRIORITY_EARLY   = 5;
 	public const HOOK_PRIORITY_DEFAULT = 10;
 	public const HOOK_PRIORITY_LATE    = 20;
+	/**
+	 * Enable verbose per-hook debug logs only when explicitly requested.
+	 */
+	private const VERBOSE_DEBUG_FLAG = 'FP_SEO_VERBOSE_HOOK_DEBUG';
 
 	/**
 	 * Add a WordPress action hook.
@@ -58,7 +62,7 @@ class HookManager implements HookManagerInterface {
 
 		// Check for duplicate registration
 		if ( $this->is_registered( $hook, $callback, $priority ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			if ( $this->is_verbose_debug_enabled() ) {
 				LoggerHelper::debug( 'HookManager: Hook already registered, skipping', array(
 					'hook'     => $hook,
 					'priority' => $priority,
@@ -73,7 +77,7 @@ class HookManager implements HookManagerInterface {
 		// Track the registration
 		$this->track_registration( $hook, $callback, $priority, $args );
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		if ( $this->is_verbose_debug_enabled() ) {
 			LoggerHelper::debug( 'HookManager: Action registered', array(
 				'hook'     => $hook,
 				'priority' => $priority,
@@ -100,7 +104,7 @@ class HookManager implements HookManagerInterface {
 
 		// Check for duplicate registration
 		if ( $this->is_registered( $hook, $callback, $priority ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			if ( $this->is_verbose_debug_enabled() ) {
 				LoggerHelper::debug( 'HookManager: Hook already registered, skipping', array(
 					'hook'     => $hook,
 					'priority' => $priority,
@@ -115,7 +119,7 @@ class HookManager implements HookManagerInterface {
 		// Track the registration
 		$this->track_registration( $hook, $callback, $priority, $args );
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		if ( $this->is_verbose_debug_enabled() ) {
 			LoggerHelper::debug( 'HookManager: Filter registered', array(
 				'hook'     => $hook,
 				'priority' => $priority,
@@ -143,7 +147,7 @@ class HookManager implements HookManagerInterface {
 			unset( $this->registered_hooks[ $hook ] );
 		}
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		if ( $this->is_verbose_debug_enabled() ) {
 			LoggerHelper::debug( 'HookManager: Removed all hooks', array( 'hook' => $hook ) );
 		}
 	}
@@ -245,6 +249,15 @@ class HookManager implements HookManagerInterface {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Check if verbose hook-level debug logging is enabled.
+	 *
+	 * @return bool
+	 */
+	private function is_verbose_debug_enabled(): bool {
+		return defined( self::VERBOSE_DEBUG_FLAG ) && constant( self::VERBOSE_DEBUG_FLAG ) === true;
 	}
 }
 
