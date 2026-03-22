@@ -199,6 +199,7 @@ class Assets {
 			'toplevel_page_fp-seo-performance',
 			'fp-seo-performance_page_fp-seo-performance-bulk',
 			'seo-performance_page_fp-seo-performance-bulk',
+			'fp-seo-performance_page_fp-seo-bulk-seo-update',
 			'fp-seo-performance_page_fp-seo-bulk-audit',
 			'toplevel_page_fp-seo-test-suite',
 			'fp-seo-performance_page_fp-seo-social-media',

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.79] - 2026-03-22
+### Added
+- **Aggiorna SEO con AI** – nuova pagina admin per aggiornamento bulk one-click (Pagine e Articoli separati)
+- **Contesto sito** – campo in Settings > AI per descrivere il sito; usato dall'AI per generare meta coerenti
+- OpenAiClient: iniezione `site_context` nel prompt di generazione SEO
+
 ## [0.9.0-pre.78] - 2026-03-22
 ### Changed
 - **AI Providers aggiornati a marzo 2026** – lineup GPT-5.4 (Nano, Mini, Pro) come default; GPT-5 e GPT-4 in Legacy

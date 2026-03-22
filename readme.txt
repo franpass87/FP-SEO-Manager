@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.78
+Stable tag: 0.9.0-pre.79
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,10 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.79 - 2026-03-22 =
+* Added: Pagina "Aggiorna SEO con AI" - aggiornamento bulk one-click per Pagine e Articoli
+* Added: Campo "Contesto sito" in Settings > AI per migliorare i risultati generazione
 
 = 0.9.0-pre.78 - 2026-03-22 =
 * Changed: AI providers aggiornati a marzo 2026 - GPT-5.4 Nano/Mini/Pro come default

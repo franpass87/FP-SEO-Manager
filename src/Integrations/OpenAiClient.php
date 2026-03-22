@@ -204,6 +204,11 @@ class OpenAiClient {
 				$context = array(); // Fallback to empty context
 			}
 
+			$site_context = $this->options->get_option( 'ai.site_context', '' );
+			if ( is_string( $site_context ) && '' !== trim( $site_context ) ) {
+				$context['site_context'] = trim( $site_context );
+			}
+
 			// Build prompt with error handling
 			try {
 				$prompt = $this->build_prompt( $title, $clean_content, $language, $focus_keyword, $context );
@@ -432,6 +437,11 @@ class OpenAiClient {
 
 		// Costruisci informazioni di contesto (sanitized)
 		$context_info = '';
+
+		if ( ! empty( $context['site_context'] ) ) {
+			$safe_site = $this->sanitize_prompt_input( $context['site_context'] );
+			$context_info .= "\nCONTESTO SITO (di cosa parla il sito, usa per allineare titoli e meta): " . $safe_site;
+		}
 		
 		if ( ! empty( $context['post_type'] ) && 'post' !== $context['post_type'] ) {
 			$post_type_obj   = get_post_type_object( $context['post_type'] );

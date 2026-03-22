@@ -102,6 +102,23 @@ class AiTabRenderer extends SettingsTabRenderer {
 
 			<tr>
 				<th scope="row">
+					<label for="site_context"><?php esc_html_e( 'Contesto sito', 'fp-seo-performance' ); ?></label>
+				</th>
+				<td>
+					<textarea 
+						id="site_context" 
+						name="<?php echo esc_attr( $this->get_option_key() ); ?>[ai][site_context]" 
+						rows="4" 
+						class="large-text"
+					><?php echo esc_textarea( $ai_settings['site_context'] ?? '' ); ?></textarea>
+					<p class="description">
+						<?php esc_html_e( 'Descrivi in 1-2 frasi di cosa parla il sito (es. "Ristorante tipico toscano a Firenze. Specialità: ribollita, bistecca alla fiorentina."). Migliora i risultati della generazione AI e dell\'aggiornamento bulk SEO.', 'fp-seo-performance' ); ?>
+					</p>
+				</td>
+			</tr>
+
+			<tr>
+				<th scope="row">
 					<?php esc_html_e( 'Funzionalità AI', 'fp-seo-performance' ); ?>
 				</th>
 				<td>

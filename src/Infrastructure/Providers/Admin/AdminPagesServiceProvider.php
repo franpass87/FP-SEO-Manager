@@ -21,8 +21,10 @@ use FP\SEO\Infrastructure\Contracts\OptionsInterface;
 use FP\SEO\Admin\Menu;
 use FP\SEO\Admin\SettingsPage;
 use FP\SEO\Admin\BulkAuditPage;
+use FP\SEO\Admin\BulkSeoUpdatePage;
 use FP\SEO\Admin\PerformanceDashboard;
 use FP\SEO\Admin\RedirectManagerPage;
+use FP\SEO\Integrations\OpenAiClient;
 use FP\SEO\Redirects\RedirectRepository;
 
 /**
@@ -71,6 +73,14 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 			return new BulkAuditPage( $hook_manager, $options );
 		} );
 
+		// Register BulkSeoUpdatePage with HookManager, Options, OpenAiClient
+		$container->singleton( BulkSeoUpdatePage::class, function( Container $container ) {
+			$hook_manager  = $container->get( HookManagerInterface::class );
+			$options       = $container->get( OptionsInterface::class );
+			$openai_client = $container->get( OpenAiClient::class );
+			return new BulkSeoUpdatePage( $hook_manager, $options, $openai_client );
+		} );
+
 		// Performance Dashboard is registered by PerformanceServiceProvider with dependencies
 
 		// Redirect Manager Page
@@ -111,6 +121,14 @@ class AdminPagesServiceProvider extends AbstractAdminServiceProvider {
 			BulkAuditPage::class,
 			'warning',
 			'Failed to register BulkAuditPage'
+		);
+
+		// Register Bulk SEO Update Page
+		$this->boot_service(
+			$container,
+			BulkSeoUpdatePage::class,
+			'warning',
+			'Failed to register BulkSeoUpdatePage'
 		);
 
 		// Register Performance Dashboard after Menu
