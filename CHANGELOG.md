@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.83] - 2026-03-23
+### Changed
+- Menu position 56.11 per ordine alfabetico FP.
+
 ## [0.9.0-pre.82] - 2026-03-23
 ### Changed
 - Menu WordPress e admin bar: titolo "FP SEO Manager" (allineamento con nome plugin e cartella FP-SEO-Manager).
