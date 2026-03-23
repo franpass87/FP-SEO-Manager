@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.81] - 2026-03-23
+### Changed
+- Menu WordPress e admin bar: titolo "FP SEO Performance" (allineamento naming con altri plugin FP).
+
 ## [0.9.0-pre.80] - 2026-03-23
 ### Changed
 - Menu admin: ordine voci, separatori visivi e link rapidi admin bar (pattern FP-Experiences).

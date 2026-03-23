@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.80
+Stable tag: 0.9.0-pre.81
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,9 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.81 - 2026-03-23 =
+* Changed: Menu WordPress e admin bar - titolo "FP SEO Performance" (allineamento naming con altri plugin FP)
 
 = 0.9.0-pre.80 - 2026-03-23 =
 * Changed: Menu admin - ordine voci, separatori visivi e link rapidi admin bar (pattern FP-Experiences)
