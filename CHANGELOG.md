@@ -7,20 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.9.0-pre.82] - 2026-03-22
-### Fixed
-- Tutti gli `error_log` condizionati a `WP_DEBUG` (ConversationalVariants, EmbeddingsGenerator, Metabox render/analysis) per evitare output in produzione
-
-## [0.9.0-pre.81] - 2026-03-22
-### Fixed
-- Console.log/warn/error condizionati a WP_DEBUG (fpSeoPerformanceMetabox.debug, fpSeoAiFields.debug, fpSeoAiGenerator.debug, window.fpSeoDebug) in QAMetaBoxScriptsManager, SocialScriptsManager, metabox-ai-fields.js, editor-metabox-legacy.js, fp-seo-ui-system.js, serp-preview.js, ai-generator.js
-
-## [0.9.0-pre.80] - 2026-03-22
-### Fixed
-- LocalizationDataService: rimosso `new OpenAiClient()` (costruttore richiede Logger e Options); usa `OptionsHelper::get_option()` per verifica API key
-- LazyServiceLoader: `get_openai_client()` risolve OpenAiClient dal container invece di istanziarlo senza dipendenze
-- AdminPagesServiceProvider: aggiunta dipendenza `AIServiceProvider` per garantire ordine di boot e disponibilità di OpenAiClient
-- IntegrationsTest, ErrorHandlingTest: OpenAiClient istanziato con mock Logger e Options per compatibilità costruttore
+## [0.9.0-pre.80] - 2026-03-23
+### Changed
+- Menu admin: ordine voci, separatori visivi e link rapidi admin bar (pattern FP-Experiences).
 
 ## [0.9.0-pre.79] - 2026-03-22
 ### Added

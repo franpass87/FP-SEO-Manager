@@ -27,11 +27,14 @@ use function array_values;
 use function count;
 use function current_time;
 use function current_user_can;
+use function admin_url;
 use function esc_attr;
 use function esc_html;
 use function esc_html__;
 use function esc_html_e;
+use function esc_js;
 use function esc_url;
+use function get_current_screen;
 use function get_edit_post_link;
 use function get_posts;
 use function get_the_title;
@@ -85,6 +88,9 @@ class Menu {
 	 */
 	public function register(): void {
 		$this->hook_manager->add_action( 'admin_menu', array( $this, 'add_menu' ) );
+		$this->hook_manager->add_action( 'admin_menu', array( $this, 'reorder_submenus' ), 99 );
+		$this->hook_manager->add_action( 'admin_head', array( $this, 'render_submenu_section_enhancements' ) );
+		$this->hook_manager->add_action( 'admin_bar_menu', array( $this, 'register_admin_bar_links' ), 80 );
 
 		// Initialize and register styles manager
 		$this->styles_manager = new MenuStylesManager();
@@ -109,6 +115,133 @@ class Menu {
 			'dashicons-chart-line',
 			81
 		);
+	}
+
+	/**
+	 * Riordina le voci del submenu (Operatività prima, poi Gestione, Sistema).
+	 */
+	public function reorder_submenus(): void {
+		global $submenu;
+
+		if ( ! isset( $submenu['fp-seo-performance'] ) || ! is_array( $submenu['fp-seo-performance'] ) ) {
+			return;
+		}
+
+		$items    = $submenu['fp-seo-performance'];
+		$bucketed = array();
+
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! isset( $item[2] ) ) {
+				continue;
+			}
+			$slug = (string) $item[2];
+			if ( ! isset( $bucketed[ $slug ] ) ) {
+				$bucketed[ $slug ] = array();
+			}
+			$bucketed[ $slug ][] = $item;
+		}
+
+		$desired_order = array(
+			'fp-seo-performance',
+			'fp-seo-performance-bulk',
+			'fp-seo-performance-dashboard',
+			'fp-seo-redirects',
+			'fp-seo-bulk-seo-update',
+			'fp-seo-performance-settings',
+		);
+
+		$reordered = array();
+		foreach ( $desired_order as $slug ) {
+			if ( ! isset( $bucketed[ $slug ] ) ) {
+				continue;
+			}
+			foreach ( $bucketed[ $slug ] as $entry ) {
+				$reordered[] = $entry;
+			}
+			unset( $bucketed[ $slug ] );
+		}
+		foreach ( $bucketed as $entries ) {
+			foreach ( $entries as $entry ) {
+				$reordered[] = $entry;
+			}
+		}
+		$submenu['fp-seo-performance'] = $reordered;
+	}
+
+	/**
+	 * Separatori visivi tra sezioni nel submenu.
+	 */
+	public function render_submenu_section_enhancements(): void {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
+			return;
+		}
+		?>
+		<style>
+			#toplevel_page_fp-seo-performance .wp-submenu li.fpseo-submenu-section-start {
+				margin-top: 8px;
+				padding-top: 8px;
+				border-top: 1px solid rgba(240, 246, 252, 0.18);
+			}
+			#toplevel_page_fp-seo-performance .wp-submenu li.fpseo-submenu-section-start::before {
+				content: attr(data-section-label);
+				display: block;
+				margin: 0 10px 6px 10px;
+				font-size: 10px;
+				line-height: 1.2;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				color: rgba(240, 246, 252, 0.62);
+				font-weight: 600;
+				pointer-events: none;
+			}
+		</style>
+		<script>
+		document.addEventListener('DOMContentLoaded', function () {
+			const root = document.querySelector('#toplevel_page_fp-seo-performance .wp-submenu');
+			if (!root) return;
+			const markers = [
+				{ selector: 'a[href*="page=fp-seo-performance-bulk"]', label: '<?php echo esc_js( __( 'Operatività', 'fp-seo-performance' ) ); ?>' },
+				{ selector: 'a[href*="page=fp-seo-redirects"]', label: '<?php echo esc_js( __( 'Gestione', 'fp-seo-performance' ) ); ?>' },
+				{ selector: 'a[href*="page=fp-seo-performance-settings"]', label: '<?php echo esc_js( __( 'Sistema', 'fp-seo-performance' ) ); ?>' },
+			];
+			markers.forEach(function (marker) {
+				const link = root.querySelector(marker.selector);
+				if (!link) return;
+				const item = link.closest('li');
+				if (!item) return;
+				item.classList.add('fpseo-submenu-section-start');
+				item.setAttribute('data-section-label', marker.label);
+			});
+		});
+		</script>
+		<?php
+	}
+
+	/**
+	 * Link rapidi nella admin bar.
+	 *
+	 * @param \WP_Admin_Bar $admin_bar
+	 */
+	public function register_admin_bar_links( $admin_bar ): void {
+		if ( ! current_user_can( OptionsHelper::get_capability() ) ) {
+			return;
+		}
+		$screen   = get_current_screen();
+		$screen_id = $screen ? ( $screen->id ?? '' ) : '';
+		$is_plugin = strpos( $screen_id, 'fp-seo-performance' ) !== false || strpos( $screen_id, 'fp-seo-' ) !== false;
+
+		$admin_bar->add_node( array(
+			'id'    => 'fp-seo',
+			'title' => __( 'SEO Performance', 'fp-seo-performance' ),
+			'href'  => admin_url( 'admin.php?page=fp-seo-performance' ),
+			'meta'  => $is_plugin ? array( 'aria-current' => 'page' ) : array(),
+		) );
+		$admin_bar->add_node( array(
+			'id'     => 'fp-seo-settings',
+			'parent' => 'fp-seo',
+			'title'  => __( 'Settings', 'fp-seo-performance' ),
+			'href'   => admin_url( 'admin.php?page=fp-seo-performance-settings' ),
+		) );
 	}
 
 	/**
