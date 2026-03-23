@@ -107,8 +107,8 @@ class Menu {
 		$capability = OptionsHelper::get_capability();
 
 		add_menu_page(
-			__( 'FP SEO Performance', 'fp-seo-performance' ),
-			__( 'FP SEO Performance', 'fp-seo-performance' ),
+			__( 'FP SEO Manager', 'fp-seo-performance' ),
+			__( 'FP SEO Manager', 'fp-seo-performance' ),
 			$capability,
 			'fp-seo-performance',
 			array( $this, 'render_dashboard' ),
@@ -232,7 +232,7 @@ class Menu {
 
 		$admin_bar->add_node( array(
 			'id'    => 'fp-seo',
-			'title' => __( 'FP SEO Performance', 'fp-seo-performance' ),
+			'title' => __( 'FP SEO Manager', 'fp-seo-performance' ),
 			'href'  => admin_url( 'admin.php?page=fp-seo-performance' ),
 			'meta'  => $is_plugin ? array( 'aria-current' => 'page' ) : array(),
 		) );
