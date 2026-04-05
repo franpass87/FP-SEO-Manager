@@ -1,6 +1,6 @@
 # FP SEO Performance
 
-[![Version](https://img.shields.io/badge/version-0.9.0--pre.84-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
+[![Version](https://img.shields.io/badge/version-0.9.0--pre.85-blue.svg)](https://github.com/francescopasseri/fp-seo-performance)
 [![WordPress](https://img.shields.io/badge/wordpress-6.2+-green.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/php-8.0+-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/license-GPL--2.0+-red.svg)](LICENSE)

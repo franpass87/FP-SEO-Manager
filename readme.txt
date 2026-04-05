@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.84
+Stable tag: 0.9.0-pre.85
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -90,8 +90,8 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 
 == Changelog ==
 
-= 0.9.0-pre.84 - 2026-04-05 =
-* Fixed: GEO metabox - script inline annidato (SyntaxError Unexpected token '<' su editor post).
+= 0.9.0-pre.85 - 2026-04-05 =
+* Changed: Icona menu admin (lente / search) distinta da FP Marketing Tracking (chart-line).
 
 = 0.9.0-pre.83 - 2026-03-23 =
 * Menu position 56.11 per ordine alfabetico FP.

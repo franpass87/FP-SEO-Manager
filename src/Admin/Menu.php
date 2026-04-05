@@ -112,7 +112,7 @@ class Menu {
 			$capability,
 			'fp-seo-performance',
 			array( $this, 'render_dashboard' ),
-			'dashicons-chart-line',
+			'dashicons-search',
 			'56.11'
 		);
 	}
