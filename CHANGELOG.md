@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.84] - 2026-04-05
+### Fixed
+- GEO metabox: rimosso doppio tag `<script>` (output di `GeoMetaBoxScriptsManager::get_inline_js()` già wrappato in `GeoMetabox`), che causava `Uncaught SyntaxError: Unexpected token '<'` nelle schermate di modifica post.
+
 ## [0.9.0-pre.83] - 2026-03-23
 ### Changed
 - Menu position 56.11 per ordine alfabetico FP.

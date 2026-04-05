@@ -47,17 +47,13 @@ class GeoMetaBoxScriptsManager {
 	}
 
 	/**
-	 * Render all scripts.
+	 * Emits only JavaScript; the caller (GeoMetabox) wraps it in one script element.
 	 *
 	 * @param int $claims_count Number of existing claims.
 	 * @return void
 	 */
 	private function render_scripts( int $claims_count ): void {
-		?>
-		<script>
-		<?php $this->render_claim_management_scripts( $claims_count ); ?>
-		</script>
-		<?php
+		$this->render_claim_management_scripts( $claims_count );
 	}
 
 	/**
