@@ -3,7 +3,7 @@
  * Plugin Name: FP SEO Performance
  * Plugin URI: https://francescopasseri.com
  * Description: FP SEO Performance provides AI-powered SEO content generation with GPT-5.4 (March 2026), on-page analyzer, bulk audits, GEO optimization, and Google Search Console integration.
- * Version: 0.9.0-pre.85
+ * Version: 0.9.0-pre.86
  * Author: Francesco Passeri
  * Author URI: https://francescopasseri.com
  * Text Domain: fp-seo-performance
@@ -37,7 +37,7 @@ require_once __DIR__ . '/src/Utils/Version.php';
 
 // Define plugin version constant
 if ( ! defined( 'FP_SEO_PERFORMANCE_VERSION' ) ) {
-	define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.85' ) );
+	define( 'FP_SEO_PERFORMANCE_VERSION', FP\SEO\Utils\Version::resolve( __FILE__, '0.9.0-pre.86' ) );
 }
 
 // Load Kernel for bootstrap

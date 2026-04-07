@@ -41,6 +41,7 @@ use FP\SEO\Core\Services\Http\HttpClientInterface;
 use FP\SEO\Core\Services\Http\WordPressHttpClient;
 use FP\SEO\Core\Services\Environment\EnvironmentService;
 use FP\SEO\Core\Services\ExceptionHandler\ExceptionHandlerService;
+use FP\SEO\I18n\ItalianGettextBridge;
 
 /**
  * Core service provider.
@@ -200,6 +201,13 @@ class CoreServiceProvider extends AbstractServiceProvider {
 				);
 			},
 			0
+		);
+		$hook_manager->add_action(
+			'init',
+			static function (): void {
+				ItalianGettextBridge::register_hooks();
+			},
+			1
 		);
 	}
 

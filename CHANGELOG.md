@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0-pre.86] - 2026-04-06
+### Added
+- Localizzazione admin/editor in italiano: `ItalianGettextBridge` + tabella `languages/en-it-admin-table.php` (oltre 360 stringhe inglesi) quando la locale WordPress/utente è italiana e manca la voce nel file `.mo`.
+
 ## [0.9.0-pre.85] - 2026-04-05
 ### Changed
 - Icona menu admin: `dashicons-search` al posto di `dashicons-chart-line` (evita duplicato con FP Marketing Tracking Layer).

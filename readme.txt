@@ -7,7 +7,7 @@ Tags: seo, ai, gpt-5, content-generation, openai, seo-tools, performance, search
 Requires at least: 6.2
 Tested up to: 6.8
 Requires PHP: 8.0
-Stable tag: 0.9.0-pre.85
+Stable tag: 0.9.0-pre.86
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -89,6 +89,9 @@ Use the `fp_seo_perf_checks_enabled` filter to adjust the enabled checks before 
 2. Bulk Auditor listing scores for multiple posts.
 
 == Changelog ==
+
+= 0.9.0-pre.86 - 2026-04-06 =
+* Added: traduzioni italiane admin/editor (ponte gettext + tabella stringhe) con lingua sito/utente italiana.
 
 = 0.9.0-pre.85 - 2026-04-05 =
 * Changed: Icona menu admin (lente / search) distinta da FP Marketing Tracking (chart-line).
